@@ -111,8 +111,12 @@ Reference frames are in the project owner's screenshots (YouTube Short,
 1. Green Face ID glyph, glowing, on black.
 2. The glyph collapses inward and **rotates in 3D** — it reads as a ring seen
    edge-on, tilting toward the viewer as it spins.
-3. It settles flat into a plain green circle.
-4. A tick draws itself inside the circle.
+3. It settles flat into a green **ring** — an outline, not a filled disc. The
+   panel shows through the middle.
+4. A tick draws itself inside the ring, also as a stroke.
+
+Nothing in the sequence is ever filled. It is stroked green throughout, with the
+background visible through the centre.
 
 Everything stays green throughout; there is no white stage. The whole point is
 beat 2: the spin is what makes it read as one object transforming, rather than
