@@ -47,14 +47,13 @@ screen locks
 | `Sources/Security` | Vault, lockout, unlock backends, Touch ID, tamper guard |
 | `Sources/LockScreen` | The notch panel and the SkyLight space that hosts it |
 | `Sources/App` | App entry, settings, design tokens |
-| `Plugin/` | SecurityAgent authorization plugin (Objective-C) |
 
 ### Unlocking
 
 The app watches for the screen lock, recognises you, and types your stored password into
 the login window. Touch ID keeps working, and the login window is Apple's own — so if
 recognition fails there is always a real password field waiting. That property is what
-makes this the shipping path; the plugin section below is what happens without it.
+makes it safe: a recognition failure costs you a password, never your way in.
 
 The cost is that your password is stored on this Mac in recoverable form. Anything running
 as you can extract it.
@@ -91,42 +90,6 @@ it much faster.
 
 ---
 
-## The authorization plugin — do not install it
-
-`Plugin/` builds a SecurityAgent authorization plugin. It is no longer selectable in the
-app, because installing it **locked a Mac out** and cost a reboot to recover.
-
-It passed every test available short of the real thing: it loaded on a stock SIP-enabled
-Mac with an ordinary Development signature, matched a face in 115ms with no password
-stored, drew its own panel, and its PAM password fallback accepted a correct password and
-rejected a wrong one. `Plugin/build-paneltest.sh` walked that whole path and returned
-GRANTED.
-
-Every one of those tests drew the panel **over an ordinary desktop**. At a real lock screen
-SecurityAgent owns the display, our panel never became usable, and because our mechanism
-was the only entry in `system.login.screensaver` there was nothing behind it — face
-reported success, the password field was unreachable, and Touch ID had been disabled by the
-install.
-
-The lesson is not that the plugin is impossible. It is that **the test could not fail the
-way production fails**, which made it a rehearsal rather than evidence.
-
-### What it would need
-
-```
-mechanisms: [ FaceID:unlock, builtin:authenticate ]
-```
-
-With Apple's own password prompt chained behind ours, a failure in our UI costs an extra
-prompt instead of the machine. That, plus a second device to SSH from — this cannot be
-validated safely from the machine being locked.
-
-If your lock screen is currently routed through it:
-
-```sh
-sudo security authorizationdb write system.login.screensaver use-login-window-ui
-```
-
 ## Current state
 
 **Working:** enrolment, recognition, Secure Enclave storage, 6-attempt lockout, camera
@@ -135,8 +98,6 @@ tamper protection, login item.
 
 **Not done:**
 
-- The authorization plugin needs a chained `builtin:authenticate` rule and a second device
-  to test from before it is safe to install again. See above.
 - The notch panel stacks below DynamicLake Pro's lock icon rather than replacing it.
 - Tamper protection only covers graceful quit; `kill -9` bypasses it entirely.
 - No liveness model is bundled, so that toggle is disabled.

@@ -3,33 +3,27 @@ import Foundation
 import Observation
 import os
 
-/// Checks GitHub Releases for a newer build.
+/// Checks the git repository for newer commits, and pulls them.
 ///
-/// **What survives an update, and what does not.**
+/// Not GitHub Releases: during development the commits *are* the releases, and there is
+/// nothing tagged to compare against. This asks the checkout what it is behind by and
+/// offers to fast-forward.
 ///
-/// Settings survive: they live in `UserDefaults` keyed to the bundle identifier, which is
-/// untouched by replacing the application.
+/// **What survives an update, and what does not.** Settings survive — they live in
+/// `UserDefaults` keyed to the bundle identifier, untouched by rebuilding. The enrolled
+/// face survives only if the rebuild is signed with the same certificate: faceprints are
+/// sealed under a Secure Enclave key whose Keychain ACL is bound to the app's code
+/// identity, so a build signed by a different certificate is a different application as
+/// far as macOS is concerned and simply finds nothing.
 ///
-/// The enrolled face survives *only if the update is signed with the same certificate*.
-/// Faceprints are sealed under a Secure Enclave key whose Keychain ACL is bound to the
-/// app's code identity — a build signed by a different certificate is a different
-/// application as far as macOS is concerned, and cannot open the vault. It would not
-/// error, it would simply find nothing and ask the user to enrol again.
-///
-/// So this deliberately does not replace the app on its own. It tells the user a release
-/// exists and opens it; installing is a step they take knowingly, because getting the
-/// signing identity wrong silently costs them their enrolment.
+/// It deliberately stops after pulling. Rebuilding replaces the running bundle underneath
+/// itself, and a bad commit would take the app with it — so the rebuild stays a step the
+/// user takes knowingly.
 @Observable
 @MainActor
 final class UpdateChecker {
 
 	static let shared = UpdateChecker()
-
-	/// Public API endpoint. Returns 404 while the repository is private, which is
-	/// reported as "couldn't check" rather than "up to date" — claiming the latter
-	/// without having looked would be worse than admitting we don't know.
-	private static let releasesURL = URL(
-		string: "https://api.github.com/repos/OwenCope/FaceID/releases/latest")!
 
 	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "Updates")
 
@@ -37,83 +31,158 @@ final class UpdateChecker {
 		case idle
 		case checking
 		case upToDate
-		case available(version: String, url: URL)
+		/// `behind` commits available, with the newest subject line.
+		case available(behind: Int, latest: String)
+		case pulling
+		/// Pulled successfully; the app needs rebuilding to actually change.
+		case pulled(count: Int)
 		case failed(String)
 	}
 
 	private(set) var state: State = .idle
+
+	/// The checkout this app was built from.
+	///
+	/// Resolved from the bundle's own location when it is running out of `build/`, and
+	/// otherwise from the conventional path — an installed copy in `/Applications` has no
+	/// way to know where its source lives.
+	private var repositoryPath: String? {
+		let bundle = Bundle.main.bundleURL
+		let fromBuild = bundle.deletingLastPathComponent().deletingLastPathComponent()
+		if FileManager.default.fileExists(atPath: fromBuild.appending(path: ".git").path) {
+			return fromBuild.path
+		}
+
+		let conventional = FileManager.default.homeDirectoryForCurrentUser
+			.appending(path: "Developer/FaceID")
+		if FileManager.default.fileExists(atPath: conventional.appending(path: ".git").path) {
+			return conventional.path
+		}
+		return nil
+	}
 
 	var currentVersion: String {
 		Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
 			?? "0"
 	}
 
-	private struct Release: Decodable {
-		let tagName: String
-		let htmlURL: URL
-
-		enum CodingKeys: String, CodingKey {
-			case tagName = "tag_name"
-			case htmlURL = "html_url"
-		}
-	}
+	// MARK: - Checking
 
 	func check() async {
+		guard let repository = repositoryPath else {
+			state = .failed("No git checkout found. Updates need the source repository.")
+			return
+		}
+
 		state = .checking
 
-		do {
-			var request = URLRequest(url: Self.releasesURL)
-			request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-			request.timeoutInterval = 15
+		// Fetch first: without it the local ref is however stale the last fetch left it,
+		// and the app would confidently report "up to date" having asked nobody.
+		guard case .success = await run(["fetch", "origin", "--quiet"], in: repository) else {
+			state = .failed("Couldn't reach the repository. Check your network or credentials.")
+			return
+		}
 
-			let (data, response) = try await URLSession.shared.data(for: request)
-			guard let http = response as? HTTPURLResponse else {
-				state = .failed("No response from GitHub.")
-				return
-			}
+		guard case .success(let counts) = await run(
+			["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], in: repository)
+		else {
+			state = .failed("No upstream branch is configured.")
+			return
+		}
 
-			switch http.statusCode {
-			case 200:
-				let release = try JSONDecoder().decode(Release.self, from: data)
-				let latest = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+		// "<ahead>\t<behind>"
+		let parts = counts.split(whereSeparator: { $0 == "\t" || $0 == " " })
+		let behind = parts.count > 1 ? Int(parts[1]) ?? 0 : 0
 
-				if Self.isNewer(latest, than: currentVersion) {
-					Self.logger.notice("Update available: \(latest).")
-					state = .available(version: latest, url: release.htmlURL)
-				} else {
-					state = .upToDate
+		guard behind > 0 else {
+			state = .upToDate
+			return
+		}
+
+		let subject = await run(["log", "-1", "--format=%s", "@{upstream}"], in: repository)
+		let latest = if case .success(let line) = subject { line } else { "" }
+
+		Self.logger.notice("\(behind) new commit(s) available.")
+		state = .available(behind: behind, latest: latest)
+	}
+
+	// MARK: - Pulling
+
+	func pull() async {
+		guard let repository = repositoryPath else { return }
+		guard case .available(let behind, _) = state else { return }
+
+		state = .pulling
+
+		// Fast-forward only. A merge or rebase here could conflict with local edits and
+		// leave the checkout half-resolved, which is not something an app should do to a
+		// user's working tree without asking.
+		switch await run(["merge", "--ff-only", "@{upstream}"], in: repository) {
+		case .success:
+			Self.logger.notice("Pulled \(behind) commit(s).")
+			state = .pulled(count: behind)
+		case .failure(let message):
+			state = .failed(
+				message.contains("Not possible to fast-forward")
+					|| message.contains("local changes")
+					? "You have local changes. Commit or stash them, then pull with git."
+					: "Pull failed: \(message)")
+		}
+	}
+
+	/// Opens the checkout so the user can rebuild.
+	func revealRepository() {
+		guard let repository = repositoryPath else { return }
+		NSWorkspace.shared.open(URL(fileURLWithPath: repository))
+	}
+
+	// MARK: - git
+
+	private enum RunResult {
+		case success(String)
+		case failure(String)
+	}
+
+	private func run(_ arguments: [String], in repository: String) async -> RunResult {
+		await withCheckedContinuation { continuation in
+			DispatchQueue.global(qos: .userInitiated).async {
+				let process = Process()
+				process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+				process.arguments = ["-C", repository] + arguments
+
+				// Never prompt. A credential prompt from a background process would hang
+				// invisibly, and the check is not worth blocking on.
+				var environment = ProcessInfo.processInfo.environment
+				environment["GIT_TERMINAL_PROMPT"] = "0"
+				environment["GIT_ASKPASS"] = "/usr/bin/true"
+				process.environment = environment
+
+				let output = Pipe()
+				let errors = Pipe()
+				process.standardOutput = output
+				process.standardError = errors
+
+				do {
+					try process.run()
+				} catch {
+					continuation.resume(returning: .failure(error.localizedDescription))
+					return
 				}
 
-			case 404:
-				// Either no releases yet, or the repository is private.
-				state = .failed("No releases published yet.")
+				let stdout = output.fileHandleForReading.readDataToEndOfFile()
+				let stderr = errors.fileHandleForReading.readDataToEndOfFile()
+				process.waitUntilExit()
 
-			default:
-				state = .failed("GitHub returned \(http.statusCode).")
+				let text = String(decoding: stdout, as: UTF8.self)
+					.trimmingCharacters(in: .whitespacesAndNewlines)
+				let errorText = String(decoding: stderr, as: UTF8.self)
+					.trimmingCharacters(in: .whitespacesAndNewlines)
+
+				continuation.resume(
+					returning: process.terminationStatus == 0
+						? .success(text)
+						: .failure(errorText.isEmpty ? "git exited \(process.terminationStatus)" : errorText))
 			}
-		} catch {
-			state = .failed(error.localizedDescription)
 		}
-	}
-
-	func openLatest() {
-		guard case .available(_, let url) = state else { return }
-		NSWorkspace.shared.open(url)
-	}
-
-	/// Compares dotted version strings numerically.
-	///
-	/// String comparison gets this wrong in the case that matters: "0.10" sorts before
-	/// "0.9" lexically, so an update would be offered as a downgrade exactly when the
-	/// project has shipped ten releases.
-	static func isNewer(_ candidate: String, than current: String) -> Bool {
-		let a = candidate.split(separator: ".").map { Int($0) ?? 0 }
-		let b = current.split(separator: ".").map { Int($0) ?? 0 }
-		for i in 0..<max(a.count, b.count) {
-			let left = i < a.count ? a[i] : 0
-			let right = i < b.count ? b[i] : 0
-			if left != right { return left > right }
-		}
-		return false
 	}
 }

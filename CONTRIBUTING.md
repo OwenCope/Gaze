@@ -87,47 +87,18 @@ across head angles, a different adult 0.23, threshold 0.45.
 Lock-screen scores run lower than in-app ones — the display is dark, so the face is lit
 less. Measure there too before trusting a threshold.
 
-## The authorization plugin — do not install it
-
-`Plugin/` builds a SecurityAgent authorization plugin. It is no longer selectable in the
-app, and `install.sh` should not be run: doing so locked a Mac out.
-
-It passed everything — loaded, matched in 115ms, drew its own panel, PAM fallback verified
-both ways, `build-paneltest.sh` returned GRANTED. All of that drew the panel over an
-ordinary desktop. At a real lock screen SecurityAgent owns the display, our panel never
-became usable, and with our mechanism alone in the rule there was nothing behind it.
-
-Before touching it again it needs `mechanisms: [ FaceID:unlock, builtin:authenticate ]`, so
-Apple's password prompt is always the backstop, and a second machine to SSH from.
-
-**Test with `Plugin/test-plugin.sh`, never by editing `system.login.screensaver`** — and
-know that the throwaway right is a *weaker* test than the real lock screen, not an
-equivalent one.
-
-Rollback, worth keeping somewhere reachable from another machine:
-
-```sh
-sudo security authorizationdb write system.login.screensaver use-login-window-ui
-```
-
 ## Things that cost a day, so you don't repeat them
 
-- **The `dlopen` "library validation failed" error is misleading.** The host logs it, then
-  clears library validation and loads the plugin anyway. Log on your *success* path — a
-  plugin that loads silently is indistinguishable from one that never loaded.
+- **Log your success path, not just your failures.** Code that runs silently is
+  indistinguishable from code that never ran, and that ambiguity can burn a day.
 - **`sudo` changes identity, not just permission.** Code signing needs the invoking user's
   login keychain; `launchctl bootstrap gui/<uid>` needs their session. Both fail as root.
-- **Never `dispatch_sync` to the main queue from a mechanism.** SecurityAgent invokes them
-  on the main thread; it deadlocks instantly and looks like a load failure.
 - **`PlistBuddy -c "Set :key 'value'"` strips embedded quotes.** Use `plutil -replace`.
-  A mangled code requirement fails to parse and every reply is rejected as untrusted.
 - **Landmark geometry cannot do face recognition.** Cosine similarity on raw coordinates
   scored a stranger at 1.000 — the shared face template dominates the vector. Pose
   invariance has to be learned, not computed.
 - **Never pair launchd `KeepAlive` with `NSApp.activate()`.** That combination produced a
   process that stole focus every few seconds and could not be quit.
-- **A test that cannot fail the way production fails proves very little.** The plugin passed
-  a full end-to-end test over an ordinary desktop, then locked the machine out at a real
-  lock screen — because SecurityAgent owns the display there and our panel did not. When
-  the difference between test and production is the very thing under test, it is a
-  rehearsal, not evidence.
+- **A test that cannot fail the way production fails proves very little.** When the
+  difference between the test environment and the real one is the very thing under test,
+  passing is a rehearsal, not evidence.

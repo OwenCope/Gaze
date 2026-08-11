@@ -257,40 +257,62 @@ struct SettingsView: View {
 	private var updatesSection: some View {
 		SettingsSection(
 			title: "Updates",
-			footer: "Your settings and enrolled face are kept across updates, as long as "
-				+ "the new build is signed with the same certificate."
+			footer: "Pulls new commits from the repository. Your settings and enrolled face "
+				+ "survive a rebuild, as long as it is signed with the same certificate."
 		) {
 			SettingRow(
 				title: "Version \(updates.currentVersion)",
 				detail: updateDetail
 			) {
-				Button(updateButtonTitle) {
-					switch updates.state {
-					case .available:
-						updates.openLatest()
-					default:
-						Task { await updates.check() }
-					}
-				}
-				.buttonStyle(AccentButtonStyle())
-				.disabled(updates.state == .checking)
+				Button(updateButtonTitle) { updateAction() }
+					.buttonStyle(AccentButtonStyle())
+					.disabled(updates.state == .checking || updates.state == .pulling)
+			}
+
+			if case .pulled = updates.state {
+				RowDivider()
+				StatusPill(
+					kind: .warning,
+					message: "Run ./build.sh in the repository to apply the update.")
 			}
 		}
 	}
 
 	private var updateDetail: String {
 		switch updates.state {
-		case .idle: return "Check whether a newer build has been released."
+		case .idle: return "Check whether there are new commits."
 		case .checking: return "Checking…"
-		case .upToDate: return "You're on the latest release."
-		case .available(let version, _): return "Version \(version) is available."
+		case .upToDate: return "You're on the latest commit."
+		case .available(let behind, let latest):
+			let plural = behind == 1 ? "commit" : "commits"
+			return latest.isEmpty
+				? "\(behind) new \(plural)."
+				: "\(behind) new \(plural) — latest: \(latest)"
+		case .pulling: return "Pulling…"
+		case .pulled(let count):
+			return "Pulled \(count) \(count == 1 ? "commit" : "commits")."
 		case .failed(let message): return message
 		}
 	}
 
 	private var updateButtonTitle: String {
-		if case .available = updates.state { return "View Release" }
-		return "Check"
+		switch updates.state {
+		case .available: return "Pull"
+		case .pulling: return "Pulling…"
+		case .pulled: return "Open Folder"
+		default: return "Check"
+		}
+	}
+
+	private func updateAction() {
+		switch updates.state {
+		case .available:
+			Task { await updates.pull() }
+		case .pulled:
+			updates.revealRepository()
+		default:
+			Task { await updates.check() }
+		}
 	}
 
 	// MARK: - Manage
