@@ -6,6 +6,7 @@ struct SettingsView: View {
 	let lockout: LockoutManager
 
 	@State private var settings = Preferences.shared
+	@State private var updates = UpdateChecker.shared
 	@State private var passwordEntry = ""
 	@State private var passwordError: String?
 	@State private var lockoutPassword = ""
@@ -19,6 +20,7 @@ struct SettingsView: View {
 				if lockout.isLockedOut { lockoutSection }
 				unlockSection
 				securitySection
+				updatesSection
 				if store.isEnrolled { manageSection }
 			}
 			.padding(.horizontal, 26)
@@ -236,6 +238,47 @@ struct SettingsView: View {
 					+ "still remove the app, and force-quitting bypasses this entirely.",
 				isOn: bind(\.tamperProtection))
 		}
+	}
+
+	// MARK: - Updates
+
+	private var updatesSection: some View {
+		SettingsSection(
+			title: "Updates",
+			footer: "Your settings and enrolled face are kept across updates, as long as "
+				+ "the new build is signed with the same certificate."
+		) {
+			SettingRow(
+				title: "Version \(updates.currentVersion)",
+				detail: updateDetail
+			) {
+				Button(updateButtonTitle) {
+					switch updates.state {
+					case .available:
+						updates.openLatest()
+					default:
+						Task { await updates.check() }
+					}
+				}
+				.buttonStyle(AccentButtonStyle())
+				.disabled(updates.state == .checking)
+			}
+		}
+	}
+
+	private var updateDetail: String {
+		switch updates.state {
+		case .idle: return "Check whether a newer build has been released."
+		case .checking: return "Checking…"
+		case .upToDate: return "You're on the latest release."
+		case .available(let version, _): return "Version \(version) is available."
+		case .failed(let message): return message
+		}
+	}
+
+	private var updateButtonTitle: String {
+		if case .available = updates.state { return "View Release" }
+		return "Check"
 	}
 
 	// MARK: - Manage
