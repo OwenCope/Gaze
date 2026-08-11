@@ -214,6 +214,25 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 		return NO;
 	}
 
+	// Hand PAM the password and the requester directly, rather than relying on the
+	// conversation callback.
+	//
+	// `/etc/pam.d/screensaver` declares pam_opendirectory with **use_first_pass**, which
+	// means it takes the password from a previous module instead of prompting. There is no
+	// previous module, so the conversation function is never called and the password never
+	// arrives — authentication fails for *every* password, including the correct one.
+	//
+	// The account stack then uses pam_self and pam_group with "ruser", which need to know
+	// who is asking; without PAM_RUSER they fail even after a successful authentication.
+	//
+	// This was verified against the real PAM stack before being written here: without
+	// PAM_AUTHTOK the correct password is rejected, and without PAM_RUSER account
+	// management is. Both were silent failures that would only have surfaced at a locked
+	// screen, with no way in.
+	pam_set_item(handle, PAM_AUTHTOK, password);
+	pam_set_item(handle, PAM_RUSER, username);
+	pam_set_item(handle, PAM_TTY, "console");
+
 	int status = pam_authenticate(handle, 0);
 	if (status == PAM_SUCCESS) {
 		status = pam_acct_mgmt(handle, 0);
