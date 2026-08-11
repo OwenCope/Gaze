@@ -189,32 +189,41 @@ struct SettingChoice: View {
 
 	var body: some View {
 		Button(action: select) {
-			HStack(alignment: .top, spacing: 11) {
-				Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-					.font(.system(size: 15))
-					.foregroundStyle(isSelected ? Theme.accent : Theme.tertiaryLabel)
-					.padding(.top, 1)
-
+			HStack(alignment: .top, spacing: 12) {
 				if let symbol {
 					IconTile(symbol: symbol, tint: isSelected ? Theme.accent : Theme.tertiaryLabel)
 				}
 
 				VStack(alignment: .leading, spacing: 3) {
 					Text(title)
-						.font(.system(size: 13, weight: isSelected ? .medium : .regular))
-						.foregroundStyle(Theme.label)
+						.font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+						.foregroundStyle(isSelected ? Theme.label : Theme.label.opacity(0.75))
 					Text(detail)
 						.font(.system(size: 11))
 						.foregroundStyle(Theme.secondaryLabel)
 						.fixedSize(horizontal: false, vertical: true)
 						.multilineTextAlignment(.leading)
 				}
-				Spacer(minLength: 0)
+
+				Spacer(minLength: 8)
+
+				// A tick, not a radio button.
+				//
+				// Radio circles put an empty control beside every option, so the row reads
+				// as a form to fill in. A checkmark that only exists on the chosen row —
+				// plus a tinted background — makes the selection the thing you notice.
+				Image(systemName: "checkmark")
+					.font(.system(size: 12, weight: .bold))
+					.foregroundStyle(Theme.accent)
+					.opacity(isSelected ? 1 : 0)
+					.padding(.top, 2)
 			}
 			.padding(Theme.rowPadding)
+			.background(isSelected ? Theme.accent.opacity(0.07) : .clear)
 			.contentShape(.rect)
 		}
 		.buttonStyle(.plain)
+		.animation(.easeOut(duration: 0.15), value: isSelected)
 	}
 }
 

@@ -21,6 +21,9 @@ final class NotchCapsuleModel {
 	/// Deepen the tint when the wallpaper behind is light, or glass goes pale and the
 	/// glyph disappears into it.
 	var prefersOpaque = false
+	/// Mirrors `Preferences.notchStyle`, captured when the panel is shown.
+	var style: Preferences.NotchStyle = .normal
+	var transparency: Double = 0.3
 	/// Drives the grow-out and retract-back. False collapses the panel to the notch's own
 	/// height, where it is hidden behind the cutout.
 	var isExpanded = false
@@ -84,76 +87,27 @@ struct NotchCapsule: View {
 		.onChange(of: model.isExpanded) { _, wanted in expanded = wanted }
 	}
 
-	/// Semi-glass: a dark tint over a blurred material, no stroke.
+	/// The panel body.
 	///
-	/// The earlier translucent attempts looked bordered because the panel started *below*
-	/// the cutout and the join showed. With the window now spanning the notch that seam
-	/// is gone, so glass works — the only visible edges are the rounded bottom corners,
-	/// which are meant to be seen.
-	///
-	/// Tint rather than pure material: unmodified glass over a busy wallpaper leaves the
-	/// glyph unreadable, and over a light one washes out completely.
-	/// macOS 27 Spotlight's material: heavily blurred, deeply tinted, but still passing
-	/// colour from behind rather than flattening to a solid.
-	///
-	/// The tint has to be strong — a light one leaves the panel washed out over a bright
-	/// backdrop — while the blur is what keeps it reading as glass instead of as a dark
-	/// rectangle. Both together, not either alone.
-	/// Dark glass: `.glassEffect` alone, tinted black.
-	///
-	/// It previously sat on a `.ultraThinMaterial` backing, which is a *light* material —
-	/// it brightens whatever is behind it. Under a dark tint the light layer won, and the
-	/// panel came out as a pale grey slab on a dark wallpaper. Every attempt to fix that
-	/// by deepening the tint was fighting a layer that should not have been there.
-	///
-	/// `.glassEffect` already provides the blur. Nothing goes behind it.
+	/// Three styles, chosen in Settings: solid black, or black at a chosen opacity over a
+	/// blurred material. The material is applied here rather than relying on `.glassEffect`
+	/// to sample the wallpaper — this window lives in its own SkyLight space, so there is
+	/// nothing behind it in the compositor for a material to blur, and unbacked glass falls
+	/// back to a pale grey slab on a dark lock screen.
 	private var background: some View {
 		shape
-			.fill(
-				// An explicit dark fill, not a material.
-				//
-				// Every glass and material attempt rendered pale grey on a dark lock
-				// screen, and the reason is structural: this window lives in its own
-				// SkyLight space, so there is nothing behind it in the compositor for a
-				// material to blur. With no backdrop to sample, `.glassEffect` falls back
-				// to its light appearance — the tint was never the problem, and no amount
-				// of darkening it could have worked.
-				//
-				// Darkest where it leaves the cutout, lightening as it descends, so it
-				// looks like the notch's black bleeding downward and thinning out rather
-				// than a shape with a colour of its own.
-				// Pure opaque black at the top so it is indistinguishable from the cutout
-				// it grows out of, lightening as it descends.
-				LinearGradient(
-					stops: [
-						.init(color: .black, location: 0),
-						.init(color: .black, location: 0.45),
-						.init(color: Color(white: 0.16).opacity(0.85), location: 1),
-					],
-					startPoint: .top,
-					endPoint: .bottom)
-			)
-			// Fades to clear toward the bottom.
-			//
-			// This is what stops it reading as a rectangle stuck under the notch. A
-			// uniform panel ends in a hard boundary wherever it stops; dissolving the
-			// lower edge means it has no visible end, so it belongs to the cutout it
-			// grew out of. Solid across the top two-thirds so the glyph stays legible.
+			.fill(fillStyle)
+			.background {
+				// Glass needs something behind it to blur. In an isolated SkyLight space
+				// there is no backdrop, so the material is applied here rather than relied
+				// on to sample the wallpaper.
+				if model.style != .normal {
+					shape.fill(.ultraThinMaterial)
+				}
+			}
+			// Fades to clear toward the bottom, so the panel has no visible end and reads
+			// as the notch extending rather than a rectangle stuck under it.
 			.mask {
-				// Stops are fractions of the *whole* window, and the top third of that
-				// is hidden behind the cutout — so a fade starting at 0.62 began almost
-				// immediately below the notch and swallowed most of the visible panel.
-				// It only gets the last stretch.
-				// Opacity thins steadily through the lower half rather than holding solid
-				// and then dropping off — a late hard fade reads as a cut edge, a long
-				// one reads as it dissolving.
-				// Fully opaque only across the strip hidden behind the cutout, then thinning
-				// continuously all the way down. Holding solid into the visible drop made
-				// it read as a black slab with a fade tacked on the end; the dissolve has
-				// to be most of the panel, not its last few points.
-				//
-				// The glyph is a separate layer and is not masked, so it stays legible
-				// however far this is pushed.
 				LinearGradient(
 					stops: [
 						.init(color: .black, location: 0),
@@ -168,7 +122,19 @@ struct NotchCapsule: View {
 			}
 	}
 
-	/// Where the bottom fade begins, as a fraction of the whole window height.
+	/// Opaque black, or black at a chosen transparency over a blurred material.
+	private var fillStyle: Color {
+		switch model.style {
+		case .normal:
+			return .black
+		case .semiLiquidGlass:
+			// The slider is "how transparent", so it subtracts from opacity.
+			return .black.opacity(1 - model.transparency)
+		case .liquidGlass:
+			return .black.opacity(model.prefersOpaque ? 0.42 : 0.24)
+		}
+	}
+
 
 	/// The part of the panel that actually shows below the cutout.
 	private var visibleHeight: CGFloat { height - notchInset }

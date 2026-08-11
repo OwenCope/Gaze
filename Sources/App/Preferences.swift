@@ -18,7 +18,26 @@ final class Preferences {
 
 	static let shared = Preferences()
 
+	/// How the notch panel is drawn.
+	enum NotchStyle: String, CaseIterable, Sendable {
+		case normal
+		case semiLiquidGlass
+		case liquidGlass
+
+		var title: String {
+			switch self {
+			case .normal: return "Normal"
+			case .semiLiquidGlass: return "Semi Liquid Glass"
+			case .liquidGlass: return "Liquid Glass"
+			}
+		}
+	}
+
 	private enum Key {
+		static let notchStyle = "notchStyle"
+		static let notchTransparency = "notchTransparency"
+		static let notchHeightAdjust = "notchHeightAdjust"
+		static let notchWidthAdjust = "notchWidthAdjust"
 		static let liveness = "livenessEnabled"
 		static let touchIDFallback = "touchIDFallback"
 		static let tamperProtection = "tamperProtection"
@@ -60,6 +79,27 @@ final class Preferences {
 		didSet { defaults.set(unlockBackend.rawValue, forKey: Key.unlockBackend) }
 	}
 
+	// MARK: - Notch
+
+	var notchStyle: NotchStyle {
+		didSet { defaults.set(notchStyle.rawValue, forKey: Key.notchStyle) }
+	}
+
+	/// 0 = fully opaque, 1 = fully clear. Only applies to the semi-glass style.
+	var notchTransparency: Double {
+		didSet { defaults.set(notchTransparency, forKey: Key.notchTransparency) }
+	}
+
+	/// Points added to the measured notch size, so a panel that sits slightly wrong on
+	/// unusual hardware can be nudged rather than requiring a rebuild.
+	var notchHeightAdjust: Double {
+		didSet { defaults.set(notchHeightAdjust, forKey: Key.notchHeightAdjust) }
+	}
+
+	var notchWidthAdjust: Double {
+		didSet { defaults.set(notchWidthAdjust, forKey: Key.notchWidthAdjust) }
+	}
+
 	private init() {
 		livenessEnabled = defaults.bool(forKey: Key.liveness)
 		touchIDFallback = defaults.object(forKey: Key.touchIDFallback) as? Bool ?? true
@@ -68,5 +108,12 @@ final class Preferences {
 		unlockBackend =
 			defaults.string(forKey: Key.unlockBackend)
 			.flatMap(UnlockBackendKind.init(rawValue:)) ?? .none
+
+		notchStyle =
+			defaults.string(forKey: Key.notchStyle)
+			.flatMap(NotchStyle.init(rawValue:)) ?? .normal
+		notchTransparency = defaults.object(forKey: Key.notchTransparency) as? Double ?? 0.3
+		notchHeightAdjust = defaults.double(forKey: Key.notchHeightAdjust)
+		notchWidthAdjust = defaults.double(forKey: Key.notchWidthAdjust)
 	}
 }

@@ -19,6 +19,7 @@ struct SettingsView: View {
 				hero
 				if lockout.isLockedOut { lockoutSection }
 				unlockSection
+				NotchSettingsSection(settings: settings)
 				securitySection
 				updatesSection
 				if store.isEnrolled { manageSection }
@@ -126,11 +127,16 @@ struct SettingsView: View {
 				HStack(spacing: 8) {
 					SecureField("Required", text: $lockoutPassword)
 						.textFieldStyle(.plain)
+						.font(.system(size: 13))
 						.frame(width: 150)
-						.padding(.horizontal, 9)
-						.padding(.vertical, 5)
-						.background(Theme.surfaceRaised)
-						.clipShape(.rect(cornerRadius: 7))
+						.padding(.horizontal, 14)
+						.padding(.vertical, 8)
+						.background {
+							Capsule()
+								.fill(Theme.surfaceRaised)
+								.overlay(
+									Capsule().strokeBorder(Theme.cardHighlight, lineWidth: 1))
+						}
 					Button("Unlock") { clearLockout() }
 						.buttonStyle(AccentButtonStyle())
 						.disabled(lockoutPassword.isEmpty)
@@ -219,10 +225,15 @@ struct SettingsView: View {
 				HStack(spacing: 8) {
 					SecureField("Required", text: $passwordEntry)
 						.textFieldStyle(.plain)
-						.padding(.horizontal, 9)
-						.padding(.vertical, 6)
-						.background(Theme.surfaceRaised)
-						.clipShape(.rect(cornerRadius: 7))
+						.font(.system(size: 13))
+						.padding(.horizontal, 14)
+						.padding(.vertical, 9)
+						.background {
+							Capsule()
+								.fill(Theme.surfaceRaised)
+								.overlay(
+									Capsule().strokeBorder(Theme.cardHighlight, lineWidth: 1))
+						}
 					Button("Store") { storePassword() }
 						.buttonStyle(AccentButtonStyle())
 						.disabled(passwordEntry.isEmpty)
@@ -242,9 +253,7 @@ struct SettingsView: View {
 		SettingsSection(title: "Security") {
 			SettingToggle(
 				title: "Only trust the built-in camera",
-				detail:
-					"Refuses virtual and external cameras. Without this, software that feeds a "
-					+ "recording into the video pipeline can unlock your Mac.",
+				detail: "Refuses virtual and external cameras.",
 				symbol: "camera.fill",
 				isOn: bind(\.requireBuiltInCamera))
 
@@ -252,8 +261,8 @@ struct SettingsView: View {
 			SettingToggle(
 				title: "Check for spoofing",
 				detail: Liveness.isAvailable
-					? "Rejects photos and screens held up to the camera. Adds a moment to each unlock."
-					: "Needs an anti-spoof model at Resources/Liveness.mlpackage. None is installed.",
+					? "Rejects photos held up to the camera."
+					: "No anti-spoof model installed.",
 				symbol: "eye.trianglebadge.exclamationmark.fill",
 				isEnabled: Liveness.isAvailable,
 				isOn: bind(\.livenessEnabled))
@@ -262,7 +271,7 @@ struct SettingsView: View {
 			SettingToggle(
 				title: "Require Touch ID for changes",
 				detail: BiometricGate.isAvailable
-					? "Confirms it's you before removing your face or storing a password."
+					? "Confirms it's you before making changes here."
 					: "This Mac has no Touch ID sensor.",
 				symbol: "touchid",
 				isEnabled: BiometricGate.isAvailable,
@@ -282,9 +291,7 @@ struct SettingsView: View {
 			RowDivider()
 			SettingToggle(
 				title: "Tamper protection",
-				detail:
-					"Requires administrator authentication to quit Face ID. An administrator can "
-					+ "still remove the app, and force-quitting bypasses this entirely.",
+				detail: "Asks for an administrator password before quitting.",
 				symbol: "lock.shield.fill",
 				isOn: bind(\.tamperProtection))
 		}
@@ -295,8 +302,7 @@ struct SettingsView: View {
 	private var updatesSection: some View {
 		SettingsSection(
 			title: "Updates",
-			footer: "Pulls new commits from the repository. Your settings and enrolled face "
-				+ "survive a rebuild, as long as it is signed with the same certificate."
+			footer: "Your settings and enrolled face survive a rebuild."
 		) {
 			SettingRow(
 				title: "Version \(updates.currentVersion)",

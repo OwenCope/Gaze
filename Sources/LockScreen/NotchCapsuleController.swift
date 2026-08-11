@@ -38,6 +38,8 @@ final class NotchCapsuleController {
 		if let screen = NSScreen.main {
 			model.prefersOpaque = WallpaperBrightness.isLight(on: screen)
 		}
+		model.style = Preferences.shared.notchStyle
+		model.transparency = Preferences.shared.notchTransparency
 
 		if window == nil {
 			build()
@@ -105,6 +107,7 @@ final class NotchCapsuleController {
 		// matches the island those apps present rather than the hardware behind it.
 		// Measured off Dynamic Lake's own panel: ~280pt across on a 179pt cutout.
 		let notchWidth = (NotchMetrics.width(on: screen) ?? 180) * 1.56
+			+ Preferences.shared.notchWidthAdjust
 
 		// The window spans the notch as well as the area below it, so the black runs
 		// continuously from the physical cutout into the panel.
@@ -115,7 +118,7 @@ final class NotchCapsuleController {
 		// part behind the cutout is simply never seen.
 		// Also measured: the panel hangs ~66pt below the menu bar, not the 38 I guessed.
 		// The short drop was what made it read as a stub rather than a panel.
-		let dropHeight: CGFloat = 66
+		let dropHeight = 66 + Preferences.shared.notchHeightAdjust
 		let size = CGSize(width: notchWidth, height: notchHeight + dropHeight)
 
 		let frame = NSRect(
