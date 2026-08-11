@@ -37,7 +37,14 @@ final class UnlockService {
 
 	/// Long enough for the checkmark to be seen before the screen unlocks. Recognition is
 	/// often under 200ms, which is faster than the animation reads as anything at all.
-	private static let successDwell: TimeInterval = 0.9
+	private static let successDwell: TimeInterval = 1.2
+
+	/// Shortest time the Face ID glyph stays up before it may become a checkmark.
+	///
+	/// Without it the glyph appears and is replaced within about 200ms — the scanning
+	/// state exists but is never actually seen, so the unlock reads as a flicker rather
+	/// than as the Mac looking at you and deciding.
+	private static let minimumScanTime: TimeInterval = 1.6
 
 	/// How long to keep looking before giving up. Must stay under the plugin's timeout,
 	/// or the plugin gives up first and the user sees a stall for no reason.
@@ -119,6 +126,7 @@ final class UnlockService {
 		let deadline = Date().addingTimeInterval(searchTimeout)
 		let liveness = Preferences.shared.livenessEnabled ? Liveness.detector() : nil
 		var shown = false
+		var shownAt = Date()
 
 		while Date() < deadline {
 			try? await Task.sleep(for: .milliseconds(80))
@@ -128,6 +136,7 @@ final class UnlockService {
 			// "the camera is looking at someone", not "something asked".
 			if !shown {
 				capsule.show(phase: .scanning)
+				shownAt = Date()
 				shown = true
 			}
 
@@ -145,6 +154,12 @@ final class UnlockService {
 
 			lockout.recordSuccess()
 			Self.logger.notice("Recognised (score \(result.score)).")
+
+			// Let the glyph be seen before it turns into a tick.
+			let seen = Date().timeIntervalSince(shownAt)
+			if seen < Self.minimumScanTime {
+				try? await Task.sleep(for: .seconds(Self.minimumScanTime - seen))
+			}
 
 			// Play the checkmark, then hold before answering. The plugin unlocks the moment
 			// it hears back, so replying immediately would cut the animation off mid-draw.

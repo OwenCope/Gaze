@@ -36,6 +36,15 @@ if [ ! -d "$APP" ]; then
 	exit 1
 fi
 
+# Same vintage, for the same reason as test-plugin.sh: a new plugin against a stale
+# /Applications copy recognises faces and draws nothing.
+BUILD="$ROOT/../build/Face ID.app"
+if [ -d "$BUILD" ] && [ "$BUILD/Contents/MacOS/FaceID" -nt "$APP/Contents/MacOS/FaceID" ]; then
+	echo "→ Refreshing /Applications from the current build"
+	rm -rf "$APP"
+	cp -R "$BUILD" /Applications/
+fi
+
 echo "→ Backing up the current authorization rule"
 mkdir -p "$(dirname "$BACKUP")"
 security authorizationdb read system.login.screensaver > "$BACKUP"
