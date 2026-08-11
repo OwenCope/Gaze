@@ -498,7 +498,10 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	}
 
 	NSRect frame = window.frame;
-	const CGFloat extra = 58;
+	// Enough that the field can sit clear of the bottom edge with room to dissolve
+	// beneath it. At 58 the field ended up ~16pt from the edge, which left no space for
+	// the fade — the panel just stopped.
+	const CGFloat extra = 96;
 	frame.origin.y -= extra;
 	frame.size.height += extra;
 
@@ -507,23 +510,38 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	((CAGradientLayer *)self.panelBody.mask).frame =
 		NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame));
 
-	// Everything shifts up by the amount the window grew downward.
+	// Everything shifts up by the amount the window grew downward, and re-centres for
+	// the new width.
 	NSView *content = window.contentView;
+	const CGFloat newWidth = NSWidth(frame);
 	for (NSView *view in content.subviews) {
 		NSRect f = view.frame;
 		f.origin.y += extra;
+		if (view == self.statusLabel) {
+			f.origin.x = 12;
+			f.size.width = newWidth - 24;
+		} else {
+			f.origin.x = (newWidth - NSWidth(f)) / 2;
+		}
 		view.frame = f;
 	}
 
 	NSRect fieldFrame = self.fieldContainer.frame;
-	fieldFrame.origin.y = 16;
+	fieldFrame.size.width = newWidth - 56;
+	fieldFrame.origin.x = 28;
+	fieldFrame.origin.y = 46;
 	self.fieldContainer.frame = fieldFrame;
+
+	NSRect inner = self.passwordField.frame;
+	inner.size.width = NSWidth(fieldFrame) - 20;
+	self.passwordField.frame = inner;
 
 	// Pull the fade back once the field is showing. At its scanning extent the gradient
 	// reaches well past the field and washes it out — the dissolve is there to soften an
 	// empty bottom edge, not to erase content.
+	// The dissolve now happens in the empty band below the field rather than across it.
 	CAGradientLayer *fade = (CAGradientLayer *)self.panelBody.mask;
-	fade.locations = @[ @0.0, @0.10, @1.0 ];
+	fade.locations = @[ @0.0, @0.22, @1.0 ];
 }
 
 /// Tears the panel down.
@@ -681,7 +699,13 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 		// reports visible=YES), so the plugin can present its own panel. That is also
 		// better than the original plan: we control every pixel instead of living inside
 		// Apple's dialog.
-		[v presentOwnPanel];
+		// Nothing is shown yet. The app renders the capsule at the notch while it looks —
+		// it is doing the recognition, it has the polished SwiftUI panel, and it can put a
+		// window on the lock screen through its own SkyLight space. A second panel drawn
+		// here would just be a cruder duplicate on top of it.
+		//
+		// This only puts UI on screen if the face fails and a password is needed.
+		(void)v;
 	});
 
 	if (!canUseFaceID) {

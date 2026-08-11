@@ -27,6 +27,18 @@ final class UnlockService {
 	private let lockout: LockoutManager
 	private var listener: xpc_connection_t?
 
+	/// The same capsule the keystroke path uses.
+	///
+	/// The plugin could draw its own, and did — but it is AppKit inside SecurityAgent, so
+	/// it was a second, cruder implementation of a panel this app already renders properly.
+	/// Recognition happens here, so the feedback belongs here too; the plugin only puts up
+	/// UI when it needs a password.
+	private let capsule = NotchCapsuleController()
+
+	/// Long enough for the checkmark to be seen before the screen unlocks. Recognition is
+	/// often under 200ms, which is faster than the animation reads as anything at all.
+	private static let successDwell: TimeInterval = 0.9
+
 	/// How long to keep looking before giving up. Must stay under the plugin's timeout,
 	/// or the plugin gives up first and the user sees a stall for no reason.
 	private let searchTimeout: TimeInterval = 9
@@ -106,10 +118,18 @@ final class UnlockService {
 
 		let deadline = Date().addingTimeInterval(searchTimeout)
 		let liveness = Preferences.shared.livenessEnabled ? Liveness.detector() : nil
+		var shown = false
 
 		while Date() < deadline {
 			try? await Task.sleep(for: .milliseconds(80))
 			guard !camera.faceMissing, let sample = camera.sample else { continue }
+
+			// Shown on the first frame with a face, not on the request — the capsule means
+			// "the camera is looking at someone", not "something asked".
+			if !shown {
+				capsule.show(phase: .scanning)
+				shown = true
+			}
 
 			let result = store.matches(sample)
 			guard result.matched else { continue }
@@ -125,12 +145,25 @@ final class UnlockService {
 
 			lockout.recordSuccess()
 			Self.logger.notice("Recognised (score \(result.score)).")
+
+			// Play the checkmark, then hold before answering. The plugin unlocks the moment
+			// it hears back, so replying immediately would cut the animation off mid-draw.
+			capsule.update(phase: .success)
+			try? await Task.sleep(for: .seconds(Self.successDwell))
+            capsule.hide(after: 0.1)
 			return .match
 		}
 
 		// A timeout is a failed attempt. Not counting it would let an attacker retry
 		// forever simply by walking away before the deadline.
 		lockout.recordFailure()
+
+		// Show the rejection here too, so the failure reads in the same place the scan
+		// did rather than jumping to the plugin's panel.
+		if shown {
+			capsule.update(phase: .notRecognised)
+			capsule.hide(after: 1.2)
+		}
 		return .noMatch
 	}
 }
