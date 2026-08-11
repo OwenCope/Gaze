@@ -91,15 +91,27 @@ final class TamperGuard {
 			return
 		}
 
+		// Deletion and renaming only.
+		//
+		// `.write` and `.attrib` fire constantly for reasons that are not tampering — the
+		// OS touches bundles, and a rebuild rewrites the whole thing. Worse, the alert
+		// below is modal: showing it from the handler meant the alert's own run loop let
+		// more events land, which raised another alert, which... The app sat at 79% CPU
+		// doing nothing else, and dragged the window server with it.
 		let source = DispatchSource.makeFileSystemObjectSource(
 			fileDescriptor: descriptor,
-			eventMask: [.delete, .rename, .write, .attrib],
+			eventMask: [.delete, .rename],
 			queue: .main)
 
 		source.setEventHandler { [weak self] in
 			guard let self else { return }
+
+			// Once only. This is tamper *evidence*, and the evidence does not improve by
+			// being reported repeatedly.
+			guard !self.bundleWasModified else { return }
 			self.bundleWasModified = true
-			Self.logger.fault("The Face ID app bundle was modified or removed.")
+
+			Self.logger.fault("The Face ID app bundle was moved or removed.")
 			self.warnAboutTampering()
 		}
 		source.setCancelHandler { close(descriptor) }
@@ -109,6 +121,8 @@ final class TamperGuard {
 	}
 
 	private func warnAboutTampering() {
+		// A notification, not a modal alert. Blocking the main thread from a file-system
+		// event handler is what turned one rebuild into a CPU spin.
 		let alert = NSAlert()
 		alert.alertStyle = .critical
 		alert.messageText = "Face ID was modified"
@@ -118,6 +132,8 @@ final class TamperGuard {
 			the enrolment and set it up again.
 			"""
 		alert.addButton(withTitle: "OK")
-		alert.runModal()
+		// Deferred, so the event handler returns immediately and the source is free to be
+		// cancelled while the alert is up.
+		DispatchQueue.main.async { alert.runModal() }
 	}
 }

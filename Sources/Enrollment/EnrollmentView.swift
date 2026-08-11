@@ -124,32 +124,8 @@ struct EnrollmentView: View {
 		.background(Circle().fill(.white.opacity(0.05)))
 	}
 
-	/// Live numbers from the pipeline.
-	///
-	/// Kept in the build because when enrolment stalls there is no way to tell from the
-	/// UI alone whether the camera, Vision's pose estimation, or the coverage logic is at
-	/// fault — and "nothing happens" is the failure mode this flow has.
-	private var diagnostics: some View {
-		let pose = camera.sample?.pose
-		return VStack(spacing: 3) {
-			Text(
-				camera.faceMissing
-					? "no single face in frame"
-					: String(
-						format: "yaw %+.2f   pitch %+.2f   quality %.2f",
-						pose?.yaw ?? 0, pose?.pitch ?? 0, camera.sample?.quality ?? 0))
-			Text(
-				String(
-					format: "frames %llu   covered %.0f%%   prints %d",
-					camera.frameID, (model?.progress ?? 0) * 100, model?.prints.count ?? 0))
-		}
-		.font(.system(size: 10, design: .monospaced))
-		.foregroundStyle(.white.opacity(0.35))
-	}
-
 	private var footer: some View {
 		VStack(spacing: 14) {
-			diagnostics
 			if let saveError {
 				Text(saveError)
 					.font(.system(size: 12))
@@ -175,6 +151,11 @@ struct EnrollmentView: View {
 	// MARK: - Flow
 
 	private func begin() async {
+		// Nothing to do when the user is already enrolled — `EnrollmentWindow` is about to
+		// dismiss itself. Starting the camera here meant an enrolled user paid for a live
+		// 30fps preview, and a full SwiftUI redraw per frame, on every launch.
+		guard !store.isEnrolled else { return }
+
 		model = EnrollmentModel(embedder: store.embedder)
 		await camera.start()
 	}
