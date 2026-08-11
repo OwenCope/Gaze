@@ -4,9 +4,13 @@ Unlock your Mac by looking at it. Built as an alternative to
 [Sapphire](https://github.com/cshariq/Sapphire)'s Face ID feature — its approach informed
 this one, but no code was copied (it is GPL-3.0; see *Licensing* below).
 
-```sh
-./build.sh && open "build/Face ID.app"
+Intall
 ```
+git clone https://github.com/OwenCope/FaceID.git
+
+cd FaceID && ./build.sh && open "build/Face ID.app"
+```
+
 
 Requires the macOS 26 SDK. No Xcode project — `build.sh` drives `swiftc` and assembles the
 bundle by hand.
