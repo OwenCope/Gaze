@@ -40,13 +40,28 @@ struct SettingsView: View {
 	private var hero: some View {
 		VStack(spacing: 14) {
 			ZStack {
+				// A soft bloom behind the glyph, and a ring around it. Together they make
+				// the mark read as active rather than as a flat icon sitting on black.
 				Circle()
-					.fill(Theme.accent.opacity(0.14))
-					.frame(width: 84, height: 84)
-				Image(systemName: "faceid")
-					.font(.system(size: 40, weight: .light))
-					.foregroundStyle(Theme.accent)
+					.fill(
+						RadialGradient(
+							colors: [heroTint.opacity(0.28), heroTint.opacity(0)],
+							center: .center, startRadius: 4, endRadius: 62))
+					.frame(width: 124, height: 124)
+
+				Circle()
+					.strokeBorder(heroTint.opacity(0.30), lineWidth: 1)
+					.frame(width: 92, height: 92)
+
+				Circle()
+					.fill(heroTint.opacity(0.14))
+					.frame(width: 78, height: 78)
+
+				Image(systemName: store.isEnrolled ? "faceid" : "person.crop.circle.badge.questionmark")
+					.font(.system(size: 36, weight: .light))
+					.foregroundStyle(heroTint)
 			}
+			.animation(.easeOut(duration: 0.25), value: store.isEnrolled)
 
 			VStack(spacing: 5) {
 				Text(store.isEnrolled ? "Face ID Is Set Up" : "Face ID Isn't Set Up")
@@ -60,14 +75,31 @@ struct SettingsView: View {
 					.fixedSize(horizontal: false, vertical: true)
 			}
 
-			Button(store.isEnrolled ? "Set Up Again" : "Set Up Face ID") {
-				AppActivation.bringToFront()
-				openWindow(id: "enrollment")
+			HStack(spacing: 8) {
+				Button(store.isEnrolled ? "Set Up Again" : "Set Up Face ID") {
+					AppActivation.bringToFront()
+					openWindow(id: "enrollment")
+				}
+				.buttonStyle(AccentButtonStyle())
+
+				if store.isEnrolled {
+					Button("Test") {
+						AppActivation.bringToFront()
+						openWindow(id: "test")
+					}
+					.buttonStyle(AccentButtonStyle(role: .cancel))
+				}
 			}
-			.buttonStyle(AccentButtonStyle())
 		}
 		.frame(maxWidth: .infinity)
 		.padding(.bottom, 4)
+	}
+
+	/// Red while locked out, grey when unenrolled, green when ready — so the hero itself
+	/// carries the state rather than relying on the text below it.
+	private var heroTint: Color {
+		if lockout.isLockedOut { return Theme.danger }
+		return store.isEnrolled ? Theme.accent : Theme.tertiaryLabel
 	}
 
 	private var heroDetail: String {
@@ -130,6 +162,7 @@ struct SettingsView: View {
 				SettingChoice(
 					title: kind.title,
 					detail: kind.detail,
+					symbol: kind.symbol,
 					isSelected: settings.unlockBackend == kind
 				) {
 					settings.unlockBackend = kind
@@ -212,6 +245,7 @@ struct SettingsView: View {
 				detail:
 					"Refuses virtual and external cameras. Without this, software that feeds a "
 					+ "recording into the video pipeline can unlock your Mac.",
+				symbol: "camera.fill",
 				isOn: bind(\.requireBuiltInCamera))
 
 			RowDivider()
@@ -220,6 +254,7 @@ struct SettingsView: View {
 				detail: Liveness.isAvailable
 					? "Rejects photos and screens held up to the camera. Adds a moment to each unlock."
 					: "Needs an anti-spoof model at Resources/Liveness.mlpackage. None is installed.",
+				symbol: "eye.trianglebadge.exclamationmark.fill",
 				isEnabled: Liveness.isAvailable,
 				isOn: bind(\.livenessEnabled))
 
@@ -229,6 +264,7 @@ struct SettingsView: View {
 				detail: BiometricGate.isAvailable
 					? "Confirms it's you before removing your face or storing a password."
 					: "This Mac has no Touch ID sensor.",
+				symbol: "touchid",
 				isEnabled: BiometricGate.isAvailable,
 				isOn: bind(\.touchIDFallback))
 
@@ -238,6 +274,7 @@ struct SettingsView: View {
 				detail: LoginItem.needsApproval
 					? "Approve Face ID in System Settings › General › Login Items."
 					: "Face ID only watches for your screen locking while it's running.",
+				symbol: "power",
 				isOn: Binding(
 					get: { LoginItem.isEnabled },
 					set: { LoginItem.setEnabled($0) }))
@@ -248,6 +285,7 @@ struct SettingsView: View {
 				detail:
 					"Requires administrator authentication to quit Face ID. An administrator can "
 					+ "still remove the app, and force-quitting bypasses this entirely.",
+				symbol: "lock.shield.fill",
 				isOn: bind(\.tamperProtection))
 		}
 	}
@@ -262,7 +300,8 @@ struct SettingsView: View {
 		) {
 			SettingRow(
 				title: "Version \(updates.currentVersion)",
-				detail: updateDetail
+				detail: updateDetail,
+				symbol: "arrow.trianglehead.2.clockwise"
 			) {
 				Button(updateButtonTitle) { updateAction() }
 					.buttonStyle(AccentButtonStyle())
@@ -327,12 +366,16 @@ struct SettingsView: View {
 		) {
 			SettingRow(
 				title: "Recognition model",
-				detail: store.embedder.identifier
+				detail: store.embedder.identifier,
+				symbol: "brain.head.profile"
 			) {
 				EmptyView()
 			}
 			RowDivider()
-			SettingRow(title: "Remove enrolled face") {
+			SettingRow(
+				title: "Remove enrolled face",
+				symbol: "trash.fill", symbolTint: Theme.danger
+			) {
 				Button("Remove", role: .destructive) {
 					Task {
 						guard await BiometricGate.authorize(.removeEnrollment) else { return }

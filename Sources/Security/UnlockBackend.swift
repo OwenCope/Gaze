@@ -18,16 +18,27 @@ enum UnlockBackendKind: String, CaseIterable, Sendable {
 
 	var title: String {
 		switch self {
-		case .none: return "Don't unlock (recognition only)"
+		case .none: return "Just recognise me"
 		case .authPlugin: return "Authorization plugin"
-		case .keystroke: return "Password replay"
+		case .keystroke: return "Unlock my Mac"
+		}
+	}
+
+	/// Icon for the choice row.
+	var symbol: String {
+		switch self {
+		case .none: return "eye.fill"
+		case .keystroke: return "lock.open.fill"
+		// Not selectable, but a saved preference can still be this — the row exists only
+		// to tell the user how to get their lock screen back.
+		case .authPlugin: return "exclamationmark.triangle.fill"
 		}
 	}
 
 	var detail: String {
 		switch self {
 		case .none:
-			return "Recognise faces and report the result, but never unlock the Mac."
+			return "See recognition working without wiring it to anything."
 		case .authPlugin:
 			// Corrected: the earlier wording said macOS "cannot run third-party plugins",
 			// which is wrong — the plugin loads fine on a stock, SIP-enabled Mac with an
@@ -41,9 +52,9 @@ enum UnlockBackendKind: String, CaseIterable, Sendable {
 				"""
 		case .keystroke:
 			return """
-				Stores your account password and types it into the login window. Keeps \
-				Touch ID working, but there is no custom lock-screen UI and your password \
-				sits on disk in recoverable form.
+				Enters your password for you when you're recognised. Touch ID keeps \
+				working. Your password is stored on this Mac in recoverable form, which is \
+				what makes this possible.
 				"""
 		}
 	}

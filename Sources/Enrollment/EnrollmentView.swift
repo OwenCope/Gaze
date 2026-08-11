@@ -20,9 +20,11 @@ struct EnrollmentView: View {
 	var body: some View {
 		VStack(spacing: 0) {
 			header
-			Spacer(minLength: 24)
+			Spacer(minLength: 20)
 			ringStack
-			Spacer(minLength: 24)
+			Spacer(minLength: 18)
+			progressBar
+			Spacer(minLength: 18)
 			footer
 		}
 		.padding(.vertical, 36)
@@ -46,9 +48,20 @@ struct EnrollmentView: View {
 
 	private var header: some View {
 		VStack(spacing: 10) {
+			// Which of the two passes is running. A ring that empties and refills with no
+			// explanation reads as failure, so the step is stated before it happens.
+			if let pass = currentPass {
+				Text("Step \(pass) of 2")
+					.font(.system(size: 11, weight: .semibold))
+					.foregroundStyle(Theme.accent)
+					.tracking(0.6)
+					.transition(.opacity)
+			}
+
 			Text(title)
 				.font(.system(size: 26, weight: .bold))
 				.foregroundStyle(.white)
+
 			Text(model?.instruction ?? "Starting the camera…")
 				.font(.system(size: 14))
 				.foregroundStyle(.white.opacity(0.6))
@@ -56,6 +69,12 @@ struct EnrollmentView: View {
 				.frame(height: 40)
 				.animation(.easeInOut(duration: 0.2), value: model?.instruction)
 		}
+		.animation(.easeInOut(duration: 0.25), value: currentPass)
+	}
+
+	private var currentPass: Int? {
+		if case .capturing(let pass) = model?.phase { return pass }
+		return nil
 	}
 
 	private var title: String {
@@ -68,6 +87,19 @@ struct EnrollmentView: View {
 
 	private var ringStack: some View {
 		ZStack {
+			// Blooms as coverage grows — a quiet reward for moving, and it keeps the
+			// centre of the screen from being a dead black disc.
+			Circle()
+				.fill(
+					RadialGradient(
+						colors: [
+							Theme.accent.opacity(0.22 * (model?.progress ?? 0)),
+							Theme.accent.opacity(0),
+						],
+						center: .center, startRadius: 60, endRadius: 165))
+				.frame(width: ringSize + 40, height: ringSize + 40)
+				.animation(.easeOut(duration: 0.4), value: model?.progress)
+
 			preview
 			if let model {
 				EnrollmentRing(
@@ -122,6 +154,25 @@ struct EnrollmentView: View {
 		.padding(.horizontal, 28)
 		.frame(width: previewSize, height: previewSize)
 		.background(Circle().fill(.white.opacity(0.05)))
+	}
+
+	/// A slim bar under the ring.
+	///
+	/// The ring alone is ambiguous about how much is left — the ticks fill in whatever
+	/// order the head moves, so "nearly done" and "just started" can look similar. A
+	/// linear bar answers that at a glance.
+	private var progressBar: some View {
+		GeometryReader { geometry in
+			ZStack(alignment: .leading) {
+				Capsule().fill(.white.opacity(0.08))
+				Capsule()
+					.fill(Theme.accent)
+					.frame(width: geometry.size.width * (model?.progress ?? 0))
+			}
+		}
+		.frame(width: 190, height: 4)
+		.animation(.easeOut(duration: 0.3), value: model?.progress)
+		.opacity(currentPass == nil ? 0 : 1)
 	}
 
 	private var footer: some View {

@@ -8,12 +8,19 @@ enum Theme {
 
 	// MARK: - Colour
 
-	static let background = Color.black
+	static let background = Color(red: 0.043, green: 0.043, blue: 0.047)
 	/// Card fill. Light enough to separate from the ground, dark enough that white text
 	/// stays comfortable.
 	static let surface = Color.white.opacity(0.055)
 	static let surfaceRaised = Color.white.opacity(0.09)
-	static let separator = Color.white.opacity(0.08)
+	static let separator = Color.white.opacity(0.07)
+
+	/// A hairline along the top of each card.
+	///
+	/// One of the cheapest ways to stop flat dark cards reading as holes: a single light
+	/// edge implies the surface is catching light from above, which is what makes it look
+	/// raised rather than cut out.
+	static let cardHighlight = Color.white.opacity(0.06)
 
 	static let label = Color.white
 	static let secondaryLabel = Color.white.opacity(0.55)
@@ -26,9 +33,9 @@ enum Theme {
 
 	// MARK: - Metrics
 
-	static let cornerRadius: CGFloat = 12
-	static let rowPadding: CGFloat = 14
-	static let sectionSpacing: CGFloat = 26
+	static let cornerRadius: CGFloat = 14
+	static let rowPadding: CGFloat = 15
+	static let sectionSpacing: CGFloat = 24
 }
 
 // MARK: - Section
@@ -45,14 +52,26 @@ struct SettingsSection<Content: View>: View {
 			Text(title.uppercased())
 				.font(.system(size: 11, weight: .semibold))
 				.foregroundStyle(Theme.tertiaryLabel)
-				.tracking(0.6)
-				.padding(.leading, 4)
+				.tracking(0.7)
+				.padding(.leading, 6)
 
 			VStack(spacing: 0) {
 				content
 			}
-			.background(Theme.surface)
-			.clipShape(.rect(cornerRadius: Theme.cornerRadius))
+			.background {
+				RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+					.fill(Theme.surface)
+					.overlay(alignment: .top) {
+						// The light edge only, not a full border — a stroked outline reads
+						// as a box drawn on the background, a top highlight reads as a
+						// surface lifted off it.
+						Rectangle()
+							.fill(Theme.cardHighlight)
+							.frame(height: 1)
+					}
+					.clipShape(.rect(cornerRadius: Theme.cornerRadius, style: .continuous))
+			}
+			.clipShape(.rect(cornerRadius: Theme.cornerRadius, style: .continuous))
 
 			if let footer {
 				Text(footer)
@@ -67,11 +86,35 @@ struct SettingsSection<Content: View>: View {
 
 /// Hairline between rows, inset to line up with the text rather than the card edge.
 struct RowDivider: View {
+	/// Rows with an icon tile need a deeper inset so the rule starts under the label.
+	var inset: CGFloat = Theme.rowPadding
+
 	var body: some View {
 		Rectangle()
 			.fill(Theme.separator)
 			.frame(height: 1)
-			.padding(.leading, Theme.rowPadding)
+			.padding(.leading, inset)
+	}
+}
+
+/// A rounded, tinted square holding an SF Symbol.
+///
+/// Rows of pure text are hard to scan — the eye has to read every line to find the one it
+/// wants. A consistent icon column gives each row a shape you can navigate by.
+struct IconTile: View {
+	let symbol: String
+	var tint: Color = Theme.accent
+	var isEnabled = true
+
+	var body: some View {
+		RoundedRectangle(cornerRadius: 7, style: .continuous)
+			.fill(tint.opacity(isEnabled ? 0.18 : 0.08))
+			.frame(width: 28, height: 28)
+			.overlay {
+				Image(systemName: symbol)
+					.font(.system(size: 13, weight: .medium))
+					.foregroundStyle(isEnabled ? tint : Theme.tertiaryLabel)
+			}
 	}
 }
 
@@ -82,11 +125,17 @@ struct SettingRow<Trailing: View>: View {
 
 	let title: String
 	var detail: String?
+	/// SF Symbol shown in a tinted tile at the leading edge.
+	var symbol: String?
+	var symbolTint: Color = Theme.accent
 	var isEnabled = true
 	@ViewBuilder var trailing: Trailing
 
 	var body: some View {
 		HStack(alignment: .center, spacing: 12) {
+			if let symbol {
+				IconTile(symbol: symbol, tint: symbolTint, isEnabled: isEnabled)
+			}
 			VStack(alignment: .leading, spacing: 3) {
 				Text(title)
 					.font(.system(size: 13))
@@ -110,11 +159,16 @@ struct SettingToggle: View {
 
 	let title: String
 	var detail: String?
+	var symbol: String?
+	var symbolTint: Color = Theme.accent
 	var isEnabled = true
 	@Binding var isOn: Bool
 
 	var body: some View {
-		SettingRow(title: title, detail: detail, isEnabled: isEnabled) {
+		SettingRow(
+			title: title, detail: detail, symbol: symbol, symbolTint: symbolTint,
+			isEnabled: isEnabled
+		) {
 			Toggle("", isOn: $isOn)
 				.labelsHidden()
 				.toggleStyle(.switch)
@@ -129,6 +183,7 @@ struct SettingChoice: View {
 
 	let title: String
 	let detail: String
+	var symbol: String?
 	let isSelected: Bool
 	let select: () -> Void
 
@@ -139,6 +194,10 @@ struct SettingChoice: View {
 					.font(.system(size: 15))
 					.foregroundStyle(isSelected ? Theme.accent : Theme.tertiaryLabel)
 					.padding(.top, 1)
+
+				if let symbol {
+					IconTile(symbol: symbol, tint: isSelected ? Theme.accent : Theme.tertiaryLabel)
+				}
 
 				VStack(alignment: .leading, spacing: 3) {
 					Text(title)
@@ -207,8 +266,16 @@ struct StatusPill: View {
 struct AccentButtonStyle: ButtonStyle {
 	var role: ButtonRole?
 
+	/// Neutral rather than accented, for actions that sit beside a primary one.
+	static let secondary = ButtonRole.cancel
+
 	func makeBody(configuration: Configuration) -> some View {
-		let tint = role == .destructive ? Theme.danger : Theme.accent
+		let tint: Color =
+			switch role {
+			case .some(.destructive): Theme.danger
+			case .some(.cancel): Theme.label
+			default: Theme.accent
+			}
 		return configuration.label
 			.font(.system(size: 12, weight: .medium))
 			.foregroundStyle(tint)
