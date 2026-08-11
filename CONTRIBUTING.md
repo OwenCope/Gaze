@@ -1,5 +1,52 @@
 # Working on this
 
+## First run on your machine
+
+```sh
+git clone https://github.com/OwenCope/FaceID.git
+cd FaceID
+./build.sh && open "build/Face ID.app"
+```
+
+**You need a code-signing identity.** `build.sh` looks for an *Apple Development* or
+*Developer ID Application* certificate in your login keychain and falls back to ad-hoc
+signing if it finds neither. Ad-hoc works, but the app's code identity changes on every
+build, so macOS challenges it for the keychain password each time you rebuild — tedious
+within about ten minutes.
+
+A free Apple ID is enough: open Xcode → Settings → Accounts → add your Apple ID → Manage
+Certificates → **+** → Apple Development. No paid membership required. Verify with:
+
+```sh
+security find-identity -v -p codesigning
+```
+
+**Then, in order:**
+
+1. **Camera** — macOS prompts on first launch. Approve it, or nothing works.
+2. **Enrol your face** — the app opens setup automatically when nothing is enrolled.
+   Turn your head slowly until the ring fills; it does two passes.
+3. **Test Recognition** (menu bar) — confirm your score sits well clear of the threshold
+   before trusting it. Get someone else to sit in front of it too; that number matters
+   more than yours.
+4. **Choose an unlock backend** in Settings. *Password replay* needs your account password
+   stored and Accessibility permission (System Settings → Privacy & Security →
+   Accessibility). *Don't unlock* is the safe way to try recognition without wiring it to
+   anything.
+5. **Open at login**, in Settings, once you're happy — it only watches for the lock while
+   running.
+
+**Nothing transfers between machines.** Faceprints are sealed with a Secure Enclave key
+that never leaves the Mac that made them, so you enrol fresh. Same for the stored password.
+There is no account, no sync, and nothing leaves the device.
+
+**If recognition seems broken**, check `Test Recognition` first — a low score means the
+model or the lighting, not the unlock path. The unlock path logs everything:
+
+```sh
+log stream --predicate 'subsystem == "app.faceid.FaceID"'
+```
+
 ## Build and run
 
 ```sh
