@@ -91,6 +91,31 @@ it much faster.
 
 ---
 
+## Do not install the authorization plugin
+
+It authenticates correctly but **cannot display UI**, which makes routing a real lock screen
+through it a lockout risk.
+
+`Plugin/build-paneltest.sh` builds a GUI app that asks for the throwaway right, so
+SecurityAgent draws the panel with no lock screen involved. It reports:
+
+```
+Calling displayView.
+displayView returned; container=NIL
+```
+
+`displayView` returns immediately and `viewForType:` is never called — SecurityAgent never
+asks for our view. Face matching still works, since that path needs no UI. But **if the
+face is not recognised the password field can never appear**, and our mechanism is the only
+one in its rule, so there is nothing behind it. No way in.
+
+Likely cause: `SFAuthorizationPluginView` only requests a view when the evaluation actually
+needs credentials, and a lone `evaluate-mechanisms` rule never signals that. Worth trying a
+rule that chains `builtin:authenticate` after our mechanism — though that changes the
+design, because the builtin would then want a password too.
+
+Until `viewForType:` is confirmed firing, **keystroke replay is the only safe backend.**
+
 ## Current state
 
 **Working:** enrolment, recognition, Secure Enclave storage, 6-attempt lockout, camera
