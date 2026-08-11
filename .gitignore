@@ -1,0 +1,12 @@
+# Build output
+build/
+*.dSYM/
+
+# Compiled Core ML models — regenerated from the .mlpackage by build.sh
+*.mlmodelc/
+
+# Plugin build output
+Plugin/build/
+
+# macOS noise
+.DS_Store

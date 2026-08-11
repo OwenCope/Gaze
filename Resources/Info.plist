@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Face ID</string>
+	<key>CFBundleDisplayName</key>
+	<string>Face ID</string>
+	<key>CFBundleExecutable</key>
+	<string>FaceID</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.faceid.FaceID</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+
+	<!-- Face ID's own UI is dark on every Apple platform, so the app doesn't follow
+	     the system appearance. -->
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+
+	<!-- Shown in the TCC prompt the first time we open the camera. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Face ID uses the camera to enrol your face and to recognise you when your Mac is locked. Images are matched on-device and never leave this Mac.</string>
+
+	<!-- The app runs as a menu bar agent; the setup window is opened on demand. -->
+	<key>LSUIElement</key>
+	<true/>
+</dict>
+</plist>

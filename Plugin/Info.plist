@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>FaceID</string>
+	<key>CFBundleExecutable</key>
+	<string>FaceID</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.faceid.plugin</string>
+	<key>CFBundlePackageType</key>
+	<string>BNDL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+
+	<!--
+	  Code-signing requirement the Face ID agent must satisfy before its verdict is
+	  believed. Written by install.sh once the agent's cdhash is known — an ad-hoc or
+	  Development signature carries no stable team identifier, so the binary hash is the
+	  only thing worth pinning. Empty here on purpose: an unpinned plugin refuses to
+	  trust any answer and falls back to password-only.
+	-->
+	<key>FaceIDAgentRequirement</key>
+	<string></string>
+</dict>
+</plist>

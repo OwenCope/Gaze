@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>app.faceid.agent</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Applications/Face ID.app/Contents/MacOS/FaceID</string>
+	</array>
+
+	<!--
+	  The reason this LaunchAgent exists at all. A plain application cannot vend a mach
+	  service — only launchd can register one — and without a registered service the
+	  authorization plugin has no way to reach the app. Declaring it here is what lets
+	  the plugin, running inside SecurityAgent, find us.
+	-->
+	<key>MachServices</key>
+	<dict>
+		<key>app.faceid.unlock</key>
+		<true/>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<!--
+	  Restart if it dies. If the agent is not running when the screen locks, the plugin
+	  gets no answer and falls back to the password field — inconvenient rather than
+	  dangerous, but there is no reason to let it stay down.
+	-->
+	<key>KeepAlive</key>
+	<true/>
+</dict>
+</plist>
