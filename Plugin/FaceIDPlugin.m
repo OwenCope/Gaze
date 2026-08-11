@@ -20,6 +20,7 @@
 #import "PeerTrust.h"
 
 #import <Cocoa/Cocoa.h>
+#import <QuartzCore/QuartzCore.h>
 #import <Security/AuthorizationPlugin.h>
 #import <SecurityInterface/SFAuthorizationPluginView.h>
 #import <os/log.h>
@@ -269,11 +270,16 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 @property (nonatomic, assign) BOOL faceIDAvailable;
 @property (nonatomic, strong) NSWindow *panelWindow;
 @property (nonatomic, strong) NSTextField *statusLabel;
+@property (nonatomic, strong) NSImageView *glyphView;
+@property (nonatomic, strong) CAShapeLayer *panelBody;
+@property (nonatomic, assign) CGFloat notchHeight;
+@property (nonatomic, strong) NSView *fieldContainer;
 
 /// Declared explicitly rather than relying on the call site sitting below the
 /// @implementation — that works, but it means a typo becomes a runtime no-op instead of
 /// a compile error.
 - (void)presentOwnPanel;
+- (void)expandForPassword;
 - (void)dismissPanel;
 - (void)showSuccess;
 - (void)fallBackToPassword;
@@ -327,7 +333,8 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 		self.passwordField != nil ? "exists" : "NIL",
 		self.passwordField.window != nil ? "on screen" : "NO WINDOW");
 	self.statusLabel.stringValue = @"Face not recognised — enter your password";
-	self.passwordField.hidden = NO;
+	[self expandForPassword];
+	self.fieldContainer.hidden = NO;
 	[self.panelWindow makeKeyAndOrderFront:nil];
 	[NSApp activateIgnoringOtherApps:YES];
 	[self.panelWindow makeFirstResponder:self.passwordField];
@@ -347,58 +354,176 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 /// Builds and shows our own window, since SecurityAgent never requests a view.
 - (void)presentOwnPanel
 {
-	// Logged on entry as well as exit. The exit log alone could not distinguish "the body
-	// never ran" from "the body ran and something swallowed the result", which are
-	// completely different bugs.
 	os_log_fault(FaceIDLog(), "presentOwnPanel ENTERED (thread=%{public}s)",
 		[NSThread isMainThread] ? "main" : "background");
 
 	if (self.panelWindow != nil) {
-		[self.panelWindow orderFrontRegardless];
+		[self.panelWindow makeKeyAndOrderFront:nil];
 		return;
 	}
 
-	NSRect frame = NSMakeRect(0, 0, 380, 190);
-	NSWindow *window = [[FaceIDPanelWindow alloc] initWithContentRect:frame
-														   styleMask:NSWindowStyleMaskBorderless
-															 backing:NSBackingStoreBuffered
-															   defer:NO];
-	// Above the lock shield, so it is visible when this runs for real.
-	window.level = NSScreenSaverWindowLevel + 1;
-	window.backgroundColor = [NSColor colorWithWhite:0.08 alpha:1.0];
+	NSScreen *screen = [NSScreen mainScreen];
+	if (screen == nil) {
+		return;
+	}
+
+	// Measured from the two menu bar fragments either side of the camera housing.
+	// Falls back to a sensible width on a screen with no notch.
+	CGFloat notchWidth = 180;
+	NSRect left = screen.auxiliaryTopLeftArea;
+	NSRect right = screen.auxiliaryTopRightArea;
+	if (!NSIsEmptyRect(left) && !NSIsEmptyRect(right)) {
+		CGFloat gap = NSMinX(right) - NSMaxX(left);
+		if (gap > 0) {
+			notchWidth = gap;
+		}
+	}
+	self.notchHeight = screen.safeAreaInsets.top > 0 ? screen.safeAreaInsets.top : 32;
+
+	// Wider than the cutout, matching what notch apps present, and tall enough that the
+	// panel can grow downward when it needs a password field.
+	const CGFloat width = notchWidth * 1.56;
+	const CGFloat drop = 66;
+	const CGFloat height = self.notchHeight + drop;
+
+	NSWindow *window = [[FaceIDPanelWindow alloc]
+		initWithContentRect:NSMakeRect(NSMidX(screen.frame) - width / 2,
+									   NSMaxY(screen.frame) - height,
+									   width, height)
+				  styleMask:NSWindowStyleMaskBorderless
+					backing:NSBackingStoreBuffered
+					  defer:NO];
+	window.backgroundColor = [NSColor clearColor];
 	window.opaque = NO;
-	window.hasShadow = YES;
+	window.hasShadow = NO;
+	window.level = NSScreenSaverWindowLevel + 1;
 	window.releasedWhenClosed = NO;
-	[window center];
 
-	NSTextField *label = [NSTextField labelWithString:@"Face ID"];
-	label.font = [NSFont systemFontOfSize:17 weight:NSFontWeightSemibold];
-	label.textColor = [NSColor whiteColor];
-	label.alignment = NSTextAlignmentCenter;
-	label.frame = NSMakeRect(0, 140, 380, 24);
-	[window.contentView addSubview:label];
+	// The window spans the cutout as well as the visible drop, so the black runs
+	// continuously out of the notch instead of butting against it with a seam.
+	NSView *content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, width, height)];
+	content.wantsLayer = YES;
+	window.contentView = content;
 
-	self.statusLabel = [NSTextField labelWithString:@"Looking…"];
-	self.statusLabel.font = [NSFont systemFontOfSize:12];
-	self.statusLabel.textColor = [NSColor secondaryLabelColor];
+	CAShapeLayer *body = [CAShapeLayer layer];
+	body.fillColor = [[NSColor blackColor] CGColor];
+	body.path = [self panelPathForWidth:width height:height];
+	// Dissolves toward the bottom rather than ending in a hard edge, so it reads as the
+	// notch extending instead of a rectangle stuck underneath it.
+	CAGradientLayer *fade = [CAGradientLayer layer];
+	fade.frame = NSMakeRect(0, 0, width, height);
+	fade.colors = @[ (id)[[NSColor clearColor] CGColor],
+					 (id)[[NSColor blackColor] CGColor],
+					 (id)[[NSColor blackColor] CGColor] ];
+	fade.locations = @[ @0.0, @0.34, @1.0 ];
+	body.mask = fade;
+	[content.layer addSublayer:body];
+
+	NSImageSymbolConfiguration *config =
+		[NSImageSymbolConfiguration configurationWithPointSize:26
+													   weight:NSFontWeightRegular
+														scale:NSImageSymbolScaleMedium];
+	NSImage *glyph = [[NSImage imageWithSystemSymbolName:@"faceid"
+							   accessibilityDescription:nil]
+		imageWithSymbolConfiguration:config];
+	self.glyphView = [NSImageView imageViewWithImage:glyph];
+	self.glyphView.contentTintColor = [NSColor whiteColor];
+	self.glyphView.frame = NSMakeRect((width - 34) / 2, drop - 52, 34, 34);
+	[content addSubview:self.glyphView];
+
+	self.statusLabel = [NSTextField labelWithString:@""];
+	self.statusLabel.font = [NSFont systemFontOfSize:11];
+	self.statusLabel.textColor = [NSColor colorWithWhite:1.0 alpha:0.6];
 	self.statusLabel.alignment = NSTextAlignmentCenter;
-	self.statusLabel.frame = NSMakeRect(0, 112, 380, 20);
-	[window.contentView addSubview:self.statusLabel];
+	self.statusLabel.frame = NSMakeRect(8, drop - 74, width - 16, 16);
+	[content addSubview:self.statusLabel];
+
+	// The field lives inside a rounded container. Setting cornerRadius on the text field
+	// directly leaves the cell's own corners square, so the rounding never shows.
+	self.fieldContainer = [[NSView alloc]
+		initWithFrame:NSMakeRect(22, 16, width - 44, 30)];
+	self.fieldContainer.wantsLayer = YES;
+	self.fieldContainer.layer.backgroundColor =
+		[[NSColor colorWithWhite:0.16 alpha:1.0] CGColor];
+	self.fieldContainer.layer.cornerRadius = 15;
+	self.fieldContainer.layer.cornerCurve = kCACornerCurveContinuous;
+	self.fieldContainer.layer.borderWidth = 0.5;
+	self.fieldContainer.layer.borderColor =
+		[[NSColor colorWithWhite:1.0 alpha:0.10] CGColor];
+	self.fieldContainer.hidden = YES;
+	[content addSubview:self.fieldContainer];
 
 	self.passwordField = [[NSSecureTextField alloc]
-		initWithFrame:NSMakeRect(60, 60, 260, 26)];
+		initWithFrame:NSMakeRect(10, 6, NSWidth(self.fieldContainer.frame) - 20, 18)];
 	self.passwordField.placeholderString = @"Password";
+	self.passwordField.font = [NSFont systemFontOfSize:12];
+	self.passwordField.alignment = NSTextAlignmentCenter;
+	self.passwordField.bezeled = NO;
+	self.passwordField.drawsBackground = NO;
+	self.passwordField.textColor = [NSColor whiteColor];
+	self.passwordField.focusRingType = NSFocusRingTypeNone;
 	self.passwordField.target = self;
 	self.passwordField.action = @selector(passwordEntered:);
-	self.passwordField.hidden = YES;
-	[window.contentView addSubview:self.passwordField];
+	[self.fieldContainer addSubview:self.passwordField];
 
+	self.panelBody = body;
 	self.panelWindow = window;
-	[window makeKeyAndOrderFront:nil];
-	[NSApp activateIgnoringOtherApps:YES];
+	[window orderFrontRegardless];
 
-	os_log_fault(FaceIDLog(), "Own panel presented: visible=%{public}s",
+	os_log_fault(FaceIDLog(), "Own panel presented at the notch: visible=%{public}s",
 		window.isVisible ? "YES" : "NO");
+}
+
+/// Square across the top where it meets the cutout, rounded along the bottom.
+- (CGPathRef)panelPathForWidth:(CGFloat)width height:(CGFloat)height
+{
+	const CGFloat radius = 16;
+	CGMutablePathRef path = CGPathCreateMutable();
+	CGPathMoveToPoint(path, NULL, 0, height);
+	CGPathAddLineToPoint(path, NULL, 0, radius);
+	CGPathAddArcToPoint(path, NULL, 0, 0, radius, 0, radius);
+	CGPathAddLineToPoint(path, NULL, width - radius, 0);
+	CGPathAddArcToPoint(path, NULL, width, 0, width, radius, radius);
+	CGPathAddLineToPoint(path, NULL, width, height);
+	CGPathCloseSubpath(path);
+	return (CGPathRef)CFAutorelease(path);
+}
+
+/// Grows the panel downward to make room for the password field.
+- (void)expandForPassword
+{
+	NSWindow *window = self.panelWindow;
+	if (window == nil) {
+		return;
+	}
+
+	NSRect frame = window.frame;
+	const CGFloat extra = 58;
+	frame.origin.y -= extra;
+	frame.size.height += extra;
+
+	[window setFrame:frame display:YES animate:NO];
+	self.panelBody.path = [self panelPathForWidth:NSWidth(frame) height:NSHeight(frame)];
+	((CAGradientLayer *)self.panelBody.mask).frame =
+		NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame));
+
+	// Everything shifts up by the amount the window grew downward.
+	NSView *content = window.contentView;
+	for (NSView *view in content.subviews) {
+		NSRect f = view.frame;
+		f.origin.y += extra;
+		view.frame = f;
+	}
+
+	NSRect fieldFrame = self.fieldContainer.frame;
+	fieldFrame.origin.y = 16;
+	self.fieldContainer.frame = fieldFrame;
+
+	// Pull the fade back once the field is showing. At its scanning extent the gradient
+	// reaches well past the field and washes it out — the dissolve is there to soften an
+	// empty bottom edge, not to erase content.
+	CAGradientLayer *fade = (CAGradientLayer *)self.panelBody.mask;
+	fade.locations = @[ @0.0, @0.10, @1.0 ];
 }
 
 /// Tears the panel down.
@@ -423,6 +548,12 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 {
 	self.statusLabel.stringValue = @"Face recognised";
 	self.passwordField.hidden = YES;
+	self.glyphView.image = [[NSImage imageWithSystemSymbolName:@"checkmark.circle.fill"
+									 accessibilityDescription:nil]
+		imageWithSymbolConfiguration:
+			[NSImageSymbolConfiguration configurationWithPointSize:52
+															weight:NSFontWeightSemibold
+															 scale:NSImageSymbolScaleLarge]];
 }
 
 /// Return pressed in the password field.
