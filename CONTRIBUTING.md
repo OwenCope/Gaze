@@ -29,7 +29,7 @@ security find-identity -v -p codesigning
 3. **Test Recognition** (menu bar) — confirm your score sits well clear of the threshold
    before trusting it. Get someone else to sit in front of it too; that number matters
    more than yours.
-4. **Choose an unlock backend** in Settings. *Password replay* needs your account password
+4. **Choose what happens when you're recognised**, in Settings. *Password replay* needs your account password
    stored and Accessibility permission (System Settings → Privacy & Security →
    Accessibility). *Don't unlock* is the safe way to try recognition without wiring it to
    anything.
@@ -87,15 +87,22 @@ across head angles, a different adult 0.23, threshold 0.45.
 Lock-screen scores run lower than in-app ones — the display is dark, so the face is lit
 less. Measure there too before trusting a threshold.
 
-## The authorization plugin
+## The authorization plugin — do not install it
 
-`Plugin/` builds a SecurityAgent authorization plugin. It works, on a stock SIP-enabled
-Mac with ordinary Development signing.
+`Plugin/` builds a SecurityAgent authorization plugin. It is no longer selectable in the
+app, and `install.sh` should not be run: doing so locked a Mac out.
 
-**Always test with `Plugin/test-plugin.sh`, never by editing `system.login.screensaver`.**
-It registers a throwaway right pointing at the same mechanism, so a broken plugin costs
-you a failed test instead of a Mac you cannot log into. Our mechanism is the only one in
-its rule, so if it fails to resolve there is no password prompt behind it.
+It passed everything — loaded, matched in 115ms, drew its own panel, PAM fallback verified
+both ways, `build-paneltest.sh` returned GRANTED. All of that drew the panel over an
+ordinary desktop. At a real lock screen SecurityAgent owns the display, our panel never
+became usable, and with our mechanism alone in the rule there was nothing behind it.
+
+Before touching it again it needs `mechanisms: [ FaceID:unlock, builtin:authenticate ]`, so
+Apple's password prompt is always the backstop, and a second machine to SSH from.
+
+**Test with `Plugin/test-plugin.sh`, never by editing `system.login.screensaver`** — and
+know that the throwaway right is a *weaker* test than the real lock screen, not an
+equivalent one.
 
 Rollback, worth keeping somewhere reachable from another machine:
 
@@ -119,3 +126,8 @@ sudo security authorizationdb write system.login.screensaver use-login-window-ui
   invariance has to be learned, not computed.
 - **Never pair launchd `KeepAlive` with `NSApp.activate()`.** That combination produced a
   process that stole focus every few seconds and could not be quit.
+- **A test that cannot fail the way production fails proves very little.** The plugin passed
+  a full end-to-end test over an ordinary desktop, then locked the machine out at a real
+  lock screen — because SecurityAgent owns the display there and our panel did not. When
+  the difference between test and production is the very thing under test, it is a
+  rehearsal, not evidence.

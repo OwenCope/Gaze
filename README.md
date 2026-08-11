@@ -4,8 +4,9 @@ Unlock your Mac by looking at it. Built as an alternative to
 [Sapphire](https://github.com/cshariq/Sapphire)'s Face ID feature — its approach informed
 this one, but no code was copied (it is GPL-3.0; see *Licensing* below).
 
-Intall
-```
+## Install
+
+```sh
 git clone https://github.com/OwenCope/FaceID.git
 
 cd FaceID && ./build.sh && open "build/Face ID.app"
@@ -50,8 +51,13 @@ screen locks
 
 ### Unlocking
 
-**Password replay** (current default). Stores your account password and types it into the
-login window. Keeps Touch ID. The password is recoverable by anything running as you.
+The app watches for the screen lock, recognises you, and types your stored password into
+the login window. Touch ID keeps working, and the login window is Apple's own — so if
+recognition fails there is always a real password field waiting. That property is what
+makes this the shipping path; the plugin section below is what happens without it.
+
+The cost is that your password is stored on this Mac in recoverable form. Anything running
+as you can extract it.
 
 ### Three decisions worth knowing
 
@@ -85,30 +91,41 @@ it much faster.
 
 ---
 
-## Do not install the authorization plugin
+## The authorization plugin — do not install it
 
-It authenticates correctly but **cannot display UI**, which makes routing a real lock screen
-through it a lockout risk.
+`Plugin/` builds a SecurityAgent authorization plugin. It is no longer selectable in the
+app, because installing it **locked a Mac out** and cost a reboot to recover.
 
-`Plugin/build-paneltest.sh` builds a GUI app that asks for the throwaway right, so
-SecurityAgent draws the panel with no lock screen involved. It reports:
+It passed every test available short of the real thing: it loaded on a stock SIP-enabled
+Mac with an ordinary Development signature, matched a face in 115ms with no password
+stored, drew its own panel, and its PAM password fallback accepted a correct password and
+rejected a wrong one. `Plugin/build-paneltest.sh` walked that whole path and returned
+GRANTED.
+
+Every one of those tests drew the panel **over an ordinary desktop**. At a real lock screen
+SecurityAgent owns the display, our panel never became usable, and because our mechanism
+was the only entry in `system.login.screensaver` there was nothing behind it — face
+reported success, the password field was unreachable, and Touch ID had been disabled by the
+install.
+
+The lesson is not that the plugin is impossible. It is that **the test could not fail the
+way production fails**, which made it a rehearsal rather than evidence.
+
+### What it would need
 
 ```
-Calling displayView.
-displayView returned; container=NIL
+mechanisms: [ FaceID:unlock, builtin:authenticate ]
 ```
 
-`displayView` returns immediately and `viewForType:` is never called — SecurityAgent never
-asks for our view. Face matching still works, since that path needs no UI. But **if the
-face is not recognised the password field can never appear**, and our mechanism is the only
-one in its rule, so there is nothing behind it. No way in.
+With Apple's own password prompt chained behind ours, a failure in our UI costs an extra
+prompt instead of the machine. That, plus a second device to SSH from — this cannot be
+validated safely from the machine being locked.
 
-Likely cause: `SFAuthorizationPluginView` only requests a view when the evaluation actually
-needs credentials, and a lone `evaluate-mechanisms` rule never signals that. Worth trying a
-rule that chains `builtin:authenticate` after our mechanism — though that changes the
-design, because the builtin would then want a password too.
+If your lock screen is currently routed through it:
 
-Until `viewForType:` is confirmed firing, **keystroke replay is the only safe backend.**
+```sh
+sudo security authorizationdb write system.login.screensaver use-login-window-ui
+```
 
 ## Current state
 
@@ -118,9 +135,8 @@ tamper protection, login item.
 
 **Not done:**
 
-- The plugin's PAM password fallback has never been executed. It is the path you depend on
-  when your face isn't recognised — exercise it before routing a real lock screen through
-  the plugin.
+- The authorization plugin needs a chained `builtin:authenticate` rule and a second device
+  to test from before it is safe to install again. See above.
 - The notch panel stacks below DynamicLake Pro's lock icon rather than replacing it.
 - Tamper protection only covers graceful quit; `kill -9` bypasses it entirely.
 - No liveness model is bundled, so that toggle is disabled.
