@@ -102,3 +102,26 @@ less. Measure there too before trusting a threshold.
 - **A test that cannot fail the way production fails proves very little.** When the
   difference between the test environment and the real one is the very thing under test,
   passing is a rehearsal, not evidence.
+
+## The unlock animation we want
+
+Reference frames are in the project owner's screenshots (YouTube Short,
+2026-08-12). The sequence, four beats:
+
+1. Green Face ID glyph, glowing, on black.
+2. The glyph collapses inward and **rotates in 3D** — it reads as a ring seen
+   edge-on, tilting toward the viewer as it spins.
+3. It settles flat into a plain green circle.
+4. A tick draws itself inside the circle.
+
+Everything stays green throughout; there is no white stage. The whole point is
+beat 2: the spin is what makes it read as one object transforming, rather than
+two icons swapping places, which is what `.symbolEffect(.replace)` gives you and
+why the current version feels flat by comparison.
+
+Implementation note: this cannot be done with SF Symbol transitions. It needs a
+hand-built shape with `rotation3DEffect` on the X axis, driven by a keyframe
+animation, with the glyph's stroke morphing into the ring as it goes.
+
+Current implementation is in `Sources/LockScreen/NotchCapsule.swift`, and
+`--preview-capsule` shows it without locking the screen.
