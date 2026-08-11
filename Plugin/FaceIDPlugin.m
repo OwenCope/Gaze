@@ -251,6 +251,8 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 @property (nonatomic, copy) NSString *username;
 /// NO when recognition cannot run, in which case the capsule is never shown.
 @property (nonatomic, assign) BOOL faceIDAvailable;
+@property (nonatomic, strong) NSWindow *panelWindow;
+@property (nonatomic, strong) NSTextField *statusLabel;
 @end
 
 @implementation FaceIDPluginView
@@ -301,9 +303,10 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	os_log_fault(FaceIDLog(), "fallBackToPassword: field=%{public}s window=%{public}s",
 		self.passwordField != nil ? "exists" : "NIL",
 		self.passwordField.window != nil ? "on screen" : "NO WINDOW");
-	self.capsule.hidden = YES;
+	self.statusLabel.stringValue = @"Face not recognised — enter your password";
 	self.passwordField.hidden = NO;
-	[self.passwordField.window makeFirstResponder:self.passwordField];
+	[self.panelWindow makeKeyAndOrderFront:nil];
+	[self.panelWindow makeFirstResponder:self.passwordField];
 }
 
 /*
@@ -314,6 +317,76 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
  resolve the authorization then nothing does and the lock screen hangs. So both branches
  end in SetResult, and so does Cancel.
 */
+/// Builds and shows our own window, since SecurityAgent never requests a view.
+- (void)presentOwnPanel
+{
+	if (self.panelWindow != nil) {
+		[self.panelWindow orderFrontRegardless];
+		return;
+	}
+
+	NSRect frame = NSMakeRect(0, 0, 380, 190);
+	NSWindow *window = [[NSWindow alloc] initWithContentRect:frame
+												  styleMask:NSWindowStyleMaskBorderless
+													backing:NSBackingStoreBuffered
+													  defer:NO];
+	// Above the lock shield, so it is visible when this runs for real.
+	window.level = NSScreenSaverWindowLevel + 1;
+	window.backgroundColor = [NSColor colorWithWhite:0.08 alpha:1.0];
+	window.opaque = NO;
+	window.hasShadow = YES;
+	window.releasedWhenClosed = NO;
+	[window center];
+
+	NSTextField *label = [NSTextField labelWithString:@"Face ID"];
+	label.font = [NSFont systemFontOfSize:17 weight:NSFontWeightSemibold];
+	label.textColor = [NSColor whiteColor];
+	label.alignment = NSTextAlignmentCenter;
+	label.frame = NSMakeRect(0, 140, 380, 24);
+	[window.contentView addSubview:label];
+
+	self.statusLabel = [NSTextField labelWithString:@"Looking…"];
+	self.statusLabel.font = [NSFont systemFontOfSize:12];
+	self.statusLabel.textColor = [NSColor secondaryLabelColor];
+	self.statusLabel.alignment = NSTextAlignmentCenter;
+	self.statusLabel.frame = NSMakeRect(0, 112, 380, 20);
+	[window.contentView addSubview:self.statusLabel];
+
+	self.passwordField = [[NSSecureTextField alloc]
+		initWithFrame:NSMakeRect(60, 60, 260, 26)];
+	self.passwordField.placeholderString = @"Password";
+	self.passwordField.target = self;
+	self.passwordField.action = @selector(passwordEntered:);
+	self.passwordField.hidden = YES;
+	[window.contentView addSubview:self.passwordField];
+
+	self.panelWindow = window;
+	[window orderFrontRegardless];
+	[window makeFirstResponder:nil];
+
+	os_log_fault(FaceIDLog(), "Own panel presented: visible=%{public}s",
+		window.isVisible ? "YES" : "NO");
+}
+
+/// Return pressed in the password field.
+- (void)passwordEntered:(id)sender
+{
+	NSString *entered = self.passwordField.stringValue ?: @"";
+	const char *user = self.username.UTF8String;
+
+	if (user != NULL && FaceIDPasswordIsValid(user, entered.UTF8String)) {
+		os_log_fault(FaceIDLog(), "Password accepted; allowing.");
+		[self.panelWindow orderOut:nil];
+		[self callbacks]->SetResult([self engineRef], kAuthorizationResultAllow);
+		return;
+	}
+
+	os_log_fault(FaceIDLog(), "Password rejected.");
+	self.passwordField.stringValue = @"";
+	self.statusLabel.stringValue = @"Incorrect password";
+	NSBeep();
+}
+
 - (void)buttonPressed:(SFButtonType)inButtonType
 {
 	const AuthorizationCallbacks *callbacks = [self callbacks];
@@ -424,6 +497,16 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 		[v displayView];
 		os_log_fault(FaceIDLog(), "displayView returned; container=%{public}s",
 			v.container != nil ? "built" : "NIL");
+
+		// We draw our own window rather than relying on SFAuthorizationPluginView.
+		//
+		// `displayView` returns without ever calling `viewForType:` — SecurityAgent does
+		// not ask for our view, so that API gives us no UI at all. But this process has a
+		// window server connection and a live AppKit run loop (verified: a plain NSWindow
+		// reports visible=YES), so the plugin can present its own panel. That is also
+		// better than the original plan: we control every pixel instead of living inside
+		// Apple's dialog.
+		[v presentOwnPanel];
 	});
 
 	if (!canUseFaceID) {
