@@ -118,8 +118,17 @@ final class AppServices {
 		}
 	}
 
-	/// Starts whichever trigger the selected backend needs.
+	/// Starts whichever trigger the selected backend needs, stopping the other.
+	///
+	/// Safe to call repeatedly, and it must be — changing the backend in Settings used to
+	/// do nothing until the app was relaunched, which left the user on a setting that
+	/// looked active while nothing was watching for the lock. Selecting the plugin without
+	/// installing it was the worst case: neither path running, and no indication why.
 	func startUnlockTrigger() {
+		// Tear down whatever was running before switching.
+		lockWatcher?.stop()
+		lockWatcher = nil
+
 		switch Preferences.shared.unlockBackend {
 		case .authPlugin:
 			// The plugin calls us; we only need to be listening.

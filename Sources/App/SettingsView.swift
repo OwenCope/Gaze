@@ -125,6 +125,8 @@ struct SettingsView: View {
 					isSelected: settings.unlockBackend == kind
 				) {
 					settings.unlockBackend = kind
+					// Apply immediately rather than at next launch.
+					AppServices.shared.startUnlockTrigger()
 				}
 			}
 

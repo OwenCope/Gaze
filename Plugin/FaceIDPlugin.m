@@ -257,6 +257,9 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 
 - (NSView *)viewForType:(SFViewType)type
 {
+	os_log_fault(FaceIDLog(), "viewForType: %ld called — SecurityAgent wants our view.",
+		(long)type);
+
 	if (self.container != nil) {
 		return self.container;
 	}
@@ -295,6 +298,9 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 /// Reveals the password field once face recognition is out of attempts.
 - (void)fallBackToPassword
 {
+	os_log_fault(FaceIDLog(), "fallBackToPassword: field=%{public}s window=%{public}s",
+		self.passwordField != nil ? "exists" : "NIL",
+		self.passwordField.window != nil ? "on screen" : "NO WINDOW");
 	self.capsule.hidden = YES;
 	self.passwordField.hidden = NO;
 	[self.passwordField.window makeFirstResponder:self.passwordField];
@@ -413,7 +419,11 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 				? [NSString stringWithUTF8String:username] : nil;
 			mechanism->view = (void *)CFBridgingRetain(view);
 		}
-		[(__bridge FaceIDPluginView *)mechanism->view displayView];
+		FaceIDPluginView *v = (__bridge FaceIDPluginView *)mechanism->view;
+		os_log_fault(FaceIDLog(), "Calling displayView.");
+		[v displayView];
+		os_log_fault(FaceIDLog(), "displayView returned; container=%{public}s",
+			v.container != nil ? "built" : "NIL");
 	});
 
 	if (!canUseFaceID) {
