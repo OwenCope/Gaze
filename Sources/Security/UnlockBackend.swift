@@ -6,10 +6,15 @@ enum UnlockBackendKind: String, CaseIterable, Sendable {
 	/// Recognition runs, but nothing is unlocked. The safe default and a usable way to
 	/// test enrolment without touching system authentication at all.
 	case none
-	/// A SecurityAgent plugin authorises the unlock. Ours is the UI on the lock screen.
+	/// Kept only so an existing installation can read its saved preference and keep the
+	/// recovery path alive. This backend is deliberately absent from `selectableCases`:
+	/// routing the lock screen through it can leave the user with no way back in.
 	case authPlugin
 	/// The stored password is replayed into the login window as keystrokes.
 	case keystroke
+
+	/// Backends that are safe to offer in Settings.
+	static let selectableCases: [UnlockBackendKind] = [.none, .keystroke]
 
 	var title: String {
 		switch self {

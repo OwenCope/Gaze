@@ -48,16 +48,10 @@ screen locks
 | `Sources/App` | App entry, settings, design tokens |
 | `Plugin/` | SecurityAgent authorization plugin (Objective-C) |
 
-### Two ways to unlock
+### Unlocking
 
 **Password replay** (current default). Stores your account password and types it into the
 login window. Keeps Touch ID. The password is recoverable by anything running as you.
-
-**Authorization plugin.** The system authenticates — no password stored or typed at all.
-Proven working end to end (115ms, `Face recognised; allowing unlock`), but **installed and
-not routed**: `system.login.screensaver` is still Apple's default. Costs Touch ID on the
-lock screen, because macOS won't run its modern lock-screen UI alongside a third-party
-plugin.
 
 ### Three decisions worth knowing
 

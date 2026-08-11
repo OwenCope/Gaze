@@ -113,11 +113,19 @@ struct SettingsView: View {
 		SettingsSection(
 			title: "When Your Face Is Recognised",
 			footer: settings.unlockBackend == .authPlugin
-				? "macOS won't run its modern lock screen and third-party plugins at the same "
-					+ "time, so this trades Touch ID for our own lock screen UI."
+				? "Restore Apple's lock screen before selecting another option: run "
+					+ "Plugin/uninstall.sh as an administrator."
 				: nil
 		) {
-			ForEach(Array(UnlockBackendKind.allCases.enumerated()), id: \.element) { index, kind in
+			if settings.unlockBackend == .authPlugin {
+				StatusPill(
+					kind: .error,
+					message: "The authorization plugin was removed because it can lock you out."
+				)
+				RowDivider()
+			}
+
+			ForEach(Array(UnlockBackendKind.selectableCases.enumerated()), id: \.element) { index, kind in
 				if index > 0 { RowDivider() }
 				SettingChoice(
 					title: kind.title,
@@ -130,8 +138,10 @@ struct SettingsView: View {
 				}
 			}
 
-			RowDivider()
-			readiness
+			if settings.unlockBackend != .authPlugin {
+				RowDivider()
+				readiness
+			}
 
 			if settings.unlockBackend == .keystroke {
 				RowDivider()
