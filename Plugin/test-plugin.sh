@@ -25,6 +25,19 @@ fi
 [ -d "$ROOT/build/FaceID.bundle" ] || { echo "Run ./build-plugin.sh first." >&2; exit 1; }
 [ -d "$APP" ] || { echo "Copy 'Face ID.app' to /Applications first." >&2; exit 1; }
 
+# Refresh the installed app from the current build.
+#
+# The plugin and the agent have to be the same vintage. Installing a new plugin against a
+# stale /Applications copy produces the most confusing failure mode there is: recognition
+# works and logs a match, but nothing appears, because the running agent predates whatever
+# UI the plugin now expects it to draw. That has cost two debugging rounds already.
+BUILD="$ROOT/../build/Face ID.app"
+if [ -d "$BUILD" ] && [ "$BUILD/Contents/MacOS/FaceID" -nt "$APP/Contents/MacOS/FaceID" ]; then
+	echo "→ Refreshing /Applications from the current build"
+	rm -rf "$APP"
+	cp -R "$BUILD" /Applications/
+fi
+
 echo "→ Pinning the agent requirement"
 REQUIREMENT="$(codesign -d -r- "$APP" 2>/dev/null | sed -n 's/^designated => //p')"
 [ -n "$REQUIREMENT" ] || { echo "App is not signed." >&2; exit 1; }
