@@ -24,6 +24,7 @@
 #import <SecurityInterface/SFAuthorizationPluginView.h>
 #import <os/log.h>
 #import <security/pam_appl.h>
+#import <pwd.h>
 #import <sys/stat.h>
 #import <xpc/xpc.h>
 
@@ -242,9 +243,24 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	return status == PAM_SUCCESS;
 }
 
+#pragma mark - Panel window
+
+/// A borderless window that can become key.
+///
+/// `NSWindow` returns NO from `canBecomeKeyWindow` for borderless windows by default, so
+/// the password field could be focused but never received a keystroke — the field looked
+/// live and simply ignored typing. Overriding both is what makes keyboard input reach it.
+@interface FaceIDPanelWindow : NSWindow
+@end
+
+@implementation FaceIDPanelWindow
+- (BOOL)canBecomeKeyWindow { return YES; }
+- (BOOL)canBecomeMainWindow { return YES; }
+@end
+
 #pragma mark - View
 
-@interface FaceIDPluginView : SFAuthorizationPluginView
+@interface FaceIDPluginView : NSObject
 @property (nonatomic, strong) NSView *container;
 @property (nonatomic, strong) FaceIDCapsuleView *capsule;
 @property (nonatomic, strong) NSSecureTextField *passwordField;
@@ -253,39 +269,46 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 @property (nonatomic, assign) BOOL faceIDAvailable;
 @property (nonatomic, strong) NSWindow *panelWindow;
 @property (nonatomic, strong) NSTextField *statusLabel;
+
+/// Declared explicitly rather than relying on the call site sitting below the
+/// @implementation — that works, but it means a typo becomes a runtime no-op instead of
+/// a compile error.
+- (void)presentOwnPanel;
+- (void)dismissPanel;
+- (void)showSuccess;
+- (void)fallBackToPassword;
+
+/// We hold the engine handles ourselves now, rather than inheriting them.
+@property (nonatomic, assign) const AuthorizationCallbacks *callbacks;
+@property (nonatomic, assign) AuthorizationEngineRef engineRef;
+- (instancetype)initWithCallbacks:(const AuthorizationCallbacks *)callbacks
+                     andEngineRef:(AuthorizationEngineRef)engineRef;
 @end
 
 @implementation FaceIDPluginView
 
-- (NSView *)viewForType:(SFViewType)type
+/*
+ Plain NSObject, not SFAuthorizationPluginView.
+
+ That base class's initialiser returns nil in this context, and because messaging nil is
+ a silent no-op in Objective-C every subsequent call vanished without a trace: displayView
+ appeared to "return immediately", `container` read as NIL, and presentOwnPanel was never
+ entered. All three symptoms were one nil object.
+
+ Nothing of it is missed — it never handed us a view (`viewForType:` was never called), and
+ we draw our own window now.
+*/
+- (instancetype)initWithCallbacks:(const AuthorizationCallbacks *)callbacks
+                     andEngineRef:(AuthorizationEngineRef)engineRef
 {
-	os_log_fault(FaceIDLog(), "viewForType: %ld called — SecurityAgent wants our view.",
-		(long)type);
-
-	if (self.container != nil) {
-		return self.container;
+	self = [super init];
+	if (self) {
+		_callbacks = callbacks;
+		_engineRef = engineRef;
 	}
-
-	self.container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 150)];
-
-	if (self.faceIDAvailable) {
-		self.capsule = [[FaceIDCapsuleView alloc]
-			initWithFrame:NSMakeRect(0, 60, 320, 90)];
-		self.capsule.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
-		[self.container addSubview:self.capsule];
-	}
-
-	// The password field exists in both cases — it is the fallback after a rejected face
-	// and the only option when Face ID cannot run — but it starts hidden while scanning
-	// so the lock screen is not two competing prompts at once.
-	self.passwordField = [[NSSecureTextField alloc]
-		initWithFrame:NSMakeRect(40, 16, 240, 24)];
-	self.passwordField.placeholderString = @"Password";
-	self.passwordField.hidden = self.faceIDAvailable;
-	[self.container addSubview:self.passwordField];
-
-	return self.container;
+	return self;
 }
+
 
 - (NSView *)firstKeyView
 {
@@ -306,7 +329,11 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	self.statusLabel.stringValue = @"Face not recognised — enter your password";
 	self.passwordField.hidden = NO;
 	[self.panelWindow makeKeyAndOrderFront:nil];
+	[NSApp activateIgnoringOtherApps:YES];
 	[self.panelWindow makeFirstResponder:self.passwordField];
+	os_log_fault(FaceIDLog(), "Password field shown: key=%{public}s firstResponder=%{public}s",
+		self.panelWindow.isKeyWindow ? "YES" : "NO",
+		self.panelWindow.firstResponder == self.passwordField ? "field" : "other");
 }
 
 /*
@@ -320,16 +347,22 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 /// Builds and shows our own window, since SecurityAgent never requests a view.
 - (void)presentOwnPanel
 {
+	// Logged on entry as well as exit. The exit log alone could not distinguish "the body
+	// never ran" from "the body ran and something swallowed the result", which are
+	// completely different bugs.
+	os_log_fault(FaceIDLog(), "presentOwnPanel ENTERED (thread=%{public}s)",
+		[NSThread isMainThread] ? "main" : "background");
+
 	if (self.panelWindow != nil) {
 		[self.panelWindow orderFrontRegardless];
 		return;
 	}
 
 	NSRect frame = NSMakeRect(0, 0, 380, 190);
-	NSWindow *window = [[NSWindow alloc] initWithContentRect:frame
-												  styleMask:NSWindowStyleMaskBorderless
-													backing:NSBackingStoreBuffered
-													  defer:NO];
+	NSWindow *window = [[FaceIDPanelWindow alloc] initWithContentRect:frame
+														   styleMask:NSWindowStyleMaskBorderless
+															 backing:NSBackingStoreBuffered
+															   defer:NO];
 	// Above the lock shield, so it is visible when this runs for real.
 	window.level = NSScreenSaverWindowLevel + 1;
 	window.backgroundColor = [NSColor colorWithWhite:0.08 alpha:1.0];
@@ -361,11 +394,35 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	[window.contentView addSubview:self.passwordField];
 
 	self.panelWindow = window;
-	[window orderFrontRegardless];
-	[window makeFirstResponder:nil];
+	[window makeKeyAndOrderFront:nil];
+	[NSApp activateIgnoringOtherApps:YES];
 
 	os_log_fault(FaceIDLog(), "Own panel presented: visible=%{public}s",
 		window.isVisible ? "YES" : "NO");
+}
+
+/// Tears the panel down.
+///
+/// Must be called when the mechanism deactivates or is destroyed. The window lives in
+/// SecurityAgentHelper, not in whatever asked for the authorization — so if the requester
+/// quits or is killed, nothing else closes it and it stays on screen above everything,
+/// unclosable. At a lock screen that would be considerably worse than a stray window.
+- (void)dismissPanel
+{
+	if (self.panelWindow == nil) {
+		return;
+	}
+	os_log_fault(FaceIDLog(), "Dismissing panel.");
+	[self.panelWindow orderOut:nil];
+	[self.panelWindow close];
+	self.panelWindow = nil;
+}
+
+/// Shows the matched state on our own panel.
+- (void)showSuccess
+{
+	self.statusLabel.stringValue = @"Face recognised";
+	self.passwordField.hidden = YES;
 }
 
 /// Return pressed in the password field.
@@ -381,44 +438,13 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 		return;
 	}
 
-	os_log_fault(FaceIDLog(), "Password rejected.");
+	os_log_fault(FaceIDLog(), "Password rejected (user=%{public}s).",
+		user != NULL ? user : "NULL");
 	self.passwordField.stringValue = @"";
 	self.statusLabel.stringValue = @"Incorrect password";
 	NSBeep();
 }
 
-- (void)buttonPressed:(SFButtonType)inButtonType
-{
-	const AuthorizationCallbacks *callbacks = [self callbacks];
-	AuthorizationEngineRef engine = [self engineRef];
-
-	if (inButtonType == SFButtonTypeCancel) {
-		callbacks->SetResult(engine, kAuthorizationResultUserCanceled);
-		return;
-	}
-
-	NSString *password = self.passwordField.stringValue ?: @"";
-	const char *user = self.username.UTF8String;
-
-	if (user != NULL && FaceIDPasswordIsValid(user, password.UTF8String)) {
-		// Hand the password to the engine as well as allowing. Later mechanisms — and the
-		// keychain unlock that follows a login — expect to find it in the context, and
-		// omitting it leaves the session authenticated but the keychain locked.
-		AuthorizationValue value = {
-			.length = strlen(password.UTF8String),
-			.data = (void *)password.UTF8String,
-		};
-		callbacks->SetContextValue(
-			engine, kAuthorizationEnvironmentPassword, kAuthorizationContextFlagVolatile, &value);
-		callbacks->SetResult(engine, kAuthorizationResultAllow);
-		return;
-	}
-
-	// Clear the field and stay on the panel. Denying here would end the whole evaluation
-	// on one typo rather than letting the user try again.
-	self.passwordField.stringValue = @"";
-	NSBeep();
-}
 
 @end
 
@@ -438,16 +464,36 @@ typedef struct {
 	char peerRequirement[512];
 } FaceIDPlugin;
 
-/// Reads the username the lock screen is authenticating.
+/// Reads the username being authenticated.
+///
+/// The lock screen puts it in the authorization context, but nothing sets it for a right
+/// invoked from an ordinary application — and a nil username makes the password check
+/// refuse every password, which reads as "incorrect" no matter what is typed. Fall back to
+/// whoever owns the console, which is the person in front of the machine either way.
 static const char *FaceIDCurrentUsername(FaceIDMechanism *mechanism)
 {
 	const AuthorizationValue *value = NULL;
 	OSStatus status = mechanism->callbacks->GetContextValue(
 		mechanism->engine, kAuthorizationEnvironmentUsername, NULL, &value);
-	if (status != errSecSuccess || value == NULL || value->data == NULL) {
-		return NULL;
+
+	if (status == errSecSuccess && value != NULL && value->data != NULL
+		&& ((const char *)value->data)[0] != '\0') {
+		os_log_fault(FaceIDLog(), "Username from context: %{public}s",
+			(const char *)value->data);
+		return (const char *)value->data;
 	}
-	return (const char *)value->data;
+
+	static char fallback[256];
+	struct passwd *pw = getpwuid(FaceIDConsoleUID());
+	if (pw != NULL && pw->pw_name != NULL) {
+		strlcpy(fallback, pw->pw_name, sizeof(fallback));
+		os_log_fault(FaceIDLog(), "No username in context; using console user %{public}s",
+			fallback);
+		return fallback;
+	}
+
+	os_log_error(FaceIDLog(), "No username available at all.");
+	return NULL;
 }
 
 static OSStatus FaceIDMechanismCreate(
@@ -493,10 +539,8 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 			mechanism->view = (void *)CFBridgingRetain(view);
 		}
 		FaceIDPluginView *v = (__bridge FaceIDPluginView *)mechanism->view;
-		os_log_fault(FaceIDLog(), "Calling displayView.");
-		[v displayView];
-		os_log_fault(FaceIDLog(), "displayView returned; container=%{public}s",
-			v.container != nil ? "built" : "NIL");
+		os_log_fault(FaceIDLog(), "View object is %{public}s",
+			v != nil ? "alive" : "NIL — nothing will happen");
 
 		// We draw our own window rather than relying on SFAuthorizationPluginView.
 		//
@@ -544,16 +588,9 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 				// called. The mechanism then waits forever, which on a real lock screen is
 				// the worst possible outcome. Resolve directly when there is nothing to
 				// animate.
-				if (view.capsule == nil) {
-					mechanism->callbacks->SetResult(
-						mechanism->engine, kAuthorizationResultAllow);
-					return;
-				}
-
-				[view.capsule playSuccessThen:^{
-					mechanism->callbacks->SetResult(
-						mechanism->engine, kAuthorizationResultAllow);
-				}];
+				[view showSuccess];
+				mechanism->callbacks->SetResult(
+					mechanism->engine, kAuthorizationResultAllow);
 			});
 			return;
 		}
@@ -566,9 +603,16 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 
 		FaceIDRunOnMain(^{
 			FaceIDPluginView *view = (__bridge FaceIDPluginView *)mechanism->view;
-			[view.capsule playRejectionThen:^{
-				[view fallBackToPassword];
-			}];
+
+			// Reveal the field directly rather than from an animation completion.
+			//
+			// This used to hang off [view.capsule playRejectionThen:], and `capsule` is
+			// nil now that we build our own panel — so the completion was silently
+			// dropped and the password field never appeared. Same nil-messaging trap as
+			// the success path had: the animation is decoration, the fallback is not, so
+			// the fallback must not depend on it.
+			[view fallBackToPassword];
+			[view.capsule playRejectionThen:nil];
 		});
 	});
 
@@ -578,6 +622,10 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 static OSStatus FaceIDMechanismDeactivate(AuthorizationMechanismRef inMechanism)
 {
 	FaceIDMechanism *mechanism = (FaceIDMechanism *)inMechanism;
+
+	FaceIDRunOnMain(^{
+		[(__bridge FaceIDPluginView *)mechanism->view dismissPanel];
+	});
 	return mechanism->callbacks->DidDeactivate(mechanism->engine);
 }
 
@@ -585,6 +633,11 @@ static OSStatus FaceIDMechanismDestroy(AuthorizationMechanismRef inMechanism)
 {
 	FaceIDMechanism *mechanism = (FaceIDMechanism *)inMechanism;
 	if (mechanism->view != NULL) {
+		// Belt and braces: if the evaluation was torn down without a Deactivate, this is
+		// the last chance to get the window off the screen.
+		FaceIDRunOnMain(^{
+			[(__bridge FaceIDPluginView *)mechanism->view dismissPanel];
+		});
 		// Balances the CFBridgingRetain in Invoke.
 		CFRelease(mechanism->view);
 		mechanism->view = NULL;
