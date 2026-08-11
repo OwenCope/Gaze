@@ -100,7 +100,7 @@ struct SettingsView: View {
 	/// carries the state rather than relying on the text below it.
 	private var heroTint: Color {
 		if lockout.isLockedOut { return Theme.danger }
-		return store.isEnrolled ? Theme.accent : Theme.tertiaryLabel
+		return store.isEnrolled ? Theme.faceID : Theme.tertiaryLabel
 	}
 
 	private var heroDetail: String {

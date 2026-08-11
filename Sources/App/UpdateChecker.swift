@@ -3,11 +3,18 @@ import Foundation
 import Observation
 import os
 
-/// Checks the git repository for newer commits, and pulls them.
+/// Checks the git repository for updates, and pulls them.
 ///
-/// Not GitHub Releases: during development the commits *are* the releases, and there is
-/// nothing tagged to compare against. This asks the checkout what it is behind by and
-/// offers to fast-forward.
+/// Prefers tags, falls back to commits.
+///
+/// If any release tag exists, only tags count as updates — a tag is the maintainer saying
+/// "this point is safe to pull", and without that every work-in-progress commit shows up
+/// as an update the user is invited to take. With no tags in the repository there is
+/// nothing to mark stability with, so commits are all there is and the checkout reports
+/// how far behind the branch it is.
+///
+/// The upshot: this behaves as a per-release updater the moment the project starts tagging,
+/// and as a development one until then, with no setting to get wrong.
 ///
 /// **What survives an update, and what does not.** Settings survive — they live in
 /// `UserDefaults` keyed to the bundle identifier, untouched by rebuilding. The enrolled
@@ -83,6 +90,14 @@ final class UpdateChecker {
 			return
 		}
 
+		// Tags first. Their presence is what decides which mode this is in.
+		if case .success(let tags) = await run(["tag", "--list"], in: repository),
+			!tags.isEmpty
+		{
+			await checkTags(in: repository)
+			return
+		}
+
 		guard case .success(let counts) = await run(
 			["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], in: repository)
 		else {
@@ -104,6 +119,29 @@ final class UpdateChecker {
 
 		Self.logger.notice("\(behind) new commit(s) available.")
 		state = .available(behind: behind, latest: latest)
+	}
+
+	/// Compares the checked-out commit against the newest release tag.
+	private func checkTags(in repository: String) async {
+		guard case .success(let latest) = await run(
+			["describe", "--tags", "--abbrev=0", "origin/main"], in: repository),
+			!latest.isEmpty
+		else {
+			state = .upToDate
+			return
+		}
+
+		// Already on it? `--contains` lists the tags reachable from HEAD.
+		if case .success(let containing) = await run(
+			["tag", "--contains", "HEAD"], in: repository),
+			containing.split(separator: "\n").contains(where: { $0 == latest })
+		{
+			state = .upToDate
+			return
+		}
+
+		Self.logger.notice("Release \(latest) available.")
+		state = .available(behind: 1, latest: latest)
 	}
 
 	// MARK: - Pulling

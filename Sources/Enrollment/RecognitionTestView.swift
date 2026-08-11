@@ -82,11 +82,11 @@ struct RecognitionTestView: View {
 			Text(statusText)
 				.font(.system(size: 14, weight: .medium))
 		}
-		.foregroundStyle(matched ? Theme.accent : Theme.secondaryLabel)
+		.foregroundStyle(matched ? Theme.faceID : Theme.secondaryLabel)
 		.padding(.horizontal, 14)
 		.padding(.vertical, 7)
 		.background(
-			Capsule().fill((matched ? Theme.accent : Color.white).opacity(matched ? 0.14 : 0.06)))
+			Capsule().fill((matched ? Theme.faceID : Color.white).opacity(matched ? 0.14 : 0.06)))
 		.animation(.easeOut(duration: 0.2), value: matched)
 	}
 
@@ -113,7 +113,7 @@ struct RecognitionTestView: View {
 
 			Circle()
 				.strokeBorder(
-					matched ? Theme.accent : Theme.separator,
+					matched ? Theme.faceID : Theme.separator,
 					lineWidth: matched ? 3 : 1)
 				.frame(width: circleSize + 10, height: circleSize + 10)
 				.animation(.easeOut(duration: 0.18), value: matched)
@@ -135,7 +135,7 @@ struct RecognitionTestView: View {
 							.fill(
 								LinearGradient(
 									colors: matched
-										? [Theme.accent.opacity(0.7), Theme.accent]
+										? [Theme.faceID.opacity(0.7), Theme.faceID]
 										: [Theme.warning.opacity(0.6), Theme.warning],
 									startPoint: .leading, endPoint: .trailing)
 							)
@@ -153,7 +153,7 @@ struct RecognitionTestView: View {
 
 				HStack {
 					Text(String(format: "%.3f", score))
-						.foregroundStyle(matched ? Theme.accent : Theme.secondaryLabel)
+						.foregroundStyle(matched ? Theme.faceID : Theme.secondaryLabel)
 					Spacer()
 					Text("threshold \(String(format: "%.2f", store.embedder.matchThreshold))")
 						.foregroundStyle(Theme.tertiaryLabel)
@@ -169,7 +169,7 @@ struct RecognitionTestView: View {
 					tint: Theme.warning, symbol: "arrow.down")
 				statTile(
 					label: "Highest", value: peak,
-					tint: Theme.accent, symbol: "arrow.up")
+					tint: Theme.faceID, symbol: "arrow.up")
 			}
 
 			VStack(spacing: 8) {

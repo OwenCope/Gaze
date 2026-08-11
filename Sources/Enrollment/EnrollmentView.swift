@@ -53,7 +53,7 @@ struct EnrollmentView: View {
 			if let pass = currentPass {
 				Text("Step \(pass) of 2")
 					.font(.system(size: 11, weight: .semibold))
-					.foregroundStyle(Theme.accent)
+					.foregroundStyle(Theme.faceID)
 					.tracking(0.6)
 					.transition(.opacity)
 			}
@@ -93,8 +93,8 @@ struct EnrollmentView: View {
 				.fill(
 					RadialGradient(
 						colors: [
-							Theme.accent.opacity(0.22 * (model?.progress ?? 0)),
-							Theme.accent.opacity(0),
+							Theme.faceID.opacity(0.22 * (model?.progress ?? 0)),
+							Theme.faceID.opacity(0),
 						],
 						center: .center, startRadius: 60, endRadius: 165))
 				.frame(width: ringSize + 40, height: ringSize + 40)
@@ -166,7 +166,7 @@ struct EnrollmentView: View {
 			ZStack(alignment: .leading) {
 				Capsule().fill(.white.opacity(0.08))
 				Capsule()
-					.fill(Theme.accent)
+					.fill(Theme.faceID)
 					.frame(width: geometry.size.width * (model?.progress ?? 0))
 			}
 		}

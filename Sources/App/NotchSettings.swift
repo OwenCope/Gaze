@@ -90,7 +90,7 @@ private struct StylePreview: View {
 				.overlay {
 					RoundedRectangle(cornerRadius: 9, style: .continuous)
 						.strokeBorder(
-							isSelected ? Theme.accent : Color.white.opacity(0.10),
+							isSelected ? Color.white.opacity(0.85) : Color.white.opacity(0.10),
 							lineWidth: isSelected ? 2 : 1)
 				}
 
@@ -151,9 +151,23 @@ struct SliderRow: View {
 					.contentTransition(.numericText())
 			}
 
-			Slider(value: $value, in: range)
-				.controlSize(.small)
-				.tint(Theme.accent)
+			VStack(spacing: 5) {
+				Slider(value: $value, in: range)
+					.controlSize(.small)
+					.tint(Theme.label.opacity(0.85))
+
+				// Tick marks. They give the track a sense of scale, so a slider reads as a
+				// measured range rather than a smear between two ends.
+				HStack(spacing: 0) {
+					ForEach(0..<9, id: \.self) { index in
+						Circle()
+							.fill(Theme.tertiaryLabel.opacity(0.5))
+							.frame(width: 2, height: 2)
+						if index < 8 { Spacer(minLength: 0) }
+					}
+				}
+				.padding(.horizontal, 6)
+			}
 		}
 		.padding(Theme.rowPadding)
 	}

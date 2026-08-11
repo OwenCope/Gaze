@@ -85,9 +85,12 @@ final class LockWatcher {
 		}
 
 		Self.logger.notice("Screen locked — looking for a face.")
-		// The capsule is deliberately NOT shown here. It appears only once a face is
-		// actually in frame — dropping it out of the notch at an empty room would be the
-		// Mac claiming to look at someone who isn't there.
+
+		// A padlock, immediately. It is a statement about the Mac's state, not a claim
+		// that the camera is looking at anyone — that distinction is why the compact
+		// locked phase exists separately from scanning.
+		capsule.show(phase: .locked)
+
 		attempt?.cancel()
 		attempt = Task { await self.attemptUnlock() }
 	}
@@ -150,8 +153,9 @@ final class LockWatcher {
 			// Shown on the very first frame containing a face. Waiting for a run of
 			// frames sounded more robust, but recognition regularly completes in under
 			// 200ms — the panel lost the race every time and never appeared at all.
+			// Grows out of the padlock the moment there is a face to look at.
 			if shownAt == nil {
-				capsule.show(phase: .scanning)
+				capsule.update(phase: .scanning)
 				shownAt = Date()
 			}
 
@@ -224,7 +228,12 @@ final class LockWatcher {
 		// failure at someone who never saw it scanning.
 		if shownAt != nil {
 			capsule.update(phase: .notRecognised)
-			capsule.hide(after: 1.4)
+			// Back to the padlock rather than vanishing — the Mac is still locked, and the
+			// indicator should keep saying so.
+			DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
+				guard let self, self.isLocked else { return }
+				self.capsule.update(phase: .locked)
+			}
 		}
 	}
 }

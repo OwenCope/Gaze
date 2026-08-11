@@ -26,8 +26,16 @@ enum Theme {
 	static let secondaryLabel = Color.white.opacity(0.55)
 	static let tertiaryLabel = Color.white.opacity(0.35)
 
-	/// Apple's system green — the Face ID accent.
-	static let accent = Color(red: 0.20, green: 0.78, blue: 0.35)
+	/// Controls are neutral.
+	///
+	/// Tinting every switch, slider and icon green made the whole window read as one
+	/// undifferentiated colour, so the green stopped meaning anything. Reserving it for
+	/// Face ID itself — the glyph, the enrolment ring, the success tick — is what gives it
+	/// back its meaning: green here says *recognised*, not *this is a control*.
+	static let accent = Color.white
+
+	/// Apple's system green. Face ID identity only, never chrome.
+	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
 	static let warning = Color(red: 1.0, green: 0.62, blue: 0.04)
 	static let danger = Color(red: 1.0, green: 0.27, blue: 0.23)
 
@@ -108,12 +116,13 @@ struct IconTile: View {
 
 	var body: some View {
 		RoundedRectangle(cornerRadius: 7, style: .continuous)
-			.fill(tint.opacity(isEnabled ? 0.18 : 0.08))
+			.fill(Color.white.opacity(isEnabled ? 0.10 : 0.05))
 			.frame(width: 28, height: 28)
 			.overlay {
 				Image(systemName: symbol)
 					.font(.system(size: 13, weight: .medium))
-					.foregroundStyle(isEnabled ? tint : Theme.tertiaryLabel)
+					.foregroundStyle(
+						isEnabled ? tint.opacity(tint == Theme.accent ? 0.9 : 1) : Theme.tertiaryLabel)
 			}
 	}
 }
@@ -214,12 +223,12 @@ struct SettingChoice: View {
 				// plus a tinted background — makes the selection the thing you notice.
 				Image(systemName: "checkmark")
 					.font(.system(size: 12, weight: .bold))
-					.foregroundStyle(Theme.accent)
+					.foregroundStyle(Theme.label)
 					.opacity(isSelected ? 1 : 0)
 					.padding(.top, 2)
 			}
 			.padding(Theme.rowPadding)
-			.background(isSelected ? Theme.accent.opacity(0.07) : .clear)
+			.background(isSelected ? Color.white.opacity(0.05) : .clear)
 			.contentShape(.rect)
 		}
 		.buttonStyle(.plain)
@@ -235,7 +244,7 @@ struct StatusPill: View {
 
 		var tint: Color {
 			switch self {
-			case .ok: return Theme.accent
+			case .ok: return Theme.faceID
 			case .warning: return Theme.warning
 			case .error: return Theme.danger
 			}
@@ -282,8 +291,7 @@ struct AccentButtonStyle: ButtonStyle {
 		let tint: Color =
 			switch role {
 			case .some(.destructive): Theme.danger
-			case .some(.cancel): Theme.label
-			default: Theme.accent
+			default: Theme.label
 			}
 		return configuration.label
 			.font(.system(size: 12, weight: .medium))

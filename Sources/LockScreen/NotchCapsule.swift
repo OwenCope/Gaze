@@ -12,9 +12,18 @@ import SwiftUI
 @MainActor
 final class NotchCapsuleModel {
 	enum Phase: Equatable {
+		/// Screen is locked, nobody in frame. A padlock, no camera activity implied.
+		case locked
 		case scanning
 		case notRecognised
 		case success
+
+		/// Compact while it is only showing a padlock, expanded once it is doing something.
+		///
+		/// A panel that hangs open all the while the Mac is locked is a permanent lump
+		/// under the notch; one that sits flush and grows when it has something to say is
+		/// a status indicator.
+		var isCompact: Bool { self == .locked }
 	}
 
 	var phase: Phase = .scanning
@@ -62,7 +71,7 @@ struct NotchCapsule: View {
 			// shape is exactly the notch's height, so it is completely hidden behind the
 			// physical cutout — nothing appears or disappears, it emerges.
 			background
-				.frame(height: expanded ? height : notchInset)
+				.frame(height: expanded ? currentHeight : notchInset)
 
 			content
 				.frame(width: glyphSide, height: glyphSide)
@@ -75,6 +84,9 @@ struct NotchCapsule: View {
 		}
 		.frame(width: width, height: height, alignment: .top)
 		.animation(.spring(response: 0.44, dampingFraction: 0.78), value: expanded)
+		// The grow from padlock to scanner is the same spring, so the two states read as
+		// one object changing rather than two panels swapping.
+		.animation(.spring(response: 0.40, dampingFraction: 0.76), value: model.phase.isCompact)
 		.modifier(Shaker(active: model.phase == .notRecognised))
 		.onAppear {
 			breathe = true
@@ -136,12 +148,22 @@ struct NotchCapsule: View {
 	}
 
 
+	/// Shorter while it is only a padlock, full height once it is scanning.
+	private var currentHeight: CGFloat {
+		model.phase.isCompact ? notchInset + Self.compactDrop : height
+	}
+
+	/// Just enough to seat the padlock below the cutout.
+	private static let compactDrop: CGFloat = 26
+
 	/// The part of the panel that actually shows below the cutout.
-	private var visibleHeight: CGFloat { height - notchInset }
+	private var visibleHeight: CGFloat { currentHeight - notchInset }
 
 	/// Sized against the visible drop. The mask does not touch the glyph, so it only has
 	/// to fit — it does not have to stay inside the opaque part.
-	private var glyphSide: CGFloat { min(width, visibleHeight) * 0.52 }
+	private var glyphSide: CGFloat {
+		model.phase.isCompact ? 15 : min(width, visibleHeight) * 0.52
+	}
 
 	/// Sits high in the drop, where the panel is still dark enough to carry it.
 	private var glyphTop: CGFloat { notchInset + visibleHeight * 0.30 - glyphSide / 2 }
@@ -175,7 +197,11 @@ struct NotchCapsule: View {
 	/// disc sits back while the tick stays solid — while giving the mark enough weight to
 	/// land.
 	private var symbolName: String {
-		model.phase == .success ? "checkmark.circle.fill" : "faceid"
+		switch model.phase {
+		case .locked: return "lock.fill"
+		case .success: return "checkmark.circle.fill"
+		case .scanning, .notRecognised: return "faceid"
+		}
 	}
 
 	/// Green on success, white while scanning.
@@ -188,7 +214,7 @@ struct NotchCapsule: View {
 		switch model.phase {
 		case .success: return Color(red: 0.20, green: 0.86, blue: 0.38)
 		case .notRecognised: return .red
-		case .scanning: return .white
+		case .locked, .scanning: return .white
 		}
 	}
 }
