@@ -107,46 +107,43 @@ struct NotchCapsule: View {
 	/// nothing behind it in the compositor for a material to blur, and unbacked glass falls
 	/// back to a pale grey slab on a dark lock screen.
 	private var background: some View {
-		shape
-			.fill(fillStyle)
-			.background {
-				// Glass needs something behind it to blur. In an isolated SkyLight space
-				// there is no backdrop, so the material is applied here rather than relied
-				// on to sample the wallpaper.
-				if model.style != .normal {
-					shape.fill(.ultraThinMaterial)
-				}
-			}
-			// Fades to clear toward the bottom, so the panel has no visible end and reads
-			// as the notch extending rather than a rectangle stuck under it.
-			.mask {
-				LinearGradient(
-					stops: [
-						.init(color: .black, location: 0),
-						.init(color: .black, location: 0.36),
-						.init(color: .black.opacity(0.72), location: 0.55),
-						.init(color: .black.opacity(0.38), location: 0.76),
-						.init(color: .black.opacity(0.12), location: 0.92),
-						.init(color: .clear, location: 1),
-					],
-					startPoint: .top,
-					endPoint: .bottom)
-			}
-	}
+		Group {
+			switch model.style {
+			case .normal:
+				// Genuinely opaque. On a dark wallpaper this is indistinguishable from
+				// the cutout itself, which is the point of offering it.
+				shape.fill(.black)
 
-	/// Opaque black, or black at a chosen transparency over a blurred material.
-	private var fillStyle: Color {
-		switch model.style {
-		case .normal:
-			return .black
-		case .semiLiquidGlass:
-			// The slider is "how transparent", so it subtracts from opacity.
-			return .black.opacity(1 - model.transparency)
-		case .liquidGlass:
-			return .black.opacity(model.prefersOpaque ? 0.42 : 0.24)
+			case .semiLiquidGlass:
+				// What the panel has been all along: dark, but with the wallpaper's
+				// light coming through a blur. The slider moves how much.
+				shape
+					.fill(.black.opacity(0.55 + 0.35 * (1 - model.transparency)))
+					.background { shape.fill(.ultraThinMaterial) }
+
+			case .liquidGlass:
+				// The real macOS 26 material — it refracts and picks up what is behind
+				// it rather than just being a dark tint over a blur.
+				Color.clear
+					.glassEffect(.regular.tint(.black.opacity(0.18)), in: shape)
+			}
+		}
+		// Fades to clear toward the bottom, so the panel has no visible end and reads
+		// as the notch extending rather than a rectangle stuck under it.
+		.mask {
+			LinearGradient(
+				stops: [
+					.init(color: .black, location: 0),
+					.init(color: .black, location: 0.36),
+					.init(color: .black.opacity(0.72), location: 0.55),
+					.init(color: .black.opacity(0.38), location: 0.76),
+					.init(color: .black.opacity(0.12), location: 0.92),
+					.init(color: .clear, location: 1),
+				],
+				startPoint: .top,
+				endPoint: .bottom)
 		}
 	}
-
 
 	/// Shorter while it is only a padlock, full height once it is scanning.
 	private var currentHeight: CGFloat {

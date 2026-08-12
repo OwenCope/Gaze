@@ -118,6 +118,7 @@ private struct StylePreview: View {
 			topLeadingRadius: 0, bottomLeadingRadius: 5,
 			bottomTrailingRadius: 5, topTrailingRadius: 0, style: .continuous)
 
+		// Mirrors NotchCapsule.background exactly, or the preview lies about the choice.
 		switch style {
 		case .normal:
 			shape.fill(.black)
@@ -125,8 +126,7 @@ private struct StylePreview: View {
 			shape.fill(.black.opacity(0.72))
 				.background(shape.fill(.ultraThinMaterial))
 		case .liquidGlass:
-			shape.fill(.black.opacity(0.28))
-				.background(shape.fill(.ultraThinMaterial))
+			Color.clear.glassEffect(.regular.tint(.black.opacity(0.18)), in: shape)
 		}
 	}
 }
