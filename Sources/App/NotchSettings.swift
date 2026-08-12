@@ -9,6 +9,9 @@ struct NotchSettingsSection: View {
 
 	@Bindable var settings: Preferences
 
+	/// Read once — decoding the desktop picture on every redraw would be wasteful.
+	@State private var wallpaper: NSImage? = WallpaperBrightness.notchStripThumbnail()
+
 	var body: some View {
 		SettingsSection(title: "Notch") {
 			styleRow
@@ -49,10 +52,9 @@ struct NotchSettingsSection: View {
 				ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
 					StylePreview(
 						style: style,
-						isSelected: settings.notchStyle == style
-					) {
-						settings.notchStyle = style
-					}
+						isSelected: settings.notchStyle == style,
+						select: { settings.notchStyle = style },
+						wallpaper: wallpaper)
 				}
 			}
 		}
@@ -66,24 +68,29 @@ private struct StylePreview: View {
 	let style: Preferences.NotchStyle
 	let isSelected: Bool
 	let select: () -> Void
+	let wallpaper: NSImage?
 
 	var body: some View {
 		Button(action: select) {
 			VStack(spacing: 6) {
 				ZStack(alignment: .top) {
-					// Stand-in for the wallpaper, so the styles can be compared against
-					// something rather than against black.
-					LinearGradient(
-						colors: [
-							Color(red: 0.42, green: 0.52, blue: 0.66),
-							Color(red: 0.78, green: 0.62, blue: 0.48),
-						],
-						startPoint: .topLeading, endPoint: .bottomTrailing)
+					// The user's actual wallpaper, cropped to the strip under the notch.
+					// An invented gradient made all three styles look identical.
+					if let wallpaper {
+						Image(nsImage: wallpaper)
+							.resizable()
+							.aspectRatio(contentMode: .fill)
+					} else {
+						LinearGradient(
+							colors: [
+								Color(red: 0.42, green: 0.52, blue: 0.66),
+								Color(red: 0.78, green: 0.62, blue: 0.48),
+							],
+							startPoint: .topLeading, endPoint: .bottomTrailing)
+					}
 
 					notchShape
-						.frame(height: 22)
-						.padding(.horizontal, 6)
-						.padding(.top, 5)
+						.frame(height: 26)
 				}
 				.frame(height: 56)
 				.clipShape(.rect(cornerRadius: 9, style: .continuous))

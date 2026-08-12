@@ -8,6 +8,42 @@ import CoreImage
 /// Sampling lets the material adapt instead of picking one and being wrong half the time.
 enum WallpaperBrightness {
 
+	/// The top-centre of the desktop picture — the strip the notch actually sits over.
+	///
+	/// Style previews are unreadable against an invented gradient: all three look like
+	/// grey blobs, and the whole point of the choice is how each one behaves over *your*
+	/// wallpaper. Cropping the real one to the region the panel covers makes the
+	/// comparison honest.
+	static func notchStripThumbnail(width: CGFloat = 220, height: CGFloat = 130) -> NSImage? {
+		guard
+			let screen = NSScreen.main,
+			let url = NSWorkspace.shared.desktopImageURL(for: screen),
+			let source = NSImage(contentsOf: url)
+		else { return nil }
+
+		let size = source.size
+		guard size.width > 0, size.height > 0 else { return nil }
+
+		// A wide strip across the top, matching the panel's own proportions.
+		let cropHeight = size.height * 0.34
+		let cropWidth = min(size.width, cropHeight * (width / height))
+		let crop = CGRect(
+			x: (size.width - cropWidth) / 2,
+			y: size.height - cropHeight,
+			width: cropWidth,
+			height: cropHeight)
+
+		let thumbnail = NSImage(size: CGSize(width: width, height: height))
+		thumbnail.lockFocus()
+		source.draw(
+			in: CGRect(x: 0, y: 0, width: width, height: height),
+			from: crop,
+			operation: .copy,
+			fraction: 1)
+		thumbnail.unlockFocus()
+		return thumbnail
+	}
+
 	/// Average luminance, 0 (black) to 1 (white), of the wallpaper region under the notch.
 	///
 	/// Only the strip the panel actually covers is sampled — a photo can be dark overall
