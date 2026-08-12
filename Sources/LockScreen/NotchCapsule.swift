@@ -512,12 +512,16 @@ struct NotchCapsule: View {
 		model.phase.isCompact ? restingBarHeight : height
 	}
 
-	/// The bar that carries the padlock: exactly the height of the housing beside it.
+	/// The bar that carries the padlock: the housing's height plus a single point.
 	///
 	/// It looked short once, but that was the bottom fade dissolving its lower third rather
-	/// than the height being wrong — and a lip added to "fix" it made the bar hang below the
-	/// notch, which is worse than either. Flush is what matches, so flush is what it is.
-	private var restingBarHeight: CGFloat { notchInset }
+	/// than the height being wrong — and a 12pt lip added to "fix" it made the bar hang below
+	/// the notch, which is worse than either.
+	///
+	/// The one point is not a fudge. Flush leaves the bar's bottom edge and the housing's on
+	/// exactly the same line, and any rounding in either direction shows as a hairline of
+	/// wallpaper between them; a point of overlap guarantees they meet.
+	private var restingBarHeight: CGFloat { notchInset + 1 }
 
 	/// Narrower while resting, full width once it drops.
 	///
