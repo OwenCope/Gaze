@@ -254,6 +254,17 @@ struct NotchCapsule: View {
 			// Grows downward out of the cutout and retracts back into it. Collapsed, the
 			// shape is exactly the notch's height, so it is completely hidden behind the
 			// physical cutout — nothing appears or disappears, it emerges.
+			// The bar is always drawn, in every mode.
+			//
+			// Island mode used to draw the island *instead* of it, which left the padlock
+			// standing on bare menu bar with nothing behind it — the chip's ground is the
+			// bar, and taking the bar away took the ground with it. The bar is the notch;
+			// the island is a thing the notch hands down. Both, always.
+			background
+				.frame(
+					width: isIsland ? compactBarWidth : backgroundWidth,
+					height: expanded ? (isIsland ? notchInset : currentHeight) : notchInset)
+
 			if isIsland {
 				islandBody
 					.frame(width: islandWidth, height: islandHeight)
@@ -265,11 +276,6 @@ struct NotchCapsule: View {
 					.offset(y: expanded ? 0 : islandHiddenOffset)
 					.scaleEffect(expanded ? 1 : 0.24, anchor: .top)
 					.opacity(expanded ? 1 : 0)
-			} else {
-				background
-					.frame(
-						width: backgroundWidth,
-						height: expanded ? currentHeight : notchInset)
 			}
 
 			// Locked: a padlock beside the cutout, at menu bar height.
@@ -522,7 +528,12 @@ struct NotchCapsule: View {
 		// Collapsing the width as well means the bar slides in behind the cutout and there is
 		// nothing left on screen to pop when the window goes.
 		guard expanded else { return cutoutWidth }
-		return model.phase.isCompact ? min(width, cutoutWidth + 2 * Self.restingEar) : width
+		return model.phase.isCompact ? compactBarWidth : width
+	}
+
+	/// The bar at rest: the housing plus a short ear either side.
+	private var compactBarWidth: CGFloat {
+		min(width, cutoutWidth + 2 * Self.restingEar)
 	}
 
 	/// Screen either side of the housing that the resting bar covers.
