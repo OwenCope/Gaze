@@ -81,6 +81,7 @@ final class LockWatcher {
 		guard store.isEnrolled else { return }
 		guard lockout.mayAttempt() else {
 			Self.logger.notice("Screen locked while locked out; not looking.")
+			StateBroadcast.post(.lockedOut)
 			return
 		}
 
@@ -90,6 +91,10 @@ final class LockWatcher {
 		// that the camera is looking at anyone — that distinction is why the compact
 		// locked phase exists separately from scanning.
 		capsule.show(phase: .locked)
+		// Every broadcast below is posted beside the capsule update that shows the same
+		// thing, so the panel and any subscriber can never disagree about the state.
+		StateBroadcast.reset()
+		StateBroadcast.post(.locked)
 
 		attempt?.cancel()
 		attempt = Task { await self.attemptUnlock() }
@@ -97,6 +102,7 @@ final class LockWatcher {
 
 	private func screenUnlocked() {
 		isLocked = false
+		StateBroadcast.post(.idle)
 		// Whatever unlocked the Mac, we are done. Cancelling releases the camera promptly
 		// rather than leaving the indicator lit after the user has typed their password.
 		attempt?.cancel()
@@ -156,6 +162,7 @@ final class LockWatcher {
 			// Grows out of the padlock the moment there is a face to look at.
 			if shownAt == nil {
 				capsule.update(phase: .scanning)
+				StateBroadcast.post(.detecting)
 				shownAt = Date()
 			}
 
@@ -190,6 +197,7 @@ final class LockWatcher {
 
 			// Let the checkmark actually draw before the password goes in.
 			capsule.update(phase: .success)
+			StateBroadcast.post(.succeeded, score: Double(result.score))
 			try? await Task.sleep(for: .milliseconds(480))
 
 			// Re-check *here*, immediately before posting keystrokes, and against the
@@ -226,6 +234,8 @@ final class LockWatcher {
 		// Only worth saying "not recognised" if we actually showed the user we were
 		// looking; otherwise the panel would appear for the first time to report a
 		// failure at someone who never saw it scanning.
+		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
+
 		if shownAt != nil {
 			capsule.update(phase: .notRecognised)
 			// Back to the padlock rather than vanishing — the Mac is still locked, and the

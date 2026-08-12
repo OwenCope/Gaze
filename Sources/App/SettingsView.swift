@@ -7,6 +7,7 @@ import SwiftUI
 enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	case general
 	case face
+	case credits
 	case about
 
 	var id: String { rawValue }
@@ -15,6 +16,7 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		switch self {
 		case .general: return "General"
 		case .face: return "Face ID"
+		case .credits: return "Credits"
 		case .about: return "About"
 		}
 	}
@@ -23,10 +25,21 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		switch self {
 		case .general: return "gearshape.fill"
 		case .face: return "faceid"
+		case .credits: return "heart.fill"
 		case .about: return "info"
 		}
 	}
 
+	/// Green for the app's own mark, neutral for everything else.
+	///
+	/// The one exception to monochrome icons, and it earns it: green means Face ID
+	/// everywhere else in this app, so the row that *is* Face ID should carry it.
+	var tint: Color {
+		self == .face ? Theme.faceID : Theme.grey
+	}
+
+	/// About sits apart from the panes you actually configure things in.
+	var isPrecededBySeparator: Bool { self == .about }
 }
 
 struct SettingsView: View {
@@ -73,6 +86,13 @@ struct SettingsView: View {
 	private var sidebar: some View {
 		VStack(alignment: .leading, spacing: 2) {
 			ForEach(Array(SettingsPane.allCases.enumerated()), id: \.element) { index, item in
+				if item.isPrecededBySeparator {
+					Rectangle()
+						.fill(Theme.separator)
+						.frame(height: 1)
+						.padding(.horizontal, 10)
+						.padding(.vertical, 7)
+				}
 				SidebarItem(
 					pane: item,
 					isSelected: pane == item,
@@ -115,7 +135,7 @@ struct SettingsView: View {
 		case .general:
 			if case .available = updates.state { return Theme.faceID }
 			return nil
-		case .about:
+		case .credits, .about:
 			return nil
 		}
 	}
@@ -141,6 +161,8 @@ struct SettingsView: View {
 					securitySection
 					behaviourSection
 					updatesSection
+				case .credits:
+					creditsSection
 				case .about:
 					aboutSection
 				}
@@ -568,21 +590,64 @@ struct SettingsView: View {
 				}
 			}
 
-			SettingsSection(title: "Thanks") {
+		}
+	}
+
+	// MARK: - Credits
+
+	/// Its own pane rather than a group tucked under About.
+	///
+	/// Not ceremony: nearly everything specific about this app came from someone else — the
+	/// recognition model, and most of what the settings window looks like. A line at the
+	/// bottom of an About page is not where you put that.
+	private var creditsSection: some View {
+		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+			SettingsSection(
+				title: "Built on other people's work",
+				footer: "Both of them build Mac apps worth your time. Go and look at them."
+			) {
 				SettingRow(
 					title: "DanFQ",
-					detail: "Sapphire, whose recognition model this uses.",
-					symbol: "heart.fill"
+					detail: "Sapphire — the recognition model this app matches faces with.",
+					symbol: "brain.head.profile"
 				) {
-					Button("Visit") {
-						if let url = URL(string: "https://sapphire-app.tech/") {
-							NSWorkspace.shared.open(url)
-						}
-					}
-					.buttonStyle(AccentButtonStyle.quiet)
+					Button("Sapphire") { Self.open("https://sapphire-app.tech/") }
+						.buttonStyle(AccentButtonStyle.quiet)
+				}
+
+				RowDivider()
+				SettingRow(
+					title: "Aviorrok",
+					detail: "Dynamic Lake Pro — the notch panel and this window follow its lead.",
+					symbol: "macbook"
+				) {
+					Button("Dynamic Lake") { Self.open("https://dynamiclake.com/") }
+						.buttonStyle(AccentButtonStyle.quiet)
 				}
 			}
+
+			// Plain text, not a group. An empty card with a caption under it is a group that
+			// forgot to have any rows.
+			VStack(alignment: .leading, spacing: 6) {
+				Text("And everyone who said what was wrong")
+					.font(Typography.groupTitle)
+					.foregroundStyle(Theme.label)
+				Text(
+					"The Discord picked apart every screenshot: the settings layout, light mode, "
+						+ "what the notch panel should look like at rest, and what this app should "
+						+ "not claim about itself. Most of it was right."
+				)
+				.font(Typography.detail)
+				.foregroundStyle(Theme.secondaryLabel)
+				.fixedSize(horizontal: false, vertical: true)
+			}
+			.padding(.horizontal, 4)
 		}
+	}
+
+	private static func open(_ address: String) {
+		guard let url = URL(string: address) else { return }
+		NSWorkspace.shared.open(url)
 	}
 
 	// MARK: - Actions
@@ -634,7 +699,7 @@ private struct SidebarItem: View {
 	var body: some View {
 		Button(action: select) {
 			HStack(spacing: 9) {
-				IconTile(symbol: pane.symbol)
+				IconTile(symbol: pane.symbol, tint: pane.tint)
 				Text(pane.title)
 					.font(Typography.row)
 					.foregroundStyle(Theme.label)
