@@ -98,8 +98,8 @@ struct NotchCapsule: View {
 			style: .continuous)
 	}
 
-	/// Half the screen either side of the cutout.
-	private var earWidth: CGFloat { max(0, (width - cutoutWidth) / 2) }
+	/// The visible screen either side of the cutout, in whichever shape is currently drawn.
+	private var earWidth: CGFloat { max(0, (backgroundWidth - cutoutWidth) / 2) }
 
 	var body: some View {
 		ZStack(alignment: .top) {
@@ -120,7 +120,9 @@ struct NotchCapsule: View {
 			// that is space this window already covers.
 			if model.phase.isCompact {
 				lockChip
-					.frame(maxWidth: .infinity, alignment: .leading)
+					// Positioned against the *resting* bar, not the window — the window is
+					// wider, so aligning to it put the padlock outside the black.
+					.frame(width: backgroundWidth, alignment: .leading)
 					.opacity(expanded ? 1 : 0)
 					.transition(.opacity.combined(with: .scale(scale: 0.7)))
 			} else {
@@ -206,16 +208,25 @@ struct NotchCapsule: View {
 
 	/// Fades to clear toward the bottom, so a glass panel has no visible end and reads as
 	/// the notch extending rather than a rectangle stuck under it.
+	///
+	/// Only while it is extending. The resting bar sits inside the menu bar band, where a
+	/// fade has nothing to resolve into — it just softens the one edge that should be as
+	/// crisp as the housing it continues, and every other notch app's bar is crisp there.
 	private var fade: some View {
 		LinearGradient(
-			stops: [
-				.init(color: .black, location: 0),
-				.init(color: .black, location: 0.36),
-				.init(color: .black.opacity(0.72), location: 0.55),
-				.init(color: .black.opacity(0.38), location: 0.76),
-				.init(color: .black.opacity(0.12), location: 0.92),
-				.init(color: .clear, location: 1),
-			],
+			stops: model.phase.isCompact
+				? [
+					.init(color: .black, location: 0),
+					.init(color: .black, location: 1),
+				]
+				: [
+					.init(color: .black, location: 0),
+					.init(color: .black, location: 0.36),
+					.init(color: .black.opacity(0.72), location: 0.55),
+					.init(color: .black.opacity(0.38), location: 0.76),
+					.init(color: .black.opacity(0.12), location: 0.92),
+					.init(color: .clear, location: 1),
+				],
 			startPoint: .top,
 			endPoint: .bottom)
 	}
@@ -264,31 +275,32 @@ struct NotchCapsule: View {
 			.frame(width: earWidth, height: notchInset)
 	}
 
-	/// A shallow lip while resting, the full drop once it is scanning.
+	/// Flush with the cutout while resting, the full drop once it is scanning.
 	///
-	/// The lip is what makes the resting state read as the notch rather than as a bar stuck
-	/// under the menu bar: it is wider than the housing and hangs just far enough below it to
-	/// round off, so the black reads as one continuous shape with the cutout. Sitting flush
-	/// at exactly the cutout's height gave it square corners and nothing to be a shape *of*.
+	/// The 11pt lip this had was almost the entire overhang: the notch is 32pt tall and a
+	/// notch app's bar sits flush with it, so anything hanging below shows as a second shape
+	/// behind the first. Nothing hangs below now — the resting bar occupies the menu bar band
+	/// and no more, and its corners round *within* that band, which is what the radius floor
+	/// is for.
 	private var currentHeight: CGFloat {
-		model.phase.isCompact ? notchInset + Self.compactDrop : height
+		model.phase.isCompact ? notchInset : height
 	}
 
-	/// Enough to clear the menu bar and take a corner radius, and no more — this is a
-	/// resting indicator, not an open panel.
-	private static let compactDrop: CGFloat = 11
+	/// Narrower while resting, full width once it drops.
+	///
+	/// Deliberately smaller than the bar a notch app draws over the same area. Dynamic Lake
+	/// Pro's is about 276pt across and flush with the menu bar; ours resting inside that
+	/// disappears under it entirely, instead of peeking out a few points wider and lower and
+	/// reading as a second notch behind the first.
+	///
+	/// It still has to look right on its own, so this is a smaller version of the same shape
+	/// rather than nothing at all — rounded, ears either side of the housing, just tighter.
+	private var backgroundWidth: CGFloat {
+		model.phase.isCompact ? min(width, cutoutWidth + 2 * Self.restingEar) : width
+	}
 
-	/// Full width in every phase.
-	///
-	/// This was briefly narrowed to the cutout while resting, to stop a square-cornered bar
-	/// running across the menu bar either side of the housing. It did stop that, by hiding
-	/// the panel behind the physical notch entirely — which left the padlock as a chip
-	/// floating in open menu bar next to a notch it had no visible connection to.
-	///
-	/// The squareness was never about the width. It came from a resting height of exactly
-	/// `notchInset`: nothing below the cutout, so a corner radius derived from the visible
-	/// drop was zero. The fix is a drop to round, not a shape to hide.
-	private var backgroundWidth: CGFloat { width }
+	/// Screen either side of the housing that the resting bar covers.
+	private static let restingEar: CGFloat = 36
 
 	/// The part of the panel that actually shows below the cutout.
 	private var visibleHeight: CGFloat { currentHeight - notchInset }
