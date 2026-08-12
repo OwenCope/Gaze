@@ -70,6 +70,16 @@ enum Theme {
 	/// coloured, it is because it is telling you something.
 	static let grey = Color(red: 0.56, green: 0.56, blue: 0.58)
 
+	/// What a switched-on control's icon turns.
+	///
+	/// The argument against colour was that hue inside a pane carries no information. A
+	/// switch is the exception: on and off is exactly the information an icon can carry, and
+	/// carrying it in colour means the state of five switches reads in one glance instead of
+	/// five. Grey when off, and this when on.
+	static let active = dynamic(
+		light: Color(red: 0.00, green: 0.42, blue: 0.90),
+		dark: Color(red: 0.16, green: 0.56, blue: 1.00))
+
 	/// Label opacities are set against the *worst* case, not the average one.
 	///
 	/// The window is translucent, so the ground under a label is whatever wallpaper the user

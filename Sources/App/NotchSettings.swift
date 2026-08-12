@@ -29,7 +29,7 @@ struct NotchSettingsSection: View {
 				// words for shapes, and a word for a shape is a worse description of it than
 				// the shape is — the same reason Style has never been a menu.
 				choiceRow(
-					title: "Shape", symbol: "rectangle.portrait.topthird.inset.filled",
+					title: "Shape",
 					values: Preferences.PanelShape.allCases,
 					titleFor: \.title,
 					isSelected: { settings.panelShape == $0 },
@@ -44,7 +44,7 @@ struct NotchSettingsSection: View {
 				// Ruken's suggestion, as a choice rather than a change.
 				RowDivider()
 				choiceRow(
-					title: "Face ID mark", symbol: "faceid", symbolTint: Theme.faceID,
+					title: "Face ID mark",
 					values: Preferences.GlyphPlacement.allCases,
 					titleFor: \.title,
 					isSelected: { settings.glyphPlacement == $0 },
@@ -107,22 +107,21 @@ struct NotchSettingsSection: View {
 	/// different products; this one shows you.
 	private func choiceRow<Value: Hashable, Sketch: View>(
 		title: String,
-		symbol: String,
-		symbolTint: Color = Theme.grey,
 		values: [Value],
 		titleFor: KeyPath<Value, String>,
 		isSelected: @escaping (Value) -> Bool,
 		select: @escaping (Value) -> Void,
 		@ViewBuilder sketch: @escaping (Value) -> Sketch
 	) -> some View {
+		// No icon tile before the label.
+		//
+		// An icon column earns its place on a list of switches, where it gives each row a
+		// shape to scan by. Above a row of thumbnails it is a second picture competing with
+		// three real ones, and the thumbnails already say what the setting is.
 		VStack(alignment: .leading, spacing: 12) {
-			HStack(spacing: 12) {
-				IconTile(symbol: symbol, tint: symbolTint)
-				Text(title)
-					.font(Typography.row)
-					.foregroundStyle(Theme.label)
-				Spacer()
-			}
+			Text(title)
+				.font(Typography.row)
+				.foregroundStyle(Theme.label)
 
 			HStack(spacing: 10) {
 				ForEach(values, id: \.self) { value in
@@ -136,7 +135,6 @@ struct NotchSettingsSection: View {
 					}
 				}
 			}
-			.padding(.leading, 38)
 		}
 		.padding(.horizontal, Theme.rowInset)
 		.padding(.vertical, 11)
@@ -144,13 +142,9 @@ struct NotchSettingsSection: View {
 
 	private var styleRow: some View {
 		VStack(alignment: .leading, spacing: 12) {
-			HStack(spacing: 12) {
-				IconTile(symbol: "paintbrush.fill")
-				Text("Style")
-					.font(Typography.row)
-					.foregroundStyle(Theme.label)
-				Spacer()
-			}
+			Text("Style")
+				.font(Typography.row)
+				.foregroundStyle(Theme.label)
 
 			HStack(spacing: 10) {
 				ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
@@ -163,7 +157,6 @@ struct NotchSettingsSection: View {
 						wallpaperIsLight: wallpaperIsLight)
 				}
 			}
-			.padding(.leading, 38)
 		}
 		.padding(.horizontal, Theme.rowInset)
 		.padding(.vertical, 11)
@@ -216,12 +209,7 @@ private struct StylePreview: View {
 				}
 				.frame(width: 112, height: 62)
 				.clipShape(.rect(cornerRadius: 7, style: .continuous))
-				.overlay {
-					RoundedRectangle(cornerRadius: 7, style: .continuous)
-						.strokeBorder(
-							isSelected ? Theme.label : Theme.separator,
-							lineWidth: isSelected ? 2 : 1)
-				}
+				.overlay { SelectionRing(isSelected: isSelected, isHovering: false) }
 
 				// No `minimumScaleFactor`. It let "Semi Liquid Glass" shrink to 8pt — under
 				// the size macOS draws text at legibly — to avoid a wrap the layout can
@@ -287,6 +275,52 @@ private struct StylePreview: View {
 	}
 }
 
+/// The selected state for a thumbnail.
+///
+/// A single ring cannot do this job. The tiles are photographs of the user's own wallpaper,
+/// so the ring has no known background to contrast against — and drawing it in `Theme.label`
+/// meant black-on-a-dark-photo in light mode, which is where "I can't see what is selected"
+/// came from.
+///
+/// Three things together, so no one of them has to work alone: a ring in the accent, a dark
+/// halo just outside it that separates the ring from whatever the picture is doing, and a
+/// filled tick in the corner. The tick is the part that never fails — it is a different
+/// *shape*, not a different shade.
+private struct SelectionRing: View {
+
+	let isSelected: Bool
+	let isHovering: Bool
+	var cornerRadius: CGFloat = 7
+
+	private var shape: RoundedRectangle {
+		RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+	}
+
+	var body: some View {
+		ZStack(alignment: .topTrailing) {
+			if isSelected {
+				// The halo is the accent's opposite, not a fixed black. Fixed black works in
+				// dark mode, where the ring is white — and in light mode the ring is black
+				// too, so the pair would have been black on black and failed in exactly the
+				// appearance the ring was added to fix.
+				shape.strokeBorder(Theme.onAccent.opacity(0.7), lineWidth: 4)
+				shape.strokeBorder(Theme.accent, lineWidth: 2)
+			} else {
+				shape.strokeBorder(
+					isHovering ? Theme.label.opacity(0.45) : Theme.separator, lineWidth: 1)
+			}
+
+			if isSelected {
+				Image(systemName: "checkmark.circle.fill")
+					.font(.system(size: 15, weight: .semibold))
+					.symbolRenderingMode(.palette)
+					.foregroundStyle(Theme.onAccent, Theme.accent)
+					.padding(4)
+			}
+		}
+	}
+}
+
 /// The wallpaper strip, selection ring and caption that every notch thumbnail shares.
 ///
 /// Extracted because there are three rows of these now. What differs between them is the
@@ -321,14 +355,7 @@ private struct PreviewTile<Content: View>: View {
 				}
 				.frame(width: 112, height: 62)
 				.clipShape(.rect(cornerRadius: 7, style: .continuous))
-				.overlay {
-					RoundedRectangle(cornerRadius: 7, style: .continuous)
-						.strokeBorder(
-							isSelected
-								? Theme.label
-								: (isHovering ? Theme.label.opacity(0.4) : Theme.separator),
-							lineWidth: isSelected ? 2 : 1)
-				}
+				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
 
 				Text(title)
 					.font(Typography.caption)
