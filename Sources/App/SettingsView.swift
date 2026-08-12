@@ -251,12 +251,9 @@ struct SettingsView: View {
 					+ "That tells you from a stranger but is much weaker than a trained model."
 				: nil
 		) {
-			SettingRow(title: "Recognition model", symbol: "brain.head.profile") {
-				Text(store.embedder.identifier)
-					.font(Typography.control)
-					.foregroundStyle(Theme.secondaryLabel)
-			}
-			RowDivider()
+			// The recognition model used to be a row here. Nebulark's point in the server was
+			// that nobody outside the project can act on `coreml:112x112` — it is a build
+			// detail taking up space in the pane you actually use. It lives in About now.
 			SettingRow(
 				title: "Remove enrolled face",
 				symbol: "trash.fill", symbolTint: Theme.danger
@@ -542,6 +539,34 @@ struct SettingsView: View {
 				}
 				.frame(maxWidth: .infinity)
 				.padding(.vertical, 22)
+			}
+
+			// Said plainly, and said here rather than in a README nobody opens.
+			//
+			// atmos raised it in the server: the name invites people to assume this is what
+			// an iPhone does, and it isn't. The built-in camera has no depth sensor, so the
+			// honest version of this app's security claim has to be on its face.
+			SettingsSection(
+				title: "What this is",
+				footer: "Apple's Face ID uses a TrueDepth camera that projects thousands of "
+					+ "infrared dots to measure the shape of your face. Macs have no such "
+					+ "sensor. This app recognises you from the ordinary built-in camera, "
+					+ "which sees a flat image — so it cannot tell a face from a good "
+					+ "photograph of one the way an iPhone can."
+			) {
+				SettingRow(
+					title: "Not Apple's Face ID",
+					detail: "Built-in camera, no depth sensor.",
+					symbol: "exclamationmark.triangle.fill", symbolTint: Theme.warning
+				) {
+					EmptyView()
+				}
+				RowDivider()
+				SettingRow(title: "Recognition model", symbol: "brain.head.profile") {
+					Text(store.embedder.identifier)
+						.font(Typography.control)
+						.foregroundStyle(Theme.secondaryLabel)
+				}
 			}
 
 			SettingsSection(title: "Thanks") {
