@@ -123,9 +123,17 @@ beat 2: the spin is what makes it read as one object transforming, rather than
 two icons swapping places, which is what `.symbolEffect(.replace)` gives you and
 why the current version feels flat by comparison.
 
-Implementation note: this cannot be done with SF Symbol transitions. It needs a
-hand-built shape with `rotation3DEffect` on the X axis, driven by a keyframe
-animation, with the glyph's stroke morphing into the ring as it goes.
+**Still missing: the morph.** What is built spins the glyph out and the mark in,
+both rotating about X so they read as one turning object. But it is still a
+crossfade underneath — in the reference the face's *strokes collapse into* the
+ring, converging rather than fading.
+
+That needs geometry interpolation between two different path sets: the four
+bracket corners plus eyes, nose and mouth on one side, a circle on the other.
+A `Shape` with an animatable progress value that lerps control points, or a
+`Canvas` drawing the interpolated geometry each frame. Opacity and transform
+alone cannot express it, which is why the current version reads as a spin
+rather than a transformation.
 
 Current implementation is in `Sources/LockScreen/NotchCapsule.swift`, and
 `--preview-capsule` shows it without locking the screen.

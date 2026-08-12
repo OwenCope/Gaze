@@ -58,10 +58,10 @@ struct NotchCapsule: View {
 	// so each beat can be timed independently.
 	@State private var glyphOpacity: Double = 1
 	@State private var glyphScale: CGFloat = 1
+	@State private var glyphSpin: Double = 0
 	@State private var ringOpacity: Double = 0
 	@State private var ringScale: CGFloat = 0.6
 	@State private var spin: Double = -640
-	@State private var tickProgress: CGFloat = 0
 
 	private var cornerRadius: CGFloat { min(15, height / 2.4) }
 
@@ -214,6 +214,7 @@ struct NotchCapsule: View {
 				.symbolEffect(.bounce, value: model.phase == .notRecognised)
 				.opacity(glyphOpacity)
 				.scaleEffect(glyphScale)
+				.rotation3DEffect(.degrees(glyphSpin), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
 
 			successMark
 		}
@@ -224,17 +225,10 @@ struct NotchCapsule: View {
 	private var successMark: some View {
 		let lineWidth = max(2, glyphSide * 0.085)
 
-		return ZStack {
-			Circle()
-				.strokeBorder(Self.faceGreen, lineWidth: lineWidth)
-
-			TickShape()
-				.trim(from: 0, to: tickProgress)
-				.stroke(
-					Self.faceGreen,
-					style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-				.padding(glyphSide * 0.28)
-		}
+		return Image(systemName: "checkmark.circle.fill")
+			.font(.system(size: glyphSide, weight: .semibold))
+			.symbolRenderingMode(.hierarchical)
+			.foregroundStyle(Self.faceGreen)
 		.opacity(ringOpacity)
 		// The spin. Rotating about X makes the circle read as a ring tilting toward the
 		// viewer rather than a disc turning on the spot, which is the whole effect.
@@ -246,9 +240,10 @@ struct NotchCapsule: View {
 
 	/// Runs the four beats: glyph collapses, ring spins in, settles, tick draws.
 	private func playSuccess() {
-		withAnimation(.easeIn(duration: 0.16)) {
+		withAnimation(.easeIn(duration: 0.30)) {
 			glyphOpacity = 0
-			glyphScale = 0.55
+			glyphScale = 0.25
+			glyphSpin = -640
 		}
 
 		// Nearly two full turns, so the ring is clearly rotating rather than just
@@ -260,14 +255,13 @@ struct NotchCapsule: View {
 			spin = 0
 			ringScale = 1
 		}
-		withAnimation(.easeOut(duration: 0.3).delay(0.72)) { tickProgress = 1 }
 	}
 
 	private func resetSuccess() {
 		glyphOpacity = 1
 		glyphScale = 1
+		glyphSpin = 0
 		ringOpacity = 0
-		tickProgress = 0
 		spin = -640
 		ringScale = 0.6
 	}
@@ -321,13 +315,3 @@ private struct Shaker: ViewModifier {
 }
 
 
-/// The tick drawn inside the success ring.
-private struct TickShape: Shape {
-	func path(in rect: CGRect) -> Path {
-		var path = Path()
-		path.move(to: CGPoint(x: rect.minX, y: rect.midY + rect.height * 0.04))
-		path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.36, y: rect.maxY))
-		path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.08))
-		return path
-	}
-}
