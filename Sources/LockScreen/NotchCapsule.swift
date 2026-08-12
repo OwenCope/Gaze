@@ -58,9 +58,13 @@ struct NotchCapsule: View {
 	// so each beat can be timed independently.
 	@State private var glyphOpacity: Double = 1
 	@State private var featureOpacity: Double = 1
+	/// -1 sits above the panel, 0 is in place. The reference slides the face down over
+	/// its first 27 frames rather than fading it in.
+	@State private var dropIn: CGFloat = -1
 	/// 0 = Face ID brackets, 1 = closed ring.
 	@State private var morph: CGFloat = 0
 	@State private var tickProgress: CGFloat = 0
+	@State private var tickScale: CGFloat = 0.55
 
 	private var cornerRadius: CGFloat { min(15, height / 2.4) }
 
@@ -216,17 +220,23 @@ struct NotchCapsule: View {
 				.opacity(featureOpacity)
 				.scaleEffect(0.4 + 0.6 * featureOpacity)
 
-			// The tick, drawn on once the ring has closed.
+			// The tick pops rather than drawing on: the reference has a small tick at
+			// frame 72 and a larger one at 94, which reads as a scale-up, not a trim.
 			TickShape()
-				.trim(from: 0, to: tickProgress)
 				.stroke(
 					Self.faceGreen,
 					style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
 				.padding(glyphSide * 0.3)
+				.opacity(tickProgress > 0 ? 1 : 0)
+				.scaleEffect(tickScale)
 		}
 		.frame(width: glyphSide, height: glyphSide)
 		.opacity(glyphOpacity)
+		.offset(y: dropIn * glyphSide * 0.9)
 		.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
+		.onAppear {
+			withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) { dropIn = 0 }
+		}
 	}
 
 	/// Frosted white while scanning, green once it has recognised you.
@@ -252,8 +262,11 @@ struct NotchCapsule: View {
 		withAnimation(.easeIn(duration: 0.22)) { featureOpacity = 0 }
 		// Then the brackets converge into the ring.
 		withAnimation(.spring(response: 0.6, dampingFraction: 0.74).delay(0.12)) { morph = 1 }
-		// Then the tick draws inside it.
-		withAnimation(.easeOut(duration: 0.28).delay(0.55)) { tickProgress = 1 }
+		// Small tick, then it springs up to full size.
+		withAnimation(.linear(duration: 0.01).delay(0.55)) { tickProgress = 1 }
+		withAnimation(.spring(response: 0.34, dampingFraction: 0.6).delay(0.56)) {
+			tickScale = 1
+		}
 	}
 
 	private func resetSuccess() {
@@ -261,6 +274,8 @@ struct NotchCapsule: View {
 		featureOpacity = 1
 		morph = 0
 		tickProgress = 0
+		tickScale = 0.55
+		dropIn = -1
 	}
 
 	/// The filled variant, rendered hierarchically.

@@ -105,8 +105,21 @@ less. Measure there too before trusting a threshold.
 
 ## The unlock animation we want
 
-Reference frames are in the project owner's screenshots (YouTube Short,
-2026-08-12). The sequence, four beats:
+The reference is a Lottie file, `Apple Face ID.json` (LottieFiles), 60fps and
+167 frames. Reading its keyframes gives the real timing:
+
+| Frame | Time  | What happens                                  |
+| ----- | ----- | --------------------------------------------- |
+| 0–27  | 0.45s | The face **slides down** into place            |
+| 27–66 | 1.1s  | Five circle layers crossfade — the shimmer     |
+| 72    | 1.2s  | A **small** tick appears                       |
+| 94    | 1.57s | A **larger** tick replaces it — so it pops     |
+| 118+  | 2.0s  | Everything fades                               |
+
+Two details that are easy to miss from watching it: the entrance is a downward
+slide rather than a fade, and the tick scales up rather than drawing on.
+
+The sequence, four beats:
 
 1. Green Face ID glyph, glowing, on black.
 2. The glyph collapses inward and **rotates in 3D** — it reads as a ring seen
