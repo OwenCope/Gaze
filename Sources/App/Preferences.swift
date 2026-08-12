@@ -62,19 +62,22 @@ final class Preferences {
 		}
 	}
 
-	/// Where the Face ID mark sits while the panel is scanning.
+	/// Where the Face ID mark appears while Face ID is running.
 	///
-	/// Ruken's suggestion: rather than a large mark filling the middle, a small one tucked
-	/// into a corner, leaving the panel free for whatever else is there. Both were wanted in
-	/// the server, so both exist.
+	/// Ruken's suggestion, and Sapphire's behaviour: rather than a panel dropping out with a
+	/// large mark in it, a small mark on the *ear* — the strip of screen beside the camera
+	/// housing — so nothing ever covers the lock screen. The panel stays put and the menu bar
+	/// band carries the whole thing.
 	enum GlyphPlacement: String, CaseIterable, Sendable {
+		/// A panel drops out of the notch with the mark in the middle of it.
 		case centred
-		case corner
+		/// The mark sits beside the cutout, opposite the padlock. Nothing drops.
+		case ear = "corner"
 
 		var title: String {
 			switch self {
-			case .centred: return "Centred"
-			case .corner: return "Corner"
+			case .centred: return "In the panel"
+			case .ear: return "On the ear"
 			}
 		}
 	}

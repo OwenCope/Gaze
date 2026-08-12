@@ -163,7 +163,7 @@ struct NotchCapsule: View {
 	///
 	/// Compact phases stay attached whatever the setting: the resting padlock lives in the
 	/// menu bar band, and an island cannot be at rest — it is the thing that pops out.
-	private var isIsland: Bool { model.shape == .island && !model.phase.isCompact }
+	private var isIsland: Bool { model.shape == .island && showsDrop }
 
 	private static var islandGap: CGFloat { IslandMetrics.gap }
 
@@ -262,10 +262,12 @@ struct NotchCapsule: View {
 			// the island is a thing the notch hands down. Both, always.
 			background
 				.frame(
-					width: isIsland ? compactBarWidth : backgroundWidth,
-					height: expanded ? (isIsland ? restingBarHeight : currentHeight) : notchInset)
+					width: isIsland || isOnEar ? compactBarWidth : backgroundWidth,
+					height: expanded
+						? (isIsland || isOnEar ? restingBarHeight : currentHeight)
+						: notchInset)
 
-			if isIsland {
+			if isIsland && showsDrop {
 				islandBody
 					.frame(width: islandWidth, height: islandHeight)
 					.padding(.top, notchInset + Self.islandGap)
@@ -296,16 +298,17 @@ struct NotchCapsule: View {
 					.transition(.opacity.combined(with: .scale(scale: 0.7)))
 			}
 
-			if !model.phase.isCompact {
+			// The mark on the ear, opposite the padlock. Same size, same band, same idea.
+			if isOnEar && !model.phase.isCompact {
+				earMark
+					.frame(width: compactBarWidth, alignment: .trailing)
+					.opacity(expanded ? 1 : 0)
+					.transition(.opacity.combined(with: .scale(scale: 0.7)))
+			}
+
+			if showsDrop {
 				content
 					.frame(width: glyphSide, height: glyphSide)
-					// Ruken's placement: tucked into the trailing corner instead of filling
-					// the middle, so the panel reads as a status strip with a mark on it
-					// rather than as a mark with a panel around it.
-					.frame(
-						maxWidth: isCorner ? .infinity : nil,
-						alignment: isCorner ? .trailing : .center)
-					.padding(.trailing, isCorner ? cornerGlyphInset : 0)
 					// Centred in the solid band — not the whole window (whose top third is
 					// behind the cutout) and not the whole visible drop (whose lower part
 					// fades to clear, which would dissolve the glyph along with it).
@@ -512,6 +515,28 @@ struct NotchCapsule: View {
 		model.phase.isCompact ? restingBarHeight : height
 	}
 
+	/// The Face ID mark in the trailing ear — what the padlock is, on the other side.
+	///
+	/// Same size, same band, same idea. Ruken's suggestion and Sapphire's behaviour: the mark
+	/// belongs beside the housing, not in a panel drawn over the lock screen.
+	private var earMark: some View {
+		Image(systemName: model.phase == .success ? "checkmark.circle.fill" : "faceid")
+			.font(.system(size: 12, weight: .semibold))
+			.foregroundStyle(earTint)
+			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
+			.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
+			.symbolEffect(.bounce, value: model.phase == .notRecognised)
+			.frame(width: earWidth, height: restingBarHeight)
+	}
+
+	private var earTint: Color {
+		switch model.phase {
+		case .success: return Theme.faceID
+		case .notRecognised: return Theme.danger
+		default: return .white
+		}
+	}
+
 	/// The bar that carries the padlock: the housing's height plus a single point.
 	///
 	/// It looked short once, but that was the bottom fade dissolving its lower third rather
@@ -559,31 +584,22 @@ struct NotchCapsule: View {
 
 	/// Sized against the visible drop. The mask does not touch the glyph, so it only has
 	/// to fit — it does not have to stay inside the opaque part.
-	/// True when the mark sits in a corner rather than the middle.
-	private var isCorner: Bool { model.glyphPlacement == .corner }
+	/// True when the mark sits on the ear rather than in a panel.
+	private var isOnEar: Bool { model.glyphPlacement == .ear }
 
-	/// Held off the rounded edge so it does not crowd the corner it sits in.
-	private var cornerGlyphInset: CGFloat {
-		isIsland ? islandSide * 0.16 : max(10, earWidth * 0.5)
-	}
+	/// Whether anything drops out of the notch at all.
+	///
+	/// On the ear, nothing does. That is the whole point of the mode: Sapphire puts its mark
+	/// in the strip beside the housing and never covers the lock screen with a panel, and
+	/// Ruken's note was that a large mark in the middle is more than this needs to be.
+	private var showsDrop: Bool { !model.phase.isCompact && !isOnEar }
 
 	private var glyphSide: CGFloat {
-		// Smaller in a corner. A mark that keeps its full size and merely moves is not
-		// tucked into anything — it is the same mark, off-centre.
-		let base = isIsland ? min(islandWidth, islandHeight) * 0.46
-			: min(width, visibleHeight) * 0.52
-		return isCorner ? base * 0.52 : base
+		isIsland ? min(islandWidth, islandHeight) * 0.46 : min(width, visibleHeight) * 0.52
 	}
 
 	/// Sits high in the drop, where the panel is still dark enough to carry it.
 	private var glyphTop: CGFloat {
-		if isCorner {
-			// Just under the housing for the attached panel; just inside the island's own
-			// top edge for the island.
-			return isIsland
-				? notchInset + Self.islandGap + islandSide * 0.14
-				: notchInset + max(6, visibleHeight * 0.14)
-		}
 		guard !isIsland else {
 			// Centred, because an island has no fade to stay clear of and no housing to sit
 			// under — it is a panel in its own right.

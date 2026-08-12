@@ -346,7 +346,7 @@ private struct PreviewTile<Content: View>: View {
 	}
 }
 
-/// A small drawing of the panel: which shape it is, and where the mark sits on it.
+/// A small drawing of the panel: which shape it is, and where the mark sits.
 ///
 /// Not the real `NotchCapsule`. That one is built around a physical cutout to hide behind
 /// and a window sized to the screen, neither of which exists inside a 112pt thumbnail. This
@@ -361,40 +361,52 @@ private struct ShapeSketch: View {
 
 	var body: some View {
 		VStack(spacing: 0) {
-			switch shape {
-			case .attached:
-				UnevenRoundedRectangle(
-					topLeadingRadius: 0, bottomLeadingRadius: 7,
-					bottomTrailingRadius: 7, topTrailingRadius: 0, style: .continuous
-				)
-				.fill(.black.opacity(0.88))
-				.frame(width: 62, height: barHeight + 20)
-				.overlay(alignment: placement == .corner ? .topTrailing : .center) {
-					glyph
-						.padding(.top, placement == .corner ? barHeight + 3 : 6)
-						.padding(.trailing, placement == .corner ? 5 : 0)
-				}
-
-			case .island:
-				// The bar it comes out of, then the island itself, detached from it.
-				Rectangle()
-					.fill(.black.opacity(0.88))
-					.frame(width: 46, height: barHeight)
-				RoundedRectangle(cornerRadius: 8, style: .continuous)
-					.fill(.black.opacity(0.9))
-					.frame(width: 30, height: 30)
-					.overlay(alignment: placement == .corner ? .topTrailing : .center) {
-						glyph.padding(placement == .corner ? 3 : 0)
+			if placement == .ear {
+				// Nothing drops. The bar carries the padlock on one ear and the mark on the
+				// other, which is the whole of what this mode does.
+				ZStack {
+					Rectangle().fill(.black.opacity(0.88))
+					HStack(spacing: 0) {
+						glyph(.lock)
+						Spacer(minLength: 0)
+						glyph(.face)
 					}
-					.padding(.top, 4)
+					.padding(.horizontal, 3)
+				}
+				.frame(width: 74, height: barHeight)
+
+			} else {
+				switch shape {
+				case .attached:
+					UnevenRoundedRectangle(
+						topLeadingRadius: 0, bottomLeadingRadius: 7,
+						bottomTrailingRadius: 7, topTrailingRadius: 0, style: .continuous
+					)
+					.fill(.black.opacity(0.88))
+					.frame(width: 62, height: barHeight + 20)
+					.overlay(alignment: .center) { glyph(.face).padding(.top, 6) }
+
+				case .island:
+					// The bar it comes out of, then the island itself, detached from it.
+					Rectangle()
+						.fill(.black.opacity(0.88))
+						.frame(width: 46, height: barHeight)
+					RoundedRectangle(cornerRadius: 8, style: .continuous)
+						.fill(.black.opacity(0.9))
+						.frame(width: 30, height: 30)
+						.overlay { glyph(.face) }
+						.padding(.top, 4)
+				}
 			}
 			Spacer(minLength: 0)
 		}
 	}
 
-	private var glyph: some View {
-		Image(systemName: "faceid")
-			.font(.system(size: placement == .corner ? 7 : 11))
+	private enum Mark { case face, lock }
+
+	private func glyph(_ mark: Mark) -> some View {
+		Image(systemName: mark == .face ? "faceid" : "lock.fill")
+			.font(.system(size: placement == .ear ? 7 : 11))
 			.foregroundStyle(.white)
 	}
 }
