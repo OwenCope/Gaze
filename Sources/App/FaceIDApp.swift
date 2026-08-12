@@ -177,6 +177,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 			TamperGuard.shared.start()
 			AppServices.shared.startUnlockTrigger()
 			AppServices.shared.runCapsulePreviewIfRequested()
+			sweepInvisibleWindowsAfterMenus()
+		}
+	}
+
+	/// Orders out the invisible window left behind when the menu bar menu is dismissed by
+	/// choosing an item.
+	///
+	/// Reported as clicks near the top-right of the screen doing nothing, in *other*
+	/// applications. Reproduced exactly: open the menu and press Escape and nothing is left
+	/// behind; open it and choose an item — which is what anyone actually does — and a
+	/// 191×128 window stays on screen at alpha 0, layer 101, sitting under the menu bar item.
+	/// Layer 101 is above every ordinary window, and an invisible window still takes clicks,
+	/// so that rectangle becomes a dead zone for the rest of the session.
+	///
+	/// Switching the scene to `.menuBarExtraStyle(.menu)` was necessary but not sufficient:
+	/// it removed the panel that was there permanently, leaving this one that arrives when
+	/// the menu is used.
+	///
+	/// The sweep is deliberately narrow — *visible* windows with an alpha of exactly zero.
+	/// Nothing this app legitimately shows is invisible, so ordering these out changes
+	/// nothing anyone can see, and it is scoped to our own process either way.
+	@MainActor
+	private func sweepInvisibleWindowsAfterMenus() {
+		NotificationCenter.default.addObserver(
+			forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main
+		) { _ in
+			// Deferred: at the moment tracking ends the window is still up, and the action
+			// the user chose has not run yet.
+			DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+				MainActor.assumeIsolated {
+					for window in NSApp.windows where window.isVisible && window.alphaValue == 0 {
+						window.orderOut(nil)
+					}
+				}
+			}
 		}
 	}
 
