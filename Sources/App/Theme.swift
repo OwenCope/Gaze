@@ -93,6 +93,15 @@ enum Theme {
 	/// What a filled control's label is knocked out in: the opposite of `accent`.
 	static let onAccent = dynamic(light: .white.opacity(0.95), dark: .black.opacity(0.88))
 
+	/// Selected and hovered rows.
+	///
+	/// These have to be a pair, not one colour: a wash of white marks a row on dark glass and
+	/// is completely invisible on light. The selected sidebar row disappearing in light mode
+	/// was exactly this — a hardcoded `white.opacity(0.14)` with nothing lighter behind it to
+	/// stand out from.
+	static let selection = dynamic(light: .black.opacity(0.13), dark: .white.opacity(0.16))
+	static let hoverFill = dynamic(light: .black.opacity(0.06), dark: .white.opacity(0.07))
+
 	/// Apple's system green. Face ID identity only, never chrome.
 	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
 	static let warning = Color(red: 1.0, green: 0.62, blue: 0.04)

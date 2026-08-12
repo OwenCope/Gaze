@@ -652,8 +652,8 @@ private struct SidebarItem: View {
 				RoundedRectangle(cornerRadius: 8, style: .continuous)
 					.fill(
 						isSelected
-							? Color.white.opacity(0.14)
-							: (isHovering ? Color.white.opacity(0.06) : .clear))
+							? Theme.selection
+							: (isHovering ? Theme.hoverFill : .clear))
 			}
 			.contentShape(.rect)
 		}

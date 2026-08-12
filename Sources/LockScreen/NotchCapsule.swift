@@ -243,10 +243,36 @@ struct NotchCapsule: View {
 	/// between a status indicator and a sticker.
 	private var lockChip: some View {
 		Image(systemName: "lock.fill")
-			.font(.system(size: 12, weight: .medium))
+			.font(.system(size: 11, weight: .semibold))
 			.foregroundStyle(.white)
-			// Optically centred, not mathematically. The visible black band is the notch
-			// inset; the glyph belongs in the middle of *that*, clear of the fade below it.
+			.frame(width: 26, height: 19)
+			// A chip, because the glyph no longer stands on anything.
+			//
+			// It was a bare glyph, and the reasoning was sound at the time: it sat on the
+			// panel's own black band, so a translucent dark fill laid over black came out
+			// *lighter* than its surroundings and read as a grey sticker.
+			//
+			// Then the resting panel was shrunk to the cutout — correctly, it was overhanging
+			// the notch — and that took the black band away with it. The padlock has sat on
+			// bare menu bar ever since, which is wallpaper: no guaranteed contrast, and white
+			// on a pale desktop is barely there. Now it carries its own ground, the way every
+			// notch app draws its resting indicators.
+			.background {
+				RoundedRectangle(cornerRadius: 6, style: .continuous)
+					.fill(.black.opacity(0.55))
+					.background {
+						RoundedRectangle(cornerRadius: 6, style: .continuous)
+							.fill(.ultraThinMaterial)
+					}
+					.overlay {
+						// A hairline, so the chip has an edge against a dark wallpaper too —
+						// without it the black fill dissolves into a dark desktop and the
+						// padlock goes back to floating.
+						RoundedRectangle(cornerRadius: 6, style: .continuous)
+							.strokeBorder(.white.opacity(0.14), lineWidth: 1)
+					}
+			}
+			// Centred in the menu bar strip, and held clear of the cutout's edge.
 			.frame(width: earWidth, height: notchInset)
 	}
 

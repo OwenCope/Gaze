@@ -109,10 +109,33 @@ final class TamperGuard {
 			// Once only. This is tamper *evidence*, and the evidence does not improve by
 			// being reported repeatedly.
 			guard !self.bundleWasModified else { return }
-			self.bundleWasModified = true
 
-			Self.logger.fault("The Face ID app bundle was moved or removed.")
-			self.warnAboutTampering()
+			// Wait, then look again, because a *replacement* is not a removal.
+			//
+			// An update — `build.sh` swapping in a new bundle, or any installer — renames the
+			// old bundle out and the new one in. The watcher sees the rename and, before this,
+			// raised a critical "Face ID was modified" alert every single time the app was
+			// rebuilt. A guard that fires on the normal update path is one people learn to
+			// dismiss without reading, which costs exactly the signal it exists to give.
+			//
+			// A genuine removal leaves nothing at the path a moment later; a swap leaves a
+			// valid bundle. Only the first is worth an alert.
+			DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+				guard let self, !self.bundleWasModified else { return }
+
+				if FileManager.default.fileExists(atPath: path) {
+					Self.logger.notice("App bundle was replaced; re-arming the watcher.")
+					// The old descriptor points at the bundle that was renamed away, so it
+					// will never report on the new one. Watch the new bundle instead.
+					self.stop()
+					self.watchBundle()
+					return
+				}
+
+				self.bundleWasModified = true
+				Self.logger.fault("The Face ID app bundle was moved or removed.")
+				self.warnAboutTampering()
+			}
 		}
 		source.setCancelHandler { close(descriptor) }
 		source.resume()

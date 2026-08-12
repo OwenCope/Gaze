@@ -145,7 +145,7 @@ private struct StylePreview: View {
 				.overlay {
 					RoundedRectangle(cornerRadius: 7, style: .continuous)
 						.strokeBorder(
-							isSelected ? Color.white : Color.white.opacity(0.12),
+							isSelected ? Theme.label : Theme.separator,
 							lineWidth: isSelected ? 2 : 1)
 				}
 

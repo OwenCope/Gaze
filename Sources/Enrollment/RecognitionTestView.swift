@@ -53,6 +53,13 @@ struct RecognitionTestView: View {
 		// opaque, and next to the glazed settings window it read as a prop from a different
 		// app. The camera disc and score bar sit on glass just as legibly.
 		.background(WindowGlass(keepsTitle: true))
+		// Committed to dark, deliberately, rather than following the system.
+		//
+		// This window is mostly camera. A black surround is what keeps the eye on the preview
+		// rather than on the wall behind it — the same reason Photo Booth and QuickTime's
+		// recorder stay dark whatever the system is set to. Its readouts are tuned against a
+		// dark ground too, so following the appearance leaves them washed out on light.
+		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
 			await camera.start(pinnedDeviceID: store.enrollment?.cameraID)

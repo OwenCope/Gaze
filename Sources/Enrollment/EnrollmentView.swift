@@ -31,6 +31,13 @@ struct EnrollmentView: View {
 		.padding(.horizontal, 40)
 		.frame(width: 480, height: 620)
 		.background(Color.black)
+		// Committed to dark, deliberately, rather than following the system.
+		//
+		// This window is mostly camera. A black surround is what keeps the eye on the preview
+		// and stops the wall behind the app competing with the picture — the same reason Photo
+		// Booth and QuickTime's recorder are dark whatever the system is set to. It also has a
+		// hard `Color.black` ground, so following the appearance would put black text on it.
+		.preferredColorScheme(.dark)
 		.task { await begin() }
 		.onDisappear { camera.stop() }
 		// Driven by the frame counter, not the pose: identical consecutive poses are
