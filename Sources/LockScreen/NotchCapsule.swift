@@ -59,8 +59,8 @@ struct NotchCapsule: View {
 	@State private var glyphOpacity: Double = 1
 	@State private var glyphScale: CGFloat = 1
 	@State private var ringOpacity: Double = 0
-	@State private var ringScale: CGFloat = 0.75
-	@State private var spin: Double = -240
+	@State private var ringScale: CGFloat = 0.6
+	@State private var spin: Double = -640
 	@State private var tickProgress: CGFloat = 0
 
 	private var cornerRadius: CGFloat { min(15, height / 2.4) }
@@ -198,9 +198,18 @@ struct NotchCapsule: View {
 		ZStack {
 			// Scanning / rejected: Apple's own glyph and effects, which are right for
 			// these states and cost nothing to keep.
-			Image(systemName: model.phase == .notRecognised ? "faceid" : "faceid")
+			// Frosted rather than solid: a translucent white glyph over the dark panel
+			// reads as glass, and keeps green meaning "recognised" rather than being the
+			// colour of everything.
+			Image(systemName: "faceid")
 				.font(.system(size: glyphSide, weight: .regular))
-				.foregroundStyle(model.phase == .notRecognised ? .red : Self.faceGreen)
+				.foregroundStyle(
+					model.phase == .notRecognised
+						? AnyShapeStyle(Color.red.opacity(0.9))
+						: AnyShapeStyle(
+							LinearGradient(
+								colors: [.white.opacity(0.95), .white.opacity(0.55)],
+								startPoint: .top, endPoint: .bottom)))
 				.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
 				.symbolEffect(.bounce, value: model.phase == .notRecognised)
 				.opacity(glyphOpacity)
@@ -242,14 +251,16 @@ struct NotchCapsule: View {
 			glyphScale = 0.55
 		}
 
-		spin = -240
-		ringScale = 0.75
-		withAnimation(.easeOut(duration: 0.10).delay(0.10)) { ringOpacity = 1 }
-		withAnimation(.spring(response: 0.55, dampingFraction: 0.72).delay(0.10)) {
+		// Nearly two full turns, so the ring is clearly rotating rather than just
+		// unsquashing. The long spring is what gives it the settle at the end.
+		spin = -640
+		ringScale = 0.6
+		withAnimation(.easeOut(duration: 0.12).delay(0.08)) { ringOpacity = 1 }
+		withAnimation(.spring(response: 0.85, dampingFraction: 0.68).delay(0.08)) {
 			spin = 0
 			ringScale = 1
 		}
-		withAnimation(.easeOut(duration: 0.26).delay(0.46)) { tickProgress = 1 }
+		withAnimation(.easeOut(duration: 0.3).delay(0.72)) { tickProgress = 1 }
 	}
 
 	private func resetSuccess() {
@@ -257,8 +268,8 @@ struct NotchCapsule: View {
 		glyphScale = 1
 		ringOpacity = 0
 		tickProgress = 0
-		spin = -240
-		ringScale = 0.75
+		spin = -640
+		ringScale = 0.6
 	}
 
 	/// The filled variant, rendered hierarchically.
