@@ -345,7 +345,17 @@ struct NotchCapsule: View {
 	/// It still has to look right on its own, so this is a smaller version of the same shape
 	/// rather than nothing at all — rounded, ears either side of the housing, just tighter.
 	private var backgroundWidth: CGFloat {
-		model.phase.isCompact ? min(width, cutoutWidth + 2 * Self.restingEar) : width
+		// Going home: narrow to the cutout, so the whole shape ends up behind the housing.
+		//
+		// The retract used to bring the height down to the menu bar band and stop there,
+		// leaving the bar's ears — 36pt either side of the camera housing — sitting on open
+		// menu bar. Those are visible screen, so ordering the window out made them disappear
+		// in one frame: the height animated beautifully and then the last of it went *boop*.
+		//
+		// Collapsing the width as well means the bar slides in behind the cutout and there is
+		// nothing left on screen to pop when the window goes.
+		guard expanded else { return cutoutWidth }
+		return model.phase.isCompact ? min(width, cutoutWidth + 2 * Self.restingEar) : width
 	}
 
 	/// Screen either side of the housing that the resting bar covers.
