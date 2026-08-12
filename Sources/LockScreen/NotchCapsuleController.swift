@@ -80,6 +80,18 @@ final class NotchCapsuleController {
 			// the animation and the panel would vanish mid-retract.
 			self.model.isExpanded = false
 
+			// Fade as it goes, slightly behind the retract.
+			//
+			// The panel used to snap out of existence at the end of the spring, which read
+			// as the window closing rather than the notch absorbing it. Easing the alpha
+			// down over a slightly longer beat means the last thing you see is the shape
+			// dissolving into the cutout, not disappearing from in front of it.
+			NSAnimationContext.runAnimationGroup { context in
+				context.duration = 0.42
+				context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+				window.animator().alphaValue = 0
+			}
+
 			DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
 				LockScreenSpace.shared.release(window)
 				window.orderOut(nil)

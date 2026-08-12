@@ -223,7 +223,10 @@ final class LockWatcher {
 			} catch {
 				Self.logger.error("Unlock failed: \(error.localizedDescription)")
 			}
-			capsule.hide(after: 0.2)
+			// Long enough for the padlock to finish opening before the panel starts
+			// leaving. At 0.2 the retract began while the shackle was still moving, so the
+			// one frame that says "you're in" was the one frame nobody saw.
+			capsule.hide(after: 0.62)
 			return
 		}
 

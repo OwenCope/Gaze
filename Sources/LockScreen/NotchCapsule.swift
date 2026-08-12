@@ -324,15 +324,19 @@ struct NotchCapsule: View {
 	private var content: some View {
 		Image(systemName: symbolName)
 			.font(.system(size: glyphSide, weight: model.phase == .success ? .semibold : .regular))
-			// Hierarchical only for the tick, where the softened circle is what makes it
-			// read as frosted. Applied to the Face ID mark it just dims the whole glyph,
-			// which left it washed out against the glass.
-			.symbolRenderingMode(model.phase == .success ? .hierarchical : .monochrome)
+			// Monochrome throughout now. Hierarchical existed for the tick's disc, where the
+			// softened ring read as frosted; an open padlock has no disc to soften, and
+			// hierarchical only bleeds the shackle away from the body.
+			.symbolRenderingMode(.monochrome)
 			.foregroundStyle(symbolTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
 			// Breathing while it looks — the system effect, not an opacity loop.
 			.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
 			.symbolEffect(.bounce, value: model.phase == .notRecognised)
+			// The shackle springing open. `.bounce` on the padlock is the one moment in the
+			// sequence that should feel mechanical rather than smooth — a lock is a physical
+			// thing, and it lets go all at once.
+			.symbolEffect(.bounce.up, options: .speed(0.9), value: model.phase == .success)
 			.animation(.spring(response: 0.36, dampingFraction: 0.72), value: model.phase)
 	}
 
@@ -342,10 +346,16 @@ struct NotchCapsule: View {
 	/// rather than as confirmation. Filled plus hierarchical keeps the translucency — the
 	/// disc sits back while the tick stays solid — while giving the mark enough weight to
 	/// land.
+	/// The padlock it started as, opening.
+	///
+	/// This was a green tick. A tick means "that worked", which is true of any operation; an
+	/// opening padlock means *this* worked — and it is the same object the panel showed while
+	/// resting, so the sequence closes where it began. `.replace.magic` morphs the shackle
+	/// rather than swapping one glyph for another.
 	private var symbolName: String {
 		switch model.phase {
 		case .locked: return "lock.fill"
-		case .success: return "checkmark.circle.fill"
+		case .success: return "lock.open.fill"
 		case .scanning, .notRecognised: return "faceid"
 		}
 	}
