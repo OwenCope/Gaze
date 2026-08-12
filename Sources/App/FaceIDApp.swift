@@ -130,8 +130,12 @@ final class AppServices {
 			try? await Task.sleep(for: .seconds(3))
 			capsule.update(phase: .scanning)
 			try? await Task.sleep(for: .seconds(4))
+			// The tick, while the password goes in.
 			capsule.update(phase: .success)
-			try? await Task.sleep(for: .seconds(4))
+			try? await Task.sleep(for: .seconds(2))
+			// Then the Mac opens, and the padlock lets go where it has been sitting.
+			capsule.update(phase: .unlocked)
+			try? await Task.sleep(for: .seconds(2))
 			capsule.hide()
 		}
 	}

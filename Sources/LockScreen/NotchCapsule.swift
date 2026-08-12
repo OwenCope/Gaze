@@ -16,7 +16,16 @@ final class NotchCapsuleModel {
 		case locked
 		case scanning
 		case notRecognised
+		/// Recognised, and the password has gone in. The tick.
 		case success
+		/// The Mac is actually open. The padlock lets go.
+		///
+		/// Separate from `success` because they are separate events, and the gap between them
+		/// is real: the tick is this app saying "that was you, here is your password", and the
+		/// padlock opening is the Mac agreeing. Collapsing the two meant the padlock opened
+		/// while the login window was still deciding — announcing an outcome we had not been
+		/// told yet.
+		case unlocked
 
 		/// Compact whenever the padlock is the thing being shown.
 		///
@@ -24,13 +33,12 @@ final class NotchCapsuleModel {
 		/// under the notch; one that sits flush and grows when it has something to say is
 		/// a status indicator.
 		///
-		/// Success is not compact: the panel stays open to carry the tick. What it *also*
-		/// does is open the padlock in the ear, so the two halves of the confirmation happen
-		/// at once — the tick says it worked, the padlock says what "it" was.
-		var isCompact: Bool { self == .locked }
+		/// Success keeps the panel open to carry the tick. Unlocked is back to resting: the
+		/// panel is already on its way home and the padlock is the only thing left to say.
+		var isCompact: Bool { self == .locked || self == .unlocked }
 
 		/// Phases that draw the padlock beside the cutout.
-		var showsLockChip: Bool { self == .locked || self == .success }
+		var showsLockChip: Bool { self == .locked || self == .success || self == .unlocked }
 	}
 
 	var phase: Phase = .scanning
@@ -269,7 +277,7 @@ struct NotchCapsule: View {
 	/// glyph from — it can simply be drawn into the bar. That is the whole difference
 	/// between a status indicator and a sticker.
 	private var lockChip: some View {
-		Image(systemName: model.phase == .success ? "lock.open.fill" : "lock.fill")
+		Image(systemName: model.phase == .unlocked ? "lock.open.fill" : "lock.fill")
 			.font(.system(size: 11, weight: .semibold))
 			// White, not green. This is the menu bar's own vocabulary — the padlock beside
 			// the cutout is a status glyph like the ones to its right, and those are never
@@ -280,7 +288,7 @@ struct NotchCapsule: View {
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
 			// The one mechanical beat in an otherwise smooth sequence: a lock lets go all at
 			// once.
-			.symbolEffect(.bounce.up, options: .speed(0.9), value: model.phase == .success)
+			.symbolEffect(.bounce.up, options: .speed(0.9), value: model.phase == .unlocked)
 			// No chip behind it.
 			//
 			// It briefly had one, added when the resting panel was hidden behind the housing
@@ -356,7 +364,7 @@ struct NotchCapsule: View {
 			// The shackle springing open. `.bounce` on the padlock is the one moment in the
 			// sequence that should feel mechanical rather than smooth — a lock is a physical
 			// thing, and it lets go all at once.
-			.symbolEffect(.bounce.up, options: .speed(0.9), value: model.phase == .success)
+			.symbolEffect(.bounce.up, options: .speed(0.9), value: model.phase == .unlocked)
 			.animation(.spring(response: 0.36, dampingFraction: 0.72), value: model.phase)
 	}
 
@@ -374,7 +382,7 @@ struct NotchCapsule: View {
 	/// rather than swapping one glyph for another.
 	private var symbolName: String {
 		switch model.phase {
-		case .locked: return "lock.fill"
+		case .locked, .unlocked: return "lock.fill"
 		case .success: return "checkmark.circle.fill"
 		case .scanning, .notRecognised: return "faceid"
 		}
@@ -390,7 +398,7 @@ struct NotchCapsule: View {
 		switch model.phase {
 		case .success: return Theme.faceID
 		case .notRecognised: return Theme.danger
-		case .locked, .scanning: return .white
+		case .locked, .scanning, .unlocked: return .white
 		}
 	}
 }

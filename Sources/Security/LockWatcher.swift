@@ -21,6 +21,13 @@ final class LockWatcher {
 	private let lockout: LockoutManager
 
 	private var attempt: Task<Void, Never>?
+	/// Whether this lock produced a recognised face and a submitted password.
+	///
+	/// The unlock animation must only play when *we* did it. The screen unlocking is not by
+	/// itself evidence of that — Touch ID, a typed password and a paired Watch all raise the
+	/// same notification, and playing "Face ID opened this" over someone else's unlock is a
+	/// claim the app has no basis for.
+	private var didSubmitPassword = false
 	private(set) var isWatching = false
 	private(set) var isLocked = false
 
@@ -41,6 +48,12 @@ final class LockWatcher {
 	/// as a glitch. Requiring the match to hold means a deliberate look unlocks and a
 	/// glance does not.
 	private static let requiredMatchDuration: TimeInterval = 2.0
+
+	/// How long the opened padlock stays before the panel goes home.
+	private static let unlockAnimationDuration: TimeInterval = 0.7
+
+	/// How long to wait for the Mac to actually unlock before giving up on it.
+	private static let unlockGracePeriod: TimeInterval = 3.0
 
 	init(store: FaceEnrollmentStore, lockout: LockoutManager) {
 		self.store = store
@@ -90,6 +103,7 @@ final class LockWatcher {
 		// A padlock, immediately. It is a statement about the Mac's state, not a claim
 		// that the camera is looking at anyone — that distinction is why the compact
 		// locked phase exists separately from scanning.
+		didSubmitPassword = false
 		capsule.show(phase: .locked)
 		// Every broadcast below is posted beside the capsule update that shows the same
 		// thing, so the panel and any subscriber can never disagree about the state.
@@ -107,7 +121,18 @@ final class LockWatcher {
 		// rather than leaving the indicator lit after the user has typed their password.
 		attempt?.cancel()
 		attempt = nil
-		capsule.hide()
+
+		guard didSubmitPassword else {
+			// Unlocked by other means. Nothing to celebrate — just get out of the way.
+			capsule.hide()
+			return
+		}
+		didSubmitPassword = false
+
+		// The Mac agreed. Retract to the resting bar and let the padlock open there, which
+		// is the last beat of the sequence and the only one the user is still looking at.
+		capsule.update(phase: .unlocked)
+		capsule.hide(after: Self.unlockAnimationDuration)
 	}
 
 	/// Asks the window server whether the screen is locked, right now.
@@ -223,10 +248,20 @@ final class LockWatcher {
 			} catch {
 				Self.logger.error("Unlock failed: \(error.localizedDescription)")
 			}
-			// Long enough for the padlock to finish opening before the panel starts
-			// leaving. At 0.2 the retract began while the shackle was still moving, so the
-			// one frame that says "you're in" was the one frame nobody saw.
-			capsule.hide(after: 0.62)
+			// The panel stays up on the tick. `screenUnlocked` drives what happens next,
+			// because the padlock should open when the Mac actually opens — not when we
+			// finish typing at it.
+			didSubmitPassword = true
+
+			// Unless nothing happens. A password can be refused, and a panel left showing a
+			// tick over a lock screen that never opened is the app insisting it succeeded.
+			DispatchQueue.main.asyncAfter(deadline: .now() + Self.unlockGracePeriod) {
+				[weak self] in
+				guard let self, self.isLocked else { return }
+				Self.logger.notice("Screen did not unlock after submitting; withdrawing.")
+				self.didSubmitPassword = false
+				self.capsule.hide()
+			}
 			return
 		}
 
