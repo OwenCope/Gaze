@@ -54,18 +54,6 @@ struct NotchCapsule: View {
 	@State private var breathe = false
 	@State private var expanded = false
 
-	// Success animation state. Kept as separate values rather than derived from `phase`
-	// so each beat can be timed independently.
-	@State private var glyphOpacity: Double = 1
-	@State private var featureOpacity: Double = 1
-	/// -1 sits above the panel, 0 is in place. The reference slides the face down over
-	/// its first 27 frames rather than fading it in.
-	@State private var dropIn: CGFloat = -1
-	/// 0 = Face ID brackets, 1 = closed ring.
-	@State private var morph: CGFloat = 0
-	@State private var tickProgress: CGFloat = 0
-	@State private var tickScale: CGFloat = 0.55
-
 	private var cornerRadius: CGFloat { min(15, height / 2.4) }
 
 	private var shape: UnevenRoundedRectangle {
@@ -109,9 +97,6 @@ struct NotchCapsule: View {
 		}
 		// The controller still owns the retract, so mirror it back in.
 		.onChange(of: model.isExpanded) { _, wanted in expanded = wanted }
-		.onChange(of: model.phase) { _, phase in
-			if phase == .success { playSuccess() } else { resetSuccess() }
-		}
 	}
 
 	/// The panel body.
@@ -190,92 +175,19 @@ struct NotchCapsule: View {
 	/// `faceid` and `checkmark.circle.fill` are both system symbols, and
 	/// `.replace.magic` is the transition Apple uses to morph between them — so this is
 	/// the genuine article rather than an imitation of it.
-	/// Glyph while scanning; a spinning ring that resolves into a tick on success.
-	///
-	/// The success beat is hand-built rather than an SF Symbol transition, because a
-	/// symbol replace *swaps* two icons and this needs one object to *become* another.
-	/// The glyph collapses, a ring arrives edge-on and rotates flat, then the tick draws
-	/// inside it. Everything is stroked and green — nothing is ever filled, so the panel
-	/// shows through the middle.
-	/// The mark: brackets that converge into a ring, then a tick inside it.
-	///
-	/// One continuous path throughout. `FaceBracketMorph` grows its own corner radius and
-	/// segment length, so the Face ID brackets *become* the circle rather than one fading
-	/// out while the other fades in. That convergence is the whole animation.
 	private var content: some View {
-		let lineWidth = max(2, glyphSide * 0.075)
-
-		return ZStack {
-			// Brackets → ring.
-			FaceBracketMorph(progress: morph)
-				.stroke(
-					style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-				.foregroundStyle(markStyle)
-
-			// The face's features, which shrink into the middle as the brackets close.
-			FaceFeatures()
-				.stroke(
-					style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-				.foregroundStyle(markStyle)
-				.opacity(featureOpacity)
-				.scaleEffect(0.4 + 0.6 * featureOpacity)
-
-			// The tick pops rather than drawing on: the reference has a small tick at
-			// frame 72 and a larger one at 94, which reads as a scale-up, not a trim.
-			TickShape()
-				.stroke(
-					Self.faceGreen,
-					style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-				.padding(glyphSide * 0.3)
-				.opacity(tickProgress > 0 ? 1 : 0)
-				.scaleEffect(tickScale)
-		}
-		.frame(width: glyphSide, height: glyphSide)
-		.opacity(glyphOpacity)
-		.offset(y: dropIn * glyphSide * 0.9)
-		.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
-		.onAppear {
-			withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) { dropIn = 0 }
-		}
-	}
-
-	/// Frosted white while scanning, green once it has recognised you.
-	private var markStyle: AnyShapeStyle {
-		switch model.phase {
-		case .notRecognised:
-			return AnyShapeStyle(Color.red.opacity(0.9))
-		case .success:
-			return AnyShapeStyle(Self.faceGreen)
-		case .locked, .scanning:
-			return AnyShapeStyle(
-				LinearGradient(
-					colors: [.white.opacity(0.95), .white.opacity(0.6)],
-					startPoint: .top, endPoint: .bottom))
-		}
-	}
-
-	private static let faceGreen = Color(red: 0.20, green: 0.86, blue: 0.38)
-
-	/// Runs the four beats: glyph collapses, ring spins in, settles, tick draws.
-	private func playSuccess() {
-		// The features go first, so the brackets are closing on an empty middle.
-		withAnimation(.easeIn(duration: 0.22)) { featureOpacity = 0 }
-		// Then the brackets converge into the ring.
-		withAnimation(.spring(response: 0.6, dampingFraction: 0.74).delay(0.12)) { morph = 1 }
-		// Small tick, then it springs up to full size.
-		withAnimation(.linear(duration: 0.01).delay(0.55)) { tickProgress = 1 }
-		withAnimation(.spring(response: 0.34, dampingFraction: 0.6).delay(0.56)) {
-			tickScale = 1
-		}
-	}
-
-	private func resetSuccess() {
-		glyphOpacity = 1
-		featureOpacity = 1
-		morph = 0
-		tickProgress = 0
-		tickScale = 0.55
-		dropIn = -1
+		Image(systemName: symbolName)
+			.font(.system(size: glyphSide, weight: model.phase == .success ? .semibold : .regular))
+			// Hierarchical only for the tick, where the softened circle is what makes it
+			// read as frosted. Applied to the Face ID mark it just dims the whole glyph,
+			// which left it washed out against the glass.
+			.symbolRenderingMode(model.phase == .success ? .hierarchical : .monochrome)
+			.foregroundStyle(symbolTint)
+			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
+			// Breathing while it looks — the system effect, not an opacity loop.
+			.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
+			.symbolEffect(.bounce, value: model.phase == .notRecognised)
+			.animation(.spring(response: 0.36, dampingFraction: 0.72), value: model.phase)
 	}
 
 	/// The filled variant, rendered hierarchically.
@@ -323,97 +235,5 @@ private struct Shaker: ViewModifier {
 				}
 				DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) { offset = 0 }
 			}
-	}
-}
-
-
-/// The Face ID brackets morphing into a ring.
-///
-/// The trick is that the brackets already *are* corner segments of a rounded square. Grow
-/// the corner radius until it reaches half the side, and extend each segment until it
-/// meets its neighbours, and the same path becomes a circle. No crossfade, no second
-/// shape — one set of strokes that converges.
-///
-/// `progress` 0 draws the brackets, 1 draws a closed ring.
-struct FaceBracketMorph: Shape {
-	var progress: CGFloat
-
-	var animatableData: CGFloat {
-		get { progress }
-		set { progress = newValue }
-	}
-
-	func path(in rect: CGRect) -> Path {
-		let side = min(rect.width, rect.height)
-		let x0 = rect.midX - side / 2
-		let y0 = rect.midY - side / 2
-
-		// At p = 1 the radius is half the side, which is exactly a circle.
-		let r = side * (0.22 + 0.28 * progress)
-		let edge = max(0, side - 2 * r)
-		// How much of each straight edge is drawn, from a stub to the whole thing.
-		let arm = edge / 2 * (0.36 + 0.64 * progress)
-
-		var path = Path()
-
-		// Each corner: run in along one edge, round the corner, run out along the next.
-		let corners: [(CGPoint, CGFloat, CGFloat, CGPoint, CGPoint)] = [
-			// centre, startAngle, endAngle, armStart, armEnd
-			(CGPoint(x: x0 + r, y: y0 + r), 180, 270,
-			 CGPoint(x: x0, y: y0 + r + arm), CGPoint(x: x0 + r + arm, y: y0)),
-			(CGPoint(x: x0 + side - r, y: y0 + r), 270, 360,
-			 CGPoint(x: x0 + side - r - arm, y: y0), CGPoint(x: x0 + side, y: y0 + r + arm)),
-			(CGPoint(x: x0 + side - r, y: y0 + side - r), 0, 90,
-			 CGPoint(x: x0 + side, y: y0 + side - r - arm), CGPoint(x: x0 + side - r - arm, y: y0 + side)),
-			(CGPoint(x: x0 + r, y: y0 + side - r), 90, 180,
-			 CGPoint(x: x0 + r + arm, y: y0 + side), CGPoint(x: x0, y: y0 + side - r - arm)),
-		]
-
-		for (centre, start, end, armStart, armEnd) in corners {
-			path.move(to: armStart)
-			path.addArc(
-				center: centre, radius: r,
-				startAngle: .degrees(start), endAngle: .degrees(end),
-				clockwise: false)
-			path.addLine(to: armEnd)
-		}
-
-		return path
-	}
-}
-
-/// The eyes, nose and mouth, which shrink away as the brackets close.
-struct FaceFeatures: Shape {
-	func path(in rect: CGRect) -> Path {
-		let side = min(rect.width, rect.height)
-		let x0 = rect.midX - side / 2
-		let y0 = rect.midY - side / 2
-		func p(_ fx: CGFloat, _ fy: CGFloat) -> CGPoint {
-			CGPoint(x: x0 + side * fx, y: y0 + side * fy)
-		}
-
-		var path = Path()
-		// Eyes.
-		path.move(to: p(0.33, 0.34)); path.addLine(to: p(0.33, 0.46))
-		path.move(to: p(0.67, 0.34)); path.addLine(to: p(0.67, 0.46))
-		// Nose.
-		path.move(to: p(0.50, 0.36)); path.addLine(to: p(0.50, 0.56))
-		path.addQuadCurve(to: p(0.59, 0.60), control: p(0.50, 0.60))
-		// Mouth.
-		path.move(to: p(0.34, 0.68))
-		path.addQuadCurve(to: p(0.66, 0.68), control: p(0.50, 0.79))
-		return path
-	}
-}
-
-
-/// The tick drawn inside the closed ring.
-struct TickShape: Shape {
-	func path(in rect: CGRect) -> Path {
-		var path = Path()
-		path.move(to: CGPoint(x: rect.minX, y: rect.midY + rect.height * 0.04))
-		path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.36, y: rect.maxY))
-		path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.08))
-		return path
 	}
 }
