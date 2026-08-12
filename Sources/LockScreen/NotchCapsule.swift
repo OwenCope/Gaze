@@ -54,6 +54,15 @@ struct NotchCapsule: View {
 	@State private var breathe = false
 	@State private var expanded = false
 
+	// Success animation state. Kept as separate values rather than derived from `phase`
+	// so each beat can be timed independently.
+	@State private var glyphOpacity: Double = 1
+	@State private var glyphScale: CGFloat = 1
+	@State private var ringOpacity: Double = 0
+	@State private var ringScale: CGFloat = 0.75
+	@State private var spin: Double = -240
+	@State private var tickProgress: CGFloat = 0
+
 	private var cornerRadius: CGFloat { min(15, height / 2.4) }
 
 	private var shape: UnevenRoundedRectangle {
@@ -97,6 +106,9 @@ struct NotchCapsule: View {
 		}
 		// The controller still owns the retract, so mirror it back in.
 		.onChange(of: model.isExpanded) { _, wanted in expanded = wanted }
+		.onChange(of: model.phase) { _, phase in
+			if phase == .success { playSuccess() } else { resetSuccess() }
+		}
 	}
 
 	/// The panel body.
@@ -175,19 +187,78 @@ struct NotchCapsule: View {
 	/// `faceid` and `checkmark.circle.fill` are both system symbols, and
 	/// `.replace.magic` is the transition Apple uses to morph between them — so this is
 	/// the genuine article rather than an imitation of it.
+	/// Glyph while scanning; a spinning ring that resolves into a tick on success.
+	///
+	/// The success beat is hand-built rather than an SF Symbol transition, because a
+	/// symbol replace *swaps* two icons and this needs one object to *become* another.
+	/// The glyph collapses, a ring arrives edge-on and rotates flat, then the tick draws
+	/// inside it. Everything is stroked and green — nothing is ever filled, so the panel
+	/// shows through the middle.
 	private var content: some View {
-		Image(systemName: symbolName)
-			.font(.system(size: glyphSide, weight: model.phase == .success ? .semibold : .regular))
-			// Hierarchical only for the tick, where the softened circle is what makes it
-			// read as frosted. Applied to the Face ID mark it just dims the whole glyph,
-			// which left it washed out against the glass.
-			.symbolRenderingMode(model.phase == .success ? .hierarchical : .monochrome)
-			.foregroundStyle(symbolTint)
-			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
-			// Breathing while it looks — the system effect, not an opacity loop.
-			.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
-			.symbolEffect(.bounce, value: model.phase == .notRecognised)
-			.animation(.spring(response: 0.36, dampingFraction: 0.72), value: model.phase)
+		ZStack {
+			// Scanning / rejected: Apple's own glyph and effects, which are right for
+			// these states and cost nothing to keep.
+			Image(systemName: model.phase == .notRecognised ? "faceid" : "faceid")
+				.font(.system(size: glyphSide, weight: .regular))
+				.foregroundStyle(model.phase == .notRecognised ? .red : Self.faceGreen)
+				.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
+				.symbolEffect(.bounce, value: model.phase == .notRecognised)
+				.opacity(glyphOpacity)
+				.scaleEffect(glyphScale)
+
+			successMark
+		}
+		.frame(width: glyphSide, height: glyphSide)
+	}
+
+	/// The ring, and the tick inside it.
+	private var successMark: some View {
+		let lineWidth = max(2, glyphSide * 0.085)
+
+		return ZStack {
+			Circle()
+				.strokeBorder(Self.faceGreen, lineWidth: lineWidth)
+
+			TickShape()
+				.trim(from: 0, to: tickProgress)
+				.stroke(
+					Self.faceGreen,
+					style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+				.padding(glyphSide * 0.28)
+		}
+		.opacity(ringOpacity)
+		// The spin. Rotating about X makes the circle read as a ring tilting toward the
+		// viewer rather than a disc turning on the spot, which is the whole effect.
+		.rotation3DEffect(.degrees(spin), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
+		.scaleEffect(ringScale)
+	}
+
+	private static let faceGreen = Color(red: 0.20, green: 0.86, blue: 0.38)
+
+	/// Runs the four beats: glyph collapses, ring spins in, settles, tick draws.
+	private func playSuccess() {
+		withAnimation(.easeIn(duration: 0.16)) {
+			glyphOpacity = 0
+			glyphScale = 0.55
+		}
+
+		spin = -240
+		ringScale = 0.75
+		withAnimation(.easeOut(duration: 0.10).delay(0.10)) { ringOpacity = 1 }
+		withAnimation(.spring(response: 0.55, dampingFraction: 0.72).delay(0.10)) {
+			spin = 0
+			ringScale = 1
+		}
+		withAnimation(.easeOut(duration: 0.26).delay(0.46)) { tickProgress = 1 }
+	}
+
+	private func resetSuccess() {
+		glyphOpacity = 1
+		glyphScale = 1
+		ringOpacity = 0
+		tickProgress = 0
+		spin = -240
+		ringScale = 0.75
 	}
 
 	/// The filled variant, rendered hierarchically.
@@ -235,5 +306,17 @@ private struct Shaker: ViewModifier {
 				}
 				DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) { offset = 0 }
 			}
+	}
+}
+
+
+/// The tick drawn inside the success ring.
+private struct TickShape: Shape {
+	func path(in rect: CGRect) -> Path {
+		var path = Path()
+		path.move(to: CGPoint(x: rect.minX, y: rect.midY + rect.height * 0.04))
+		path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.36, y: rect.maxY))
+		path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.08))
+		return path
 	}
 }
