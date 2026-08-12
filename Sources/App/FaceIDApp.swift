@@ -13,6 +13,14 @@ struct FaceIDApp: App {
 		MenuBarExtra("Face ID", systemImage: menuBarSymbol) {
 			MenuBarContent(store: store, lockout: lockout)
 		}
+		// A real menu, not a window.
+		//
+		// Left to `.automatic`, SwiftUI backed this with a panel — and that panel stayed
+		// alive at alpha 0, layer 101, parked under the menu bar item in the top-right of the
+		// screen. An invisible window above normal windows eats every click inside its
+		// rectangle, so clicks near the top-right corner intermittently did nothing *in other
+		// applications*. The content here is a list of buttons; it wants an NSMenu.
+		.menuBarExtraStyle(.menu)
 
 		Window("Face ID", id: "settings") {
 			SettingsView(store: store, lockout: lockout)
