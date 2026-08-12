@@ -123,17 +123,15 @@ beat 2: the spin is what makes it read as one object transforming, rather than
 two icons swapping places, which is what `.symbolEffect(.replace)` gives you and
 why the current version feels flat by comparison.
 
-**Still missing: the morph.** What is built spins the glyph out and the mark in,
-both rotating about X so they read as one turning object. But it is still a
-crossfade underneath — in the reference the face's *strokes collapse into* the
-ring, converging rather than fading.
+**How it is built.** `FaceBracketMorph` is a `Shape` with an animatable
+`progress`. The insight that makes it simple: the Face ID brackets already *are*
+corner segments of a rounded square. Grow the corner radius until it reaches half
+the side, and extend each segment until it meets its neighbours, and the very
+same path becomes a circle.
 
-That needs geometry interpolation between two different path sets: the four
-bracket corners plus eyes, nose and mouth on one side, a circle on the other.
-A `Shape` with an animatable progress value that lerps control points, or a
-`Canvas` drawing the interpolated geometry each frame. Opacity and transform
-alone cannot express it, which is why the current version reads as a spin
-rather than a transformation.
+So there is no second shape and no crossfade — one set of strokes converges. The
+features (eyes, nose, mouth) fade first so the brackets close on an empty middle,
+then the tick draws inside the closed ring.
 
 Current implementation is in `Sources/LockScreen/NotchCapsule.swift`, and
 `--preview-capsule` shows it without locking the screen.
