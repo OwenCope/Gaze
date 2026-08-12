@@ -62,7 +62,25 @@ final class Preferences {
 		}
 	}
 
+	/// Where the Face ID mark sits while the panel is scanning.
+	///
+	/// Ruken's suggestion: rather than a large mark filling the middle, a small one tucked
+	/// into a corner, leaving the panel free for whatever else is there. Both were wanted in
+	/// the server, so both exist.
+	enum GlyphPlacement: String, CaseIterable, Sendable {
+		case centred
+		case corner
+
+		var title: String {
+			switch self {
+			case .centred: return "Centred"
+			case .corner: return "Corner"
+			}
+		}
+	}
+
 	private enum Key {
+		static let glyphPlacement = "notchGlyphPlacement"
 		static let panelShape = "notchPanelShape"
 		static let notchStyle = "notchStyle"
 		static let notchTransparency = "notchTransparency"
@@ -119,6 +137,10 @@ final class Preferences {
 		didSet { defaults.set(panelShape.rawValue, forKey: Key.panelShape) }
 	}
 
+	var glyphPlacement: GlyphPlacement {
+		didSet { defaults.set(glyphPlacement.rawValue, forKey: Key.glyphPlacement) }
+	}
+
 	/// 0 = fully opaque, 1 = fully clear. Only applies to the semi-glass style.
 	var notchTransparency: Double {
 		didSet { defaults.set(notchTransparency, forKey: Key.notchTransparency) }
@@ -149,6 +171,9 @@ final class Preferences {
 		panelShape =
 			defaults.string(forKey: Key.panelShape)
 			.flatMap(PanelShape.init(rawValue:)) ?? .attached
+		glyphPlacement =
+			defaults.string(forKey: Key.glyphPlacement)
+			.flatMap(GlyphPlacement.init(rawValue:)) ?? .centred
 		notchTransparency = defaults.object(forKey: Key.notchTransparency) as? Double ?? 0.3
 		notchHeightAdjust = defaults.double(forKey: Key.notchHeightAdjust)
 		notchWidthAdjust = defaults.double(forKey: Key.notchWidthAdjust)

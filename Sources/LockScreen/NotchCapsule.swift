@@ -37,8 +37,13 @@ final class NotchCapsuleModel {
 		/// panel is already on its way home and the padlock is the only thing left to say.
 		var isCompact: Bool { self == .locked || self == .unlocked }
 
-		/// Phases that draw the padlock beside the cutout.
-		var showsLockChip: Bool { self == .locked || self == .success || self == .unlocked }
+		/// The padlock is drawn in every phase.
+		///
+		/// It used to disappear while scanning and come back for the unlock, which made it a
+		/// thing that flickered rather than a state you can read: the padlock *is* the answer
+		/// to "is this Mac locked", and that question has an answer the whole time. It stays
+		/// put and changes at the one moment its answer changes.
+		var showsLockChip: Bool { true }
 	}
 
 	var phase: Phase = .scanning
@@ -49,10 +54,31 @@ final class NotchCapsuleModel {
 	var style: Preferences.NotchStyle = .normal
 	/// Mirrors `Preferences.panelShape`, captured when the panel is shown.
 	var shape: Preferences.PanelShape = .attached
+	/// Mirrors `Preferences.glyphPlacement`.
+	var glyphPlacement: Preferences.GlyphPlacement = .centred
 	var transparency: Double = 0.3
 	/// Drives the grow-out and retract-back. False collapses the panel to the notch's own
 	/// height, where it is hidden behind the cutout.
 	var isExpanded = false
+}
+
+/// The island's measurements, in one place.
+///
+/// Shared with the controller because the window has to be built big enough to hold what the
+/// view will draw, and the two disagreeing is how the shadow ended up clipped against the
+/// window's edge.
+enum IslandMetrics {
+	/// Between the housing and the island, so it reads as a separate object rather than as
+	/// the panel with its corners filed off.
+	static let gap: CGFloat = 8
+
+	/// Empty space below the island for its shadow to fall into.
+	static let shadowRoom: CGFloat = 24
+
+	/// The window's drop for an island of a given cutout width.
+	static func dropHeight(cutoutWidth: CGFloat) -> CGFloat {
+		gap + cutoutWidth + shadowRoom
+	}
 }
 
 /// The panel's timings, in one place.
@@ -139,9 +165,7 @@ struct NotchCapsule: View {
 	/// menu bar band, and an island cannot be at rest — it is the thing that pops out.
 	private var isIsland: Bool { model.shape == .island && !model.phase.isCompact }
 
-	/// The gap between the housing and the island, so it reads as a separate object rather
-	/// than as the panel with its corners filed off.
-	private static let islandGap: CGFloat = 8
+	private static var islandGap: CGFloat { IslandMetrics.gap }
 
 	/// A square with one radius on all four corners, the way Apple Pay's card drops from the
 	/// Dynamic Island.
@@ -154,9 +178,17 @@ struct NotchCapsule: View {
 	}
 
 	/// One dimension, used for both.
+	/// As wide as the housing it comes out of.
+	///
+	/// It was a fraction of the window, and the window is deliberately wider than the cutout
+	/// — so the island came out narrower than the notch and read as unrelated to it. Matching
+	/// the cutout is what makes it look like the thing the notch handed down.
 	private var islandSide: CGFloat {
-		max(0, min(width * 0.52, height - notchInset - Self.islandGap))
+		let available = height - notchInset - Self.islandGap - Self.islandShadowRoom
+		return max(0, min(cutoutWidth > 0 ? cutoutWidth : width * 0.52, available))
 	}
+
+	private static var islandShadowRoom: CGFloat { IslandMetrics.shadowRoom }
 
 	private var islandHeight: CGFloat { islandSide }
 	private var islandWidth: CGFloat { islandSide }
@@ -261,6 +293,13 @@ struct NotchCapsule: View {
 			if !model.phase.isCompact {
 				content
 					.frame(width: glyphSide, height: glyphSide)
+					// Ruken's placement: tucked into the trailing corner instead of filling
+					// the middle, so the panel reads as a status strip with a mark on it
+					// rather than as a mark with a panel around it.
+					.frame(
+						maxWidth: isCorner ? .infinity : nil,
+						alignment: isCorner ? .trailing : .center)
+					.padding(.trailing, isCorner ? cornerGlyphInset : 0)
 					// Centred in the solid band — not the whole window (whose top third is
 					// behind the cutout) and not the whole visible drop (whose lower part
 					// fades to clear, which would dissolve the glyph along with it).
@@ -322,7 +361,9 @@ struct NotchCapsule: View {
 			.overlay {
 				islandShape.strokeBorder(.white.opacity(0.16), lineWidth: 1)
 			}
-			.shadow(color: .black.opacity(0.5), radius: 14, y: 6)
+			// Softer and tighter than it was. A shadow large enough to need a lot of margin
+			// is a shadow large enough to get clipped by something.
+			.shadow(color: .black.opacity(0.42), radius: 10, y: 4)
 	}
 
 	/// The panel body.
@@ -488,12 +529,31 @@ struct NotchCapsule: View {
 
 	/// Sized against the visible drop. The mask does not touch the glyph, so it only has
 	/// to fit — it does not have to stay inside the opaque part.
+	/// True when the mark sits in a corner rather than the middle.
+	private var isCorner: Bool { model.glyphPlacement == .corner }
+
+	/// Held off the rounded edge so it does not crowd the corner it sits in.
+	private var cornerGlyphInset: CGFloat {
+		isIsland ? islandSide * 0.16 : max(10, earWidth * 0.5)
+	}
+
 	private var glyphSide: CGFloat {
-		isIsland ? min(islandWidth, islandHeight) * 0.46 : min(width, visibleHeight) * 0.52
+		// Smaller in a corner. A mark that keeps its full size and merely moves is not
+		// tucked into anything — it is the same mark, off-centre.
+		let base = isIsland ? min(islandWidth, islandHeight) * 0.46
+			: min(width, visibleHeight) * 0.52
+		return isCorner ? base * 0.52 : base
 	}
 
 	/// Sits high in the drop, where the panel is still dark enough to carry it.
 	private var glyphTop: CGFloat {
+		if isCorner {
+			// Just under the housing for the attached panel; just inside the island's own
+			// top edge for the island.
+			return isIsland
+				? notchInset + Self.islandGap + islandSide * 0.14
+				: notchInset + max(6, visibleHeight * 0.14)
+		}
 		guard !isIsland else {
 			// Centred, because an island has no fade to stay clear of and no housing to sit
 			// under — it is a panel in its own right.

@@ -55,6 +55,15 @@ final class LockWatcher {
 	/// How long to wait for the Mac to actually unlock before giving up on it.
 	private static let unlockGracePeriod: TimeInterval = 3.0
 
+	/// How long a face has to be looked at, without matching, before it counts as rejected.
+	///
+	/// Comfortably longer than `requiredMatchDuration`, or a face that needs a moment to be
+	/// recognised would be turned away before it had the chance.
+	private static let rejectAfter: TimeInterval = 4.0
+
+	/// The pause between a rejection and the next attempt.
+	private static let retryCooldown: TimeInterval = 2.0
+
 	init(store: FaceEnrollmentStore, lockout: LockoutManager) {
 		self.store = store
 		self.lockout = lockout
@@ -167,18 +176,46 @@ final class LockWatcher {
 		}
 
 		let liveness = Preferences.shared.livenessEnabled ? Liveness.detector() : nil
-		let deadline = Date().addingTimeInterval(searchWindow)
 		var shownAt: Date?
 		/// When the current unbroken run of matching frames began.
 		var matchingSince: Date?
+		/// When the face currently in frame arrived, for deciding it has been rejected.
+		var faceSince: Date?
+		/// The last moment anybody was in front of the camera.
+		var lastFaceAt = Date()
+		/// Set after a rejection, so the next try starts from a clean slate.
+		var cooldownUntil: Date?
 
-		while Date() < deadline, !Task.isCancelled {
+		// Keeps looking until the person gives up, not until a stopwatch runs out.
+		//
+		// This used to be a single 12-second window from the moment the screen locked, and
+		// one failure ended the whole thing: after being rejected once you could stand in
+		// front of the camera indefinitely and nothing would happen until you locked the
+		// screen again. The window now measures *absence* — twelve seconds with nobody in
+		// front of the camera means you walked away, and that is when it stops. A face that
+		// is present and rejected simply gets another go.
+		//
+		// Still bounded, and by the thing that should bound it: six rejections and the
+		// lockout takes over.
+		while !Task.isCancelled, isLocked, lockout.mayAttempt() {
 			try? await Task.sleep(for: .milliseconds(60))
 
 			guard !camera.faceMissing, let sample = camera.sample else {
-				// Face left the frame — the run is broken and starts again from zero.
+				// Face left the frame — both runs are broken and start again from zero.
 				matchingSince = nil
+				faceSince = nil
+				if Date().timeIntervalSince(lastFaceAt) >= searchWindow { break }
 				continue
+			}
+			lastFaceAt = Date()
+
+			// A beat after a rejection before looking again, so the panel has time to say
+			// "not recognised" and the next attempt is not judged on the same frames.
+			if let until = cooldownUntil {
+				guard Date() >= until else { continue }
+				cooldownUntil = nil
+				capsule.update(phase: .scanning)
+				StateBroadcast.post(.detecting)
 			}
 
 			// Shown on the very first frame containing a face. Waiting for a run of
@@ -191,9 +228,24 @@ final class LockWatcher {
 				shownAt = Date()
 			}
 
+			let presentSince = faceSince ?? Date()
+			faceSince = presentSince
+
 			let result = store.matches(sample)
 			guard result.matched else {
 				matchingSince = nil
+
+				// Long enough looking at a face that is not yours to call it a rejection.
+				// Comfortably longer than the match has to hold, or a real face would be
+				// turned away before it had the chance to succeed.
+				if Date().timeIntervalSince(presentSince) >= Self.rejectAfter {
+					lockout.recordFailure()
+					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
+					capsule.update(phase: .notRecognised)
+					Self.logger.notice("Not recognised (score \(result.score)); will try again.")
+					faceSince = nil
+					cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
+				}
 				continue
 			}
 
@@ -266,22 +318,18 @@ final class LockWatcher {
 		}
 
 		guard !Task.isCancelled else { return }
-		lockout.recordFailure()
-		Self.logger.notice("No match within the search window.")
 
-		// Only worth saying "not recognised" if we actually showed the user we were
-		// looking; otherwise the panel would appear for the first time to report a
-		// failure at someone who never saw it scanning.
-		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
+		// Rejections are counted where they happen, one per attempt, so there is nothing to
+		// record here — the loop ended because the person left or because the lockout took
+		// over, and neither is a new failure. Counting one here as well meant walking away
+		// cost an attempt.
+		Self.logger.notice("Search ended; nobody in front of the camera.")
+		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .idle)
 
-		if shownAt != nil {
-			capsule.update(phase: .notRecognised)
-			// Back to the padlock rather than vanishing — the Mac is still locked, and the
-			// indicator should keep saying so.
-			DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
-				guard let self, self.isLocked else { return }
-				self.capsule.update(phase: .locked)
-			}
+		// Back to the padlock rather than vanishing — the Mac is still locked, and the
+		// indicator should keep saying so.
+		if isLocked {
+			capsule.update(phase: .locked)
 		}
 	}
 }

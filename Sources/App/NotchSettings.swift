@@ -24,23 +24,34 @@ struct NotchSettingsSection: View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			SettingsSection(title: "Notch", footer: styleFooter) {
 				// Shape before style: it decides what the style is even applied to.
-				SettingRow(
+				//
+				// Shown as thumbnails rather than a pop-up menu. "Attached" and "Island" are
+				// words for shapes, and a word for a shape is a worse description of it than
+				// the shape is — the same reason Style has never been a menu.
+				choiceRow(
 					title: "Shape", symbol: "rectangle.portrait.topthird.inset.filled",
-					symbolTint: Theme.grey
-				) {
-					Picker("", selection: $settings.panelShape) {
-						ForEach(Preferences.PanelShape.allCases, id: \.self) { shape in
-							Text(shape.title).tag(shape)
-						}
-					}
-					.labelsHidden()
-					.pickerStyle(.menu)
-					.controlSize(.small)
-					.tint(Theme.label)
-					.fixedSize()
+					values: Preferences.PanelShape.allCases,
+					titleFor: \.title,
+					isSelected: { settings.panelShape == $0 },
+					select: { settings.panelShape = $0 }
+				) { shape in
+					ShapeSketch(shape: shape, placement: settings.glyphPlacement)
 				}
+
 				RowDivider()
 				styleRow
+
+				// Ruken's suggestion, as a choice rather than a change.
+				RowDivider()
+				choiceRow(
+					title: "Face ID mark", symbol: "faceid", symbolTint: Theme.faceID,
+					values: Preferences.GlyphPlacement.allCases,
+					titleFor: \.title,
+					isSelected: { settings.glyphPlacement == $0 },
+					select: { settings.glyphPlacement = $0 }
+				) { placement in
+					ShapeSketch(shape: settings.panelShape, placement: placement)
+				}
 				if settings.notchStyle == .semiLiquidGlass {
 					RowDivider()
 					SliderRow(
@@ -87,6 +98,48 @@ struct NotchSettingsSection: View {
 		case .liquidGlass:
 			return "The system's glass material, which refracts what's behind it."
 		}
+	}
+
+	/// A row of thumbnails, the way the Style row works.
+	///
+	/// Generic because there are three of these now and they differ only in what they draw.
+	/// A settings pane that shows you the thing and a settings pane that names the thing are
+	/// different products; this one shows you.
+	private func choiceRow<Value: Hashable, Sketch: View>(
+		title: String,
+		symbol: String,
+		symbolTint: Color = Theme.grey,
+		values: [Value],
+		titleFor: KeyPath<Value, String>,
+		isSelected: @escaping (Value) -> Bool,
+		select: @escaping (Value) -> Void,
+		@ViewBuilder sketch: @escaping (Value) -> Sketch
+	) -> some View {
+		VStack(alignment: .leading, spacing: 12) {
+			HStack(spacing: 12) {
+				IconTile(symbol: symbol, tint: symbolTint)
+				Text(title)
+					.font(Typography.row)
+					.foregroundStyle(Theme.label)
+				Spacer()
+			}
+
+			HStack(spacing: 10) {
+				ForEach(values, id: \.self) { value in
+					PreviewTile(
+						title: value[keyPath: titleFor],
+						isSelected: isSelected(value),
+						select: { select(value) },
+						wallpaper: wallpaper
+					) {
+						sketch(value)
+					}
+				}
+			}
+			.padding(.leading, 38)
+		}
+		.padding(.horizontal, Theme.rowInset)
+		.padding(.vertical, 11)
 	}
 
 	private var styleRow: some View {
@@ -231,5 +284,117 @@ private struct StylePreview: View {
 				.init(color: .clear, location: 1),
 			],
 			startPoint: .top, endPoint: .bottom)
+	}
+}
+
+/// The wallpaper strip, selection ring and caption that every notch thumbnail shares.
+///
+/// Extracted because there are three rows of these now. What differs between them is the
+/// sketch drawn on the wallpaper, and nothing else.
+private struct PreviewTile<Content: View>: View {
+
+	let title: String
+	let isSelected: Bool
+	let select: () -> Void
+	let wallpaper: NSImage?
+	@ViewBuilder var content: Content
+
+	@State private var isHovering = false
+
+	var body: some View {
+		Button(action: select) {
+			VStack(spacing: 5) {
+				ZStack(alignment: .top) {
+					if let wallpaper {
+						Image(nsImage: wallpaper)
+							.resizable()
+							.aspectRatio(contentMode: .fill)
+					} else {
+						LinearGradient(
+							colors: [
+								Color(red: 0.42, green: 0.52, blue: 0.66),
+								Color(red: 0.78, green: 0.62, blue: 0.48),
+							],
+							startPoint: .topLeading, endPoint: .bottomTrailing)
+					}
+					content
+				}
+				.frame(width: 112, height: 62)
+				.clipShape(.rect(cornerRadius: 7, style: .continuous))
+				.overlay {
+					RoundedRectangle(cornerRadius: 7, style: .continuous)
+						.strokeBorder(
+							isSelected
+								? Theme.label
+								: (isHovering ? Theme.label.opacity(0.4) : Theme.separator),
+							lineWidth: isSelected ? 2 : 1)
+				}
+
+				Text(title)
+					.font(Typography.caption)
+					.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
+					.lineLimit(2)
+					.multilineTextAlignment(.center)
+					.frame(height: 26, alignment: .top)
+			}
+		}
+		.buttonStyle(.plain)
+		.onHover { isHovering = $0 }
+		.accessibilityLabel(title)
+		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+		.animation(.easeOut(duration: 0.15), value: isSelected)
+	}
+}
+
+/// A small drawing of the panel: which shape it is, and where the mark sits on it.
+///
+/// Not the real `NotchCapsule`. That one is built around a physical cutout to hide behind
+/// and a window sized to the screen, neither of which exists inside a 112pt thumbnail. This
+/// draws the same two decisions at a size you can actually see them at.
+private struct ShapeSketch: View {
+
+	let shape: Preferences.PanelShape
+	let placement: Preferences.GlyphPlacement
+
+	/// The menu bar band, at roughly the proportion the real one occupies.
+	private let barHeight: CGFloat = 13
+
+	var body: some View {
+		VStack(spacing: 0) {
+			switch shape {
+			case .attached:
+				UnevenRoundedRectangle(
+					topLeadingRadius: 0, bottomLeadingRadius: 7,
+					bottomTrailingRadius: 7, topTrailingRadius: 0, style: .continuous
+				)
+				.fill(.black.opacity(0.88))
+				.frame(width: 62, height: barHeight + 20)
+				.overlay(alignment: placement == .corner ? .topTrailing : .center) {
+					glyph
+						.padding(.top, placement == .corner ? barHeight + 3 : 6)
+						.padding(.trailing, placement == .corner ? 5 : 0)
+				}
+
+			case .island:
+				// The bar it comes out of, then the island itself, detached from it.
+				Rectangle()
+					.fill(.black.opacity(0.88))
+					.frame(width: 46, height: barHeight)
+				RoundedRectangle(cornerRadius: 8, style: .continuous)
+					.fill(.black.opacity(0.9))
+					.frame(width: 30, height: 30)
+					.overlay(alignment: placement == .corner ? .topTrailing : .center) {
+						glyph.padding(placement == .corner ? 3 : 0)
+					}
+					.padding(.top, 4)
+			}
+			Spacer(minLength: 0)
+		}
+	}
+
+	private var glyph: some View {
+		Image(systemName: "faceid")
+			.font(.system(size: placement == .corner ? 7 : 11))
+			.foregroundStyle(.white)
 	}
 }
