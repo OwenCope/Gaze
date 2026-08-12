@@ -18,12 +18,18 @@ final class NotchCapsuleModel {
 		case notRecognised
 		case success
 
-		/// Compact while it is only showing a padlock, expanded once it is doing something.
+		/// Compact whenever the padlock is the thing being shown.
 		///
 		/// A panel that hangs open all the while the Mac is locked is a permanent lump
 		/// under the notch; one that sits flush and grows when it has something to say is
 		/// a status indicator.
-		var isCompact: Bool { self == .locked }
+		///
+		/// Success is compact too. The unlock is the *same padlock* opening, in the same
+		/// place and at the same size it has been sitting at — not a second, larger glyph in
+		/// a panel that drops to announce it. Dropping the panel to say "done" makes the
+		/// final beat the loudest one, when it should be the quietest: the lock lets go and
+		/// the notch takes the panel back.
+		var isCompact: Bool { self == .locked || self == .success }
 	}
 
 	var phase: Phase = .scanning
@@ -258,9 +264,18 @@ struct NotchCapsule: View {
 	/// glyph from — it can simply be drawn into the bar. That is the whole difference
 	/// between a status indicator and a sticker.
 	private var lockChip: some View {
-		Image(systemName: "lock.fill")
+		Image(systemName: model.phase == .success ? "lock.open.fill" : "lock.fill")
 			.font(.system(size: 11, weight: .semibold))
+			// White, not green. This is the menu bar's own vocabulary — the padlock beside
+			// the cutout is a status glyph like the ones to its right, and those are never
+			// coloured. Green was borrowed from a confirmation panel that no longer exists.
 			.foregroundStyle(.white)
+			// The shackle morphs rather than the glyph swapping, so it reads as one padlock
+			// opening rather than two icons exchanged.
+			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
+			// The one mechanical beat in an otherwise smooth sequence: a lock lets go all at
+			// once.
+			.symbolEffect(.bounce.up, options: .speed(0.9), value: model.phase == .success)
 			// No chip behind it.
 			//
 			// It briefly had one, added when the resting panel was hidden behind the housing
