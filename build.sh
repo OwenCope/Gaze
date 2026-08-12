@@ -51,6 +51,7 @@ xcrun swiftc \
 	-framework CoreML \
 	-framework CryptoKit \
 	-framework LocalAuthentication \
+	-framework OpenDirectory \
 	"$ROOT"/Sources/*/*.swift \
 	-o "$BIN"
 

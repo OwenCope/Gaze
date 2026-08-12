@@ -1,4 +1,5 @@
 import Foundation
+import OpenDirectory
 import os
 
 /// Stores the account password for the keystroke unlock backend.
@@ -36,20 +37,35 @@ enum PasswordVault {
 		SecureVault.remove(account)
 	}
 
-	/// `dscl . -authonly` returns non-zero for a wrong password without unlocking or
-	/// consuming any system attempt counter.
+	/// Checks a password against the local directory, without unlocking anything and
+	/// without consuming any system attempt counter.
+	///
+	/// This used to shell out to `dscl . -authonly <user> <password>`, which put the
+	/// password in the argument vector of a subprocess — and `argv` is readable from the
+	/// process list by anything else running as this user for as long as the call takes.
+	/// The window was short and the audience was limited to your own uid, but it meant the
+	/// one moment the app handles a plaintext password was also the one moment it published
+	/// it, which is not a trade worth making for a check the system exposes directly.
+	///
+	/// `ODRecord.verifyPassword` is the API `dscl` itself is a wrapper around. It stays
+	/// in-process, so the password never crosses a boundary where something can observe it.
 	static func verify(_ password: String, user: String = NSUserName()) -> Bool {
-		let process = Process()
-		process.executableURL = URL(fileURLWithPath: "/usr/bin/dscl")
-		process.arguments = [".", "-authonly", user, password]
-		process.standardOutput = FileHandle.nullDevice
-		process.standardError = FileHandle.nullDevice
 		do {
-			try process.run()
-			process.waitUntilExit()
-			return process.terminationStatus == 0
-		} catch {
-			logger.error("Could not run dscl: \(error)")
+			let node = try ODNode(
+				session: ODSession.default(), type: ODNodeType(kODNodeTypeAuthentication))
+			let record = try node.record(
+				withRecordType: kODRecordTypeUsers, name: user, attributes: nil)
+			try record.verifyPassword(password)
+			return true
+		} catch let error as NSError {
+			// A wrong password and a broken lookup both land here, so tell them apart in the
+			// log — "the password was wrong" and "we could not ask" need different fixes,
+			// and conflating them is how a directory problem gets misread as a typo.
+			if error.domain == "com.apple.OpenDirectory" && error.code == 5000 {
+				logger.notice("Password did not verify against the local directory.")
+			} else {
+				logger.error("Could not verify password: \(error.localizedDescription)")
+			}
 			return false
 		}
 	}
