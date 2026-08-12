@@ -27,13 +27,6 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		}
 	}
 
-	var tint: Color {
-		switch self {
-		case .general: return Theme.grey
-		case .face: return Theme.faceID
-		case .about: return Theme.blue
-		}
-	}
 }
 
 struct SettingsView: View {
@@ -53,13 +46,24 @@ struct SettingsView: View {
 	var body: some View {
 		HStack(spacing: 0) {
 			sidebar
-			Divider().overlay(Theme.separator)
 			detail
 		}
-		.frame(width: 700, height: 540)
-		// One vibrancy layer behind the whole window, scrimmed differently on each side.
-		// Two separate effect views produced a visible seam where their samples disagreed.
-		.background(VibrantBackground())
+		// A floor, not a fixed size.
+		//
+		// The window was pinned at exactly 700×540 and non-resizable, which meant a user who
+		// found the text small had no recourse, and a long string — a localised footer, a
+		// camera driver's error message — had nowhere to go but the clip. System Settings
+		// resizes; so does this now.
+		.frame(
+			minWidth: 660, idealWidth: 700, maxWidth: .infinity,
+			minHeight: 480, idealHeight: 560, maxHeight: .infinity)
+		// One sheet of glass, dense at the top and thinning as it falls.
+		//
+		// No divider between sidebar and detail, and no separate scrim on each: a hairline
+		// with two different fills either side is what cut the window into a "web app with a
+		// sidebar". On one unbroken sheet, the sidebar is just the left margin of the glass —
+		// the way the Siri panel and Spotlight treat their edges.
+		.background(WindowGlass())
 		.preferredColorScheme(.dark)
 		.onAppear { AppActivation.bringToFront() }
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
@@ -69,21 +73,38 @@ struct SettingsView: View {
 
 	private var sidebar: some View {
 		VStack(alignment: .leading, spacing: 2) {
-			ForEach(SettingsPane.allCases) { item in
+			ForEach(Array(SettingsPane.allCases.enumerated()), id: \.element) { index, item in
 				SidebarItem(
 					pane: item,
 					isSelected: pane == item,
 					badge: badge(for: item),
 					select: { pane = item })
+					// ⌘1/⌘2/⌘3, the way every Mac app with tabbed preferences switches
+					// panes. The sidebar was mouse-only before this.
+					.keyboardShortcut(
+						KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
 			}
 			Spacer(minLength: 0)
 		}
+		// Arrow keys once the sidebar has focus, matching a real source list.
+		.onMoveCommand { direction in
+			guard let current = SettingsPane.allCases.firstIndex(of: pane) else { return }
+			switch direction {
+			case .up where current > 0:
+				pane = SettingsPane.allCases[current - 1]
+			case .down where current < SettingsPane.allCases.count - 1:
+				pane = SettingsPane.allCases[current + 1]
+			default:
+				break
+			}
+		}
+		.accessibilityElement(children: .contain)
+		.accessibilityLabel("Settings panes")
 		.padding(.horizontal, 9)
 		// Clears the traffic lights, which sit over the sidebar on a hidden title bar.
 		.padding(.top, 38)
 		.padding(.bottom, 12)
 		.frame(width: 168)
-		.background(Theme.sidebarScrim)
 	}
 
 	/// A dot on the panes that want attention, so a problem is visible from any pane.
@@ -106,7 +127,7 @@ struct SettingsView: View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 				Text(pane.title)
-					.font(.system(size: 20, weight: .bold))
+					.font(Typography.paneTitle)
 					.foregroundStyle(Theme.label)
 					.padding(.bottom, 2)
 
@@ -119,6 +140,7 @@ struct SettingsView: View {
 				case .general:
 					NotchSettingsSection(settings: settings)
 					securitySection
+					behaviourSection
 					updatesSection
 				case .about:
 					aboutSection
@@ -131,8 +153,13 @@ struct SettingsView: View {
 			.padding(.top, 38)
 			.padding(.bottom, 26)
 		}
-		.scrollIndicators(.never)
-		.background(Theme.contentScrim)
+		// Not `.never`.
+		//
+		// Hiding the indicator on a pane that scrolls removes the only thing telling the
+		// user there is more below the fold — on the General pane there are two groups under
+		// it. `.automatic` keeps it out of the way until the content actually moves, which
+		// is the behaviour it was presumably reaching for.
+		.scrollIndicators(.automatic)
 	}
 
 	// MARK: - Overview
@@ -150,38 +177,49 @@ struct SettingsView: View {
 					systemName: store.isEnrolled
 						? "faceid" : "person.crop.circle.badge.questionmark"
 				)
-				.font(.system(size: 34, weight: .thin))
+				.font(Typography.glyph)
 				.foregroundStyle(heroTint)
 				.frame(width: 42)
 				.animation(.easeOut(duration: 0.25), value: store.isEnrolled)
 
 				VStack(alignment: .leading, spacing: 3) {
 					Text(store.isEnrolled ? "Face ID is set up" : "Face ID isn't set up")
-						.font(.system(size: 14, weight: .semibold))
+						.font(Typography.heroTitle)
 						.foregroundStyle(Theme.label)
 					Text(heroDetail)
-						.font(.system(size: 11))
+						.font(Typography.detail)
 						.foregroundStyle(Theme.secondaryLabel)
 						.fixedSize(horizontal: false, vertical: true)
 				}
 
 				Spacer(minLength: 8)
 
+				// Equal widths.
+				//
+				// Two right-aligned buttons whose labels differ in length — "Set Up Again"
+				// over "Test Recognition" — left a ragged left edge between them. Matching
+				// their widths is what makes them read as a pair.
 				VStack(alignment: .trailing, spacing: 6) {
-					Button(store.isEnrolled ? "Set Up Again" : "Set Up Face ID") {
+					Button {
 						AppActivation.bringToFront()
 						openWindow(id: "enrollment")
+					} label: {
+						Text(store.isEnrolled ? "Set Up Again" : "Set Up Face ID")
+							.frame(maxWidth: .infinity)
 					}
-					.buttonStyle(AccentButtonStyle())
+					.buttonStyle(store.isEnrolled ? .accent : .primaryAction)
 
 					if store.isEnrolled {
-						Button("Test Recognition") {
+						Button {
 							AppActivation.bringToFront()
 							openWindow(id: "test")
+						} label: {
+							Text("Test Recognition").frame(maxWidth: .infinity)
 						}
-						.buttonStyle(AccentButtonStyle(role: .cancel))
+						.buttonStyle(.quiet)
 					}
 				}
+				.frame(width: 132)
 			}
 			.padding(.horizontal, Theme.rowInset)
 			.padding(.vertical, 14)
@@ -213,9 +251,9 @@ struct SettingsView: View {
 					+ "That tells you from a stranger but is much weaker than a trained model."
 				: nil
 		) {
-			SettingRow(title: "Recognition model", symbol: "brain.head.profile", symbolTint: Theme.purple) {
+			SettingRow(title: "Recognition model", symbol: "brain.head.profile") {
 				Text(store.embedder.identifier)
-					.font(.system(size: 12))
+					.font(Typography.control)
 					.foregroundStyle(Theme.secondaryLabel)
 			}
 			RowDivider()
@@ -229,7 +267,7 @@ struct SettingsView: View {
 						store.removeEnrollment()
 					}
 				}
-				.buttonStyle(AccentButtonStyle(role: .destructive))
+				.buttonStyle(AccentButtonStyle.destructive)
 			}
 		}
 	}
@@ -249,7 +287,7 @@ struct SettingsView: View {
 					SettingsField(placeholder: "Required", text: $lockoutPassword)
 						.frame(width: 140)
 					Button("Unlock") { clearLockout() }
-						.buttonStyle(AccentButtonStyle())
+						.buttonStyle(.accent)
 						.disabled(lockoutPassword.isEmpty)
 				}
 			}
@@ -285,7 +323,7 @@ struct SettingsView: View {
 
 			if let problem = readinessProblem {
 				RowDivider(inset: 0)
-				StatusPill(kind: problem.kind, message: problem.message)
+				StatusLine(kind: problem.kind, message: problem.message)
 			}
 		}
 	}
@@ -315,7 +353,7 @@ struct SettingsView: View {
 	///
 	/// A green "Ready." sitting permanently in the window is noise: the state it reports is
 	/// the state the user already expects.
-	private var readinessProblem: (kind: StatusPill.Kind, message: String)? {
+	private var readinessProblem: (kind: StatusLine.Kind, message: String)? {
 		let backend: UnlockBackend =
 			switch settings.unlockBackend {
 			case .none: NoUnlockBackend()
@@ -335,50 +373,64 @@ struct SettingsView: View {
 			SettingRow(
 				title: "Account password",
 				detail: "Checked against your account before it's stored.",
-				symbol: "key.fill", symbolTint: Theme.orange
+				symbol: "key.fill"
 			) {
 				HStack(spacing: 6) {
 					SettingsField(placeholder: "Required", text: $passwordEntry)
 						.frame(width: 140)
 					Button("Store") { storePassword() }
-						.buttonStyle(AccentButtonStyle())
+						.buttonStyle(.accent)
 						.disabled(passwordEntry.isEmpty)
 						.fixedSize()
 				}
 			}
 			if let passwordError {
-				StatusPill(kind: .error, message: passwordError)
+				StatusLine(kind: .error, message: passwordError)
 			}
 		}
 	}
 
 	// MARK: - Security
 
+	/// Two groups, not one.
+	///
+	/// Five switches under a single unlabelled heading mixed two different questions — how
+	/// hard Face ID is to fool, and how the app behaves on this Mac. Splitting them is also
+	/// what lets the icon colours mean something: the first group is the hardening group and
+	/// reads as one family, the second is plumbing and stays grey.
 	private var securitySection: some View {
-		SettingsSection(footer: securityFooter) {
+		SettingsSection(title: "Hardening", footer: securityFooter) {
 			SettingToggle(
 				title: "Only trust the built-in camera",
-				symbol: "camera.fill", symbolTint: Theme.blue,
+				symbol: "camera.fill",
 				isOn: bind(\.requireBuiltInCamera))
 
 			RowDivider()
 			SettingToggle(
 				title: "Reject photos held up to the camera",
-				symbol: "eye.trianglebadge.exclamationmark.fill", symbolTint: Theme.orange,
+				symbol: "eye.trianglebadge.exclamationmark.fill",
 				isEnabled: Liveness.isAvailable,
 				isOn: bind(\.livenessEnabled))
 
 			RowDivider()
 			SettingToggle(
 				title: "Require Touch ID for changes here",
-				symbol: "touchid", symbolTint: Theme.pink,
+				// Pink because Apple's own Touch ID icon is pink, not because a fifth hue
+				// was needed. Every tint in this window now points at a System Settings row
+				// that uses the same one.
+				symbol: "touchid",
 				isEnabled: BiometricGate.isAvailable,
 				isOn: bind(\.touchIDFallback))
+		}
+	}
 
-			RowDivider()
+	private var behaviourSection: some View {
+		SettingsSection(title: "This Mac", footer: behaviourFooter) {
 			SettingToggle(
 				title: "Open at login",
-				symbol: "power", symbolTint: Theme.faceID,
+				// Grey, like Login Items in System Settings — and because `Theme.faceID` is
+				// documented as Face ID identity only. A power button is not Face ID.
+				symbol: "power",
 				isOn: Binding(
 					get: { LoginItem.isEnabled },
 					set: { LoginItem.setEnabled($0) }))
@@ -386,16 +438,24 @@ struct SettingsView: View {
 			RowDivider()
 			SettingToggle(
 				title: "Ask for a password before quitting",
-				symbol: "lock.fill", symbolTint: Theme.indigo,
+				symbol: "lock.fill",
 				isOn: bind(\.tamperProtection))
 		}
 	}
 
 	/// Only the caveats. Rows that work as expected need no sentence explaining that they do.
-	private var securityFooter: String {
+	///
+	/// Nil rather than empty when there is nothing to say — an empty footer still reserved
+	/// its leading and its line height, which left an unexplained gap under the group.
+	private var securityFooter: String? {
 		var notes: [String] = []
 		if !Liveness.isAvailable { notes.append("No anti-spoof model is installed.") }
 		if !BiometricGate.isAvailable { notes.append("This Mac has no Touch ID sensor.") }
+		return notes.isEmpty ? nil : notes.joined(separator: " ")
+	}
+
+	private var behaviourFooter: String {
+		var notes: [String] = []
 		if LoginItem.needsApproval {
 			notes.append("Approve Face ID in System Settings › General › Login Items.")
 		}
@@ -411,16 +471,16 @@ struct SettingsView: View {
 		) {
 			SettingRow(
 				title: "Version \(updates.currentVersion)",
-				symbol: "arrow.trianglehead.2.clockwise", symbolTint: Theme.blue
+				symbol: "arrow.trianglehead.2.clockwise"
 			) {
 				Button(updateButtonTitle) { updateAction() }
-					.buttonStyle(AccentButtonStyle())
+					.buttonStyle(.accent)
 					.disabled(updates.state == .checking || updates.state == .pulling)
 			}
 
 			if case .pulled = updates.state {
 				RowDivider(inset: 0)
-				StatusPill(
+				StatusLine(
 					kind: .warning,
 					message: "Run ./build.sh in the repository to apply the update.")
 			}
@@ -471,13 +531,13 @@ struct SettingsView: View {
 			SettingsSection {
 				VStack(spacing: 10) {
 					Image(systemName: "faceid")
-						.font(.system(size: 40, weight: .thin))
+						.font(Typography.glyphLarge)
 						.foregroundStyle(Theme.faceID)
 					Text("Face ID")
-						.font(.system(size: 15, weight: .semibold))
+						.font(Typography.heroTitle)
 						.foregroundStyle(Theme.label)
 					Text("Version \(updates.currentVersion)")
-						.font(.system(size: 11))
+						.font(Typography.detail)
 						.foregroundStyle(Theme.secondaryLabel)
 				}
 				.frame(maxWidth: .infinity)
@@ -488,14 +548,14 @@ struct SettingsView: View {
 				SettingRow(
 					title: "DanFQ",
 					detail: "Sapphire, whose recognition model this uses.",
-					symbol: "heart.fill", symbolTint: Theme.pink
+					symbol: "heart.fill"
 				) {
 					Button("Visit") {
 						if let url = URL(string: "https://sapphire-app.tech/") {
 							NSWorkspace.shared.open(url)
 						}
 					}
-					.buttonStyle(AccentButtonStyle(role: .cancel))
+					.buttonStyle(AccentButtonStyle.quiet)
 				}
 			}
 		}
@@ -545,13 +605,14 @@ private struct SidebarItem: View {
 	let select: () -> Void
 
 	@State private var isHovering = false
+	@FocusState private var isFocused: Bool
 
 	var body: some View {
 		Button(action: select) {
 			HStack(spacing: 9) {
-				IconTile(symbol: pane.symbol, tint: pane.tint)
+				IconTile(symbol: pane.symbol)
 				Text(pane.title)
-					.font(.system(size: 13))
+					.font(Typography.row)
 					.foregroundStyle(Theme.label)
 					.lineLimit(1)
 				Spacer(minLength: 4)
@@ -573,6 +634,19 @@ private struct SidebarItem: View {
 			.contentShape(.rect)
 		}
 		.buttonStyle(.plain)
+		// Only the selected row takes focus, so the ring and the highlight are never on two
+		// different rows. Making all three focusable put the ring on "General" while the
+		// "Face ID" pane was showing, which reads as the sidebar disagreeing with itself.
+		.focusable(isSelected)
+		.focused($isFocused)
+		// AppKit's blue ring on top of the white one drawn above — two rings around one row,
+		// and a colour this window otherwise never uses.
+		.focusEffectDisabled()
 		.onHover { isHovering = $0 }
+		// Without this a screen reader announces three unrelated buttons and never says
+		// which pane is showing.
+		.accessibilityLabel(pane.title)
+		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+		.accessibilityValue(badge == nil ? "" : "Needs attention")
 	}
 }

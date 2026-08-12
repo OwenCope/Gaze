@@ -143,7 +143,8 @@ final class NotchCapsuleController {
 			rootView: AnyView(
 				NotchCapsule(
 					model: model, width: size.width, height: size.height,
-					notchInset: notchHeight)))
+					notchInset: notchHeight,
+					cutoutWidth: NotchMetrics.width(on: screen) ?? 180)))
 		host.frame = NSRect(origin: .zero, size: size)
 		window.contentView = host
 

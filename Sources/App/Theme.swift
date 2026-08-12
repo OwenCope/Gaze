@@ -13,34 +13,41 @@ enum Theme {
 	/// test, both of which are full of camera preview and want no wallpaper behind them.
 	static let background = Color(red: 0.078, green: 0.078, blue: 0.082)
 
-	/// Sits *over* the window's vibrancy rather than replacing it, so the wallpaper still
-	/// comes through. An opaque fill here is what made the window read as a flat web page
-	/// dropped on the desktop instead of a Mac window.
-	static let contentScrim = Color.black.opacity(0.16)
-	static let sidebarScrim = Color.clear
-
-	/// Group fill. Frosted rather than dark: the window is translucent now, so a group has
-	/// to lift *off* the wallpaper with light instead of sinking into it with black.
-	static let surface = Color.white.opacity(0.13)
-	static let surfaceRaised = Color.white.opacity(0.18)
-	static let separator = Color.white.opacity(0.13)
+	/// Group fill, over the glass rather than instead of it.
+	///
+	/// A flat `white.opacity(0.13)` rectangle is what made every group read as a grey slab:
+	/// it is a *painted* panel, so it sits at the same depth as everything else and the
+	/// window flattens into one sheet of cardboard. Real glass has a blur of its own, which
+	/// is what separates a group from the thing behind it.
+	static let surface = Color.white.opacity(0.07)
+	static let surfaceRaised = Color.white.opacity(0.12)
+	static let separator = Color.white.opacity(0.09)
 
 	// MARK: - Icon palette
 
-	/// Apple's own settings icons are colour-coded, and colour is what makes an icon column
-	/// worth having: a row of identical grey tiles adds a shape to every line without
-	/// telling you anything, which is why they read as filler.
-	static let blue = Color(red: 0.04, green: 0.52, blue: 1.00)
-	static let orange = Color(red: 1.00, green: 0.58, blue: 0.00)
-	static let purple = Color(red: 0.69, green: 0.32, blue: 0.87)
-	static let pink = Color(red: 1.00, green: 0.18, blue: 0.33)
-	static let teal = Color(red: 0.19, green: 0.69, blue: 0.78)
-	static let indigo = Color(red: 0.35, green: 0.34, blue: 0.84)
+	/// There isn't one. That is the palette.
+	///
+	/// This used to be six saturated hues — blue, orange, purple, pink, teal, indigo — one
+	/// per settings row, on the argument that Apple colour-codes its own icons. Apple does,
+	/// in the *top-level* list of System Settings, where the categories are fixed and
+	/// learnable. Inside a pane it buys nothing: nobody navigates to a switch by remembering
+	/// that it was the pink one, and five hues in a group of five rows is chroma with no
+	/// information in it.
+	///
+	/// Monochrome tiles keep what the icon column is actually for — a shape per row to scan
+	/// by — and hand the whole colour budget to state. When something in this window is
+	/// coloured, it is because it is telling you something.
 	static let grey = Color(red: 0.56, green: 0.56, blue: 0.58)
 
+	/// Label opacities are set against the *worst* case, not the average one.
+	///
+	/// The window is translucent, so the ground under a label is whatever wallpaper the user
+	/// happens to have. Tuned on a dark desktop, 0.35 looked like a restrained tertiary; on a
+	/// light one it was gone. These are the lowest values that still hold up over a bright
+	/// wallpaper coming through the glass.
 	static let label = Color.white
-	static let secondaryLabel = Color.white.opacity(0.55)
-	static let tertiaryLabel = Color.white.opacity(0.35)
+	static let secondaryLabel = Color.white.opacity(0.68)
+	static let tertiaryLabel = Color.white.opacity(0.52)
 
 	/// Controls are neutral.
 	///
@@ -57,9 +64,164 @@ enum Theme {
 
 	// MARK: - Metrics
 
-	static let cornerRadius: CGFloat = 12
-	static let rowInset: CGFloat = 13
-	static let sectionSpacing: CGFloat = 20
+	/// Generous and continuous. Small radii on a dark panel read as a dialog box; the
+	/// system's own glass surfaces — Spotlight, the Siri panel, the notch capsule this app
+	/// already draws — are much rounder than a settings group used to be.
+	static let cornerRadius: CGFloat = 16
+	static let rowInset: CGFloat = 15
+	static let sectionSpacing: CGFloat = 22
+}
+
+// MARK: - Glass
+
+/// The window's ground: dark glass at the top, fading toward clear at the bottom.
+///
+/// The window used to be a vibrancy layer under a flat black scrim, and it looked like a
+/// grey slab dropped on the desktop — the wallpaper technically came through, but at one
+/// unchanging density, so nothing about it read as glass. What makes the system's own
+/// panels look like glass is the *gradient*: dense enough at the top to carry a title,
+/// thinning as it falls, so the surface admits it is a sheet with light behind it.
+///
+/// The same shape the notch capsule already uses, which is the point — the panel that drops
+/// out of the notch and the window you configure it from should be made of one material.
+struct WindowGlass: View {
+	var keepsTitle = false
+
+	var body: some View {
+		ZStack {
+			VibrantBackground(material: .underWindowBackground, hidesTitle: !keepsTitle)
+
+			LinearGradient(
+				stops: [
+					.init(color: .black.opacity(0.74), location: 0),
+					.init(color: .black.opacity(0.62), location: 0.32),
+					.init(color: .black.opacity(0.44), location: 0.68),
+					.init(color: .black.opacity(0.26), location: 1),
+				],
+				startPoint: .top,
+				endPoint: .bottom)
+
+			// The specular top edge. A single hairline of light along the upper rim is what
+			// tells the eye a surface is glass rather than paint — it is the highlight of a
+			// physical sheet catching the light above it.
+			VStack(spacing: 0) {
+				LinearGradient(
+					colors: [.white.opacity(0.22), .clear],
+					startPoint: .top, endPoint: .bottom)
+					.frame(height: 90)
+				Spacer(minLength: 0)
+			}
+			.blendMode(.plusLighter)
+			.opacity(0.5)
+		}
+		.ignoresSafeArea()
+	}
+}
+
+/// A group's surface: material, a breath of white, and a rim that catches light at the top.
+///
+/// Three layers rather than one fill. The material blurs what is behind the group — which
+/// is the window's own glass, not the desktop — so the group sits at a different depth from
+/// its background instead of being painted onto it. That depth is the whole difference
+/// between this and a grey box.
+struct GlassSurface: ViewModifier {
+
+	var cornerRadius: CGFloat = Theme.cornerRadius
+	/// Slightly brighter for things that sit *on* a group rather than being one.
+	var fill: Color = Theme.surface
+
+	private var shape: RoundedRectangle {
+		RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+	}
+
+	func body(content: Content) -> some View {
+		content
+			.background {
+				shape
+					.fill(.ultraThinMaterial)
+					.overlay { shape.fill(fill) }
+			}
+			.overlay {
+				// Bright along the top, gone by the bottom — a rim lit from above, not a
+				// border drawn evenly around a box.
+				shape.strokeBorder(
+					LinearGradient(
+						colors: [
+							.white.opacity(0.28),
+							.white.opacity(0.08),
+							.white.opacity(0.03),
+						],
+						startPoint: .top, endPoint: .bottom),
+					lineWidth: 1)
+			}
+			.clipShape(shape)
+	}
+}
+
+extension View {
+	func glassSurface(cornerRadius: CGFloat = Theme.cornerRadius, fill: Color = Theme.surface)
+		-> some View
+	{
+		modifier(GlassSurface(cornerRadius: cornerRadius, fill: fill))
+	}
+}
+
+// MARK: - Type
+
+/// The type scale.
+///
+/// Every size in the app comes from here. It used to be a dozen loose `.system(size:)`
+/// literals scattered across the views — 9, 10, 11, 12, 13, 14, 15, 19, 20 — which is a
+/// spread rather than a scale, and it showed: rows and their details differed by a point in
+/// one window and three in another.
+///
+/// These are macOS's own text styles rather than fixed sizes, so they match the metrics
+/// AppKit uses for the same job (`.body` *is* 13pt, `.callout` 12, `.subheadline` 11) and
+/// they follow the system text size where the user has changed it. Nothing is below
+/// `.caption` — 10pt is the floor macOS draws at, and the 9pt labels that were here before
+/// were under it.
+enum Typography {
+
+	/// The pane heading in the detail column.
+	static let paneTitle = Font.system(.title2, weight: .bold)
+
+	/// A group's heading.
+	static let groupTitle = Font.headline
+
+	/// A row's label, and body copy generally.
+	static let row = Font.body
+
+	/// The explanatory line under a row's label, and a group's footer.
+	static let detail = Font.subheadline
+
+	/// Text inside a control — buttons, pop-up menus, value read-outs.
+	static let control = Font.callout
+
+	/// The status line in the hero row.
+	static let heroTitle = Font.system(.title3, weight: .semibold)
+
+	/// A large figure that changes — a score, a peak. Rounded because it is a *number*
+	/// being read as a quantity, which is the one place macOS uses the rounded face.
+	static let metric = Font.system(.title2, design: .rounded, weight: .semibold)
+
+	/// The caption over a metric.
+	static let metricLabel = Font.system(.caption, weight: .semibold)
+
+	/// Figures that must line up column-wise between frames — a score that updates ten
+	/// times a second jitters horribly in a proportional face.
+	static let mono = Font.system(.subheadline, design: .monospaced, weight: .medium)
+
+	/// The value pill on a slider.
+	static let pill = Font.system(.caption, design: .rounded, weight: .medium)
+
+	/// The smallest thing in the app.
+	static let caption = Font.caption
+
+	/// The Face ID mark used as a picture rather than as text — the hero row, the About
+	/// panel. Fixed rather than scaled: this is an illustration sized against the layout
+	/// around it, and it is never the only statement of what it says.
+	static let glyph = Font.system(size: 34, weight: .thin)
+	static let glyphLarge = Font.system(size: 40, weight: .thin)
 }
 
 // MARK: - Window background
@@ -71,9 +233,13 @@ enum Theme {
 /// a view backing the window itself samples the desktop.
 struct VibrantBackground: NSViewRepresentable {
 	var material: NSVisualEffectView.Material = .sidebar
+	/// Settings draws its own heading, so its title would be a second one. A utility window
+	/// like the recognition test has no heading of its own and needs to keep AppKit's.
+	var hidesTitle = true
 
 	func makeNSView(context: Context) -> NSVisualEffectView {
 		let view = TransparentHostView()
+		view.hidesTitle = hidesTitle
 		view.material = material
 		view.blendingMode = .behindWindow
 		view.state = .active
@@ -84,17 +250,31 @@ struct VibrantBackground: NSViewRepresentable {
 		view.material = material
 	}
 
-	/// Clears the window behind itself.
+	/// Clears the window behind itself, and takes the title bar out of the way.
 	///
 	/// `behindWindow` blending samples the desktop *through* the window, which it can only
 	/// do while the window is not opaque. SwiftUI's `Window` ships opaque with a solid
 	/// background, so the material had nothing to sample and rendered as flat grey — the
 	/// window looked painted rather than glazed.
+	///
+	/// `.hiddenTitleBar` alone was not enough either: it hides the *title*, but AppKit still
+	/// draws a title bar behind it, which showed as a pale band across the top right of the
+	/// window — the one place the glass stopped and a grey slab started. Making it
+	/// transparent and letting content run full-height is what closes that seam.
 	private final class TransparentHostView: NSVisualEffectView {
+		var hidesTitle = true
+
 		override func viewDidMoveToWindow() {
 			super.viewDidMoveToWindow()
-			window?.isOpaque = false
-			window?.backgroundColor = .clear
+			guard let window else { return }
+			window.isOpaque = false
+			window.backgroundColor = .clear
+			window.titlebarAppearsTransparent = true
+			window.styleMask.insert(.fullSizeContentView)
+			if hidesTitle { window.titleVisibility = .hidden }
+			// Drag anywhere. With no title bar to grab, the window was only movable by a
+			// strip the user cannot see.
+			window.isMovableByWindowBackground = true
 		}
 	}
 }
@@ -121,7 +301,7 @@ struct SettingsSection<Content: View>: View {
 		VStack(alignment: .leading, spacing: 7) {
 			if let title {
 				Text(title)
-					.font(.system(size: 13, weight: .semibold))
+					.font(Typography.groupTitle)
 					.foregroundStyle(Theme.label)
 					.padding(.leading, 4)
 			}
@@ -129,15 +309,11 @@ struct SettingsSection<Content: View>: View {
 			VStack(spacing: 0) {
 				content
 			}
-			.background(
-				Theme.surface,
-				in: .rect(cornerRadius: Theme.cornerRadius, style: .continuous)
-			)
-			.clipShape(.rect(cornerRadius: Theme.cornerRadius, style: .continuous))
+			.glassSurface()
 
 			if let footer {
 				Text(footer)
-					.font(.system(size: 11))
+					.font(Typography.detail)
 					.foregroundStyle(Theme.secondaryLabel)
 					.fixedSize(horizontal: false, vertical: true)
 					.padding(.horizontal, 4)
@@ -159,25 +335,28 @@ struct RowDivider: View {
 	}
 }
 
-/// A rounded, tinted square holding an SF Symbol.
+/// A rounded glass square holding an SF Symbol.
 ///
 /// Rows of pure text are hard to scan — the eye has to read every line to find the one it
 /// wants. A consistent icon column gives each row a shape you can navigate by.
+///
+/// The tile is light on the wallpaper rather than a block of colour on it: same frosted
+/// surface as the group it sits in, one step brighter, with a hairline to catch the edge.
+/// It reads as glass rather than as a sticker.
 struct IconTile: View {
 	let symbol: String
-	var tint: Color = Theme.grey
+	/// Only ever passed for something that is reporting *state* — the enrolled face's
+	/// warning triangle, a destructive row. Left alone otherwise.
+	var tint: Color?
 	var isEnabled = true
 
 	var body: some View {
-		RoundedRectangle(cornerRadius: 6.5, style: .continuous)
-			.fill(isEnabled ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Theme.grey.opacity(0.35)))
-			.frame(width: 24, height: 24)
-			.overlay {
-				Image(systemName: symbol)
-					.font(.system(size: 12, weight: .medium))
-					.foregroundStyle(.white)
-					.opacity(isEnabled ? 1 : 0.6)
-			}
+		Image(systemName: symbol)
+			.font(.system(size: 13, weight: .medium))
+			.foregroundStyle(tint ?? Theme.label)
+			.frame(width: 26, height: 26)
+			.glassSurface(cornerRadius: 8, fill: Theme.surfaceRaised)
+			.opacity(isEnabled ? 1 : 0.45)
 	}
 }
 
@@ -190,7 +369,7 @@ struct SettingRow<Trailing: View>: View {
 	var detail: String?
 	/// SF Symbol shown in a tinted tile at the leading edge.
 	var symbol: String?
-	var symbolTint: Color = Theme.grey
+	var symbolTint: Color?
 	var isEnabled = true
 	@ViewBuilder var trailing: Trailing
 
@@ -201,11 +380,11 @@ struct SettingRow<Trailing: View>: View {
 			}
 			VStack(alignment: .leading, spacing: 2) {
 				Text(title)
-					.font(.system(size: 13))
+					.font(Typography.row)
 					.foregroundStyle(isEnabled ? Theme.label : Theme.tertiaryLabel)
 				if let detail {
 					Text(detail)
-						.font(.system(size: 11))
+						.font(Typography.detail)
 						.foregroundStyle(Theme.secondaryLabel)
 						.fixedSize(horizontal: false, vertical: true)
 				}
@@ -225,7 +404,7 @@ struct SettingToggle: View {
 	let title: String
 	var detail: String?
 	var symbol: String?
-	var symbolTint: Color = Theme.grey
+	var symbolTint: Color?
 	var isEnabled = true
 	@Binding var isOn: Bool
 
@@ -244,7 +423,7 @@ struct SettingToggle: View {
 	}
 }
 
-/// A labelled slider with its value in a pill.
+/// A labelled slider with its value in a pill and a tick scale under the track.
 ///
 /// The pill matters: a bare slider tells you there is a value but not what it is, so any
 /// adjustment becomes trial and error.
@@ -252,10 +431,14 @@ struct SliderRow: View {
 
 	let title: String
 	var symbol: String?
-	var symbolTint: Color = Theme.grey
+	var symbolTint: Color?
 	@Binding var value: Double
 	let range: ClosedRange<Double>
 	var format: (Double) -> String
+
+	/// Half the small slider's knob. The track is inset by this at both ends, so ticks laid
+	/// out across the full width drift away from the values they claim to mark.
+	private let knobRadius: CGFloat = 7
 
 	var body: some View {
 		VStack(spacing: 8) {
@@ -264,39 +447,84 @@ struct SliderRow: View {
 					IconTile(symbol: symbol, tint: symbolTint)
 				}
 				Text(title)
-					.font(.system(size: 13))
+					.font(Typography.row)
 					.foregroundStyle(Theme.label)
 				Spacer()
 				Text(format(value))
-					.font(.system(size: 11, weight: .medium, design: .rounded))
+					.font(Typography.pill)
 					.foregroundStyle(Theme.secondaryLabel)
 					.padding(.horizontal, 9)
 					.padding(.vertical, 3)
 					.background(Capsule().fill(Theme.surfaceRaised))
 					.contentTransition(.numericText())
+					.monospacedDigit()
 			}
 
-			VStack(spacing: 4) {
+			VStack(spacing: 3) {
 				Slider(value: $value, in: range)
 					.controlSize(.small)
 					.tint(Theme.label.opacity(0.85))
-
-				// Tick marks give the track a sense of scale, so a slider reads as a
-				// measured range rather than a smear between two ends.
-				HStack(spacing: 0) {
-					ForEach(0..<9, id: \.self) { index in
-						Circle()
-							.fill(Theme.tertiaryLabel.opacity(0.5))
-							.frame(width: 2, height: 2)
-						if index < 8 { Spacer(minLength: 0) }
-					}
-				}
-				.padding(.horizontal, 5)
+				ticks
 			}
 			.padding(.leading, symbol == nil ? 0 : 38)
 		}
 		.padding(.horizontal, Theme.rowInset)
 		.padding(.vertical, 11)
+	}
+
+	/// The scale under the track.
+	///
+	/// These used to be nine evenly spaced dots drawn regardless of the range — the same
+	/// marks under `0…1`, `-20…20` and `-40…40`. They looked like a scale and measured
+	/// nothing, which is worse than having no marks at all: a decoration that reads as
+	/// information tells the user something false. Now each tick sits at a round value in
+	/// the row's own range, and the ends and zero are drawn taller so the span is readable
+	/// without a legend.
+	private var ticks: some View {
+		GeometryReader { geometry in
+			let track = geometry.size.width - knobRadius * 2
+			ZStack(alignment: .topLeading) {
+				ForEach(tickValues, id: \.self) { tick in
+					Capsule()
+						.fill(Theme.tertiaryLabel.opacity(isMajor(tick) ? 0.55 : 0.3))
+						.frame(width: 1, height: isMajor(tick) ? 5 : 3)
+						.offset(x: knobRadius + track * fraction(of: tick) - 0.5)
+				}
+			}
+		}
+		.frame(height: 5)
+	}
+
+	private func fraction(of tick: Double) -> CGFloat {
+		CGFloat((tick - range.lowerBound) / (range.upperBound - range.lowerBound))
+	}
+
+	/// Ends and zero.
+	private func isMajor(_ tick: Double) -> Bool {
+		let epsilon = (range.upperBound - range.lowerBound) / 1000
+		return abs(tick - range.lowerBound) < epsilon
+			|| abs(tick - range.upperBound) < epsilon
+			|| (range.contains(0) && abs(tick) < epsilon)
+	}
+
+	/// Round values across the range, aiming for eight or so intervals: 5px steps on
+	/// `-20…20`, 10px on `-40…40`, 0.1 on `0…1`.
+	private var tickValues: [Double] {
+		let span = range.upperBound - range.lowerBound
+		guard span > 0 else { return [] }
+
+		let rough = span / 8
+		let magnitude = pow(10, (log10(rough)).rounded(.down))
+		let normalised = rough / magnitude
+		let step = (normalised < 1.5 ? 1 : normalised < 3 ? 2 : normalised < 7 ? 5 : 10) * magnitude
+
+		var values: [Double] = []
+		var tick = (range.lowerBound / step).rounded(.up) * step
+		while tick <= range.upperBound + step / 1000 {
+			values.append(tick)
+			tick += step
+		}
+		return values
 	}
 }
 
@@ -304,7 +532,11 @@ struct SliderRow: View {
 ///
 /// Plain text with a small coloured symbol, not a tinted banner. Full-width colour bars
 /// inside a group shout at a volume the message rarely earns.
-struct StatusPill: View {
+///
+/// Named for what it is. It was `StatusPill`, and it has never been a pill — the same file
+/// held a real capsule-backed pill in the recognition test, so the two names were the wrong
+/// way round.
+struct StatusLine: View {
 
 	enum Kind {
 		case ok, warning, error
@@ -324,6 +556,16 @@ struct StatusPill: View {
 			case .error: return "xmark.circle.fill"
 			}
 		}
+
+		/// Colour is the only thing separating these three on screen, which is no separation
+		/// at all for a colour-blind user. Spoken, the severity has to be said.
+		var accessibilityPrefix: String {
+			switch self {
+			case .ok: return ""
+			case .warning: return "Warning: "
+			case .error: return "Problem: "
+			}
+		}
 	}
 
 	let kind: Kind
@@ -332,16 +574,20 @@ struct StatusPill: View {
 	var body: some View {
 		HStack(alignment: .firstTextBaseline, spacing: 7) {
 			Image(systemName: kind.symbol)
-				.font(.system(size: 10))
+				.font(Typography.caption)
 				.foregroundStyle(kind.tint)
 			Text(message)
-				.font(.system(size: 11))
+				.font(Typography.detail)
 				.foregroundStyle(Theme.secondaryLabel)
 				.fixedSize(horizontal: false, vertical: true)
 			Spacer(minLength: 0)
 		}
 		.padding(.horizontal, Theme.rowInset)
 		.padding(.vertical, 10)
+		// The symbol is decoration for a message that already says it; without this,
+		// VoiceOver reads "checkmark circle fill" before every status line.
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel(Text(kind.accessibilityPrefix + message))
 	}
 }
 
@@ -360,43 +606,111 @@ struct SettingsField: View {
 			}
 		}
 		.textFieldStyle(.plain)
-		.font(.system(size: 13))
-		.padding(.horizontal, 9)
-		.padding(.vertical, 5)
+		.font(Typography.row)
+		.padding(.horizontal, 10)
+		.padding(.vertical, 6)
+		// Recessed rather than raised: a field is a well cut into the glass, so it takes a
+		// darker fill and an inner rim, the opposite of a group's lit top edge.
 		.background {
-			// A shallow rounded rectangle, not a capsule. Capsule fields are a web form
-			// convention; every text field on macOS is 6pt-ish.
-			RoundedRectangle(cornerRadius: 6, style: .continuous)
-				.fill(Color.black.opacity(0.25))
+			RoundedRectangle(cornerRadius: 8, style: .continuous)
+				.fill(Color.black.opacity(0.22))
 				.overlay {
-					RoundedRectangle(cornerRadius: 6, style: .continuous)
-						.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+					RoundedRectangle(cornerRadius: 8, style: .continuous)
+						.strokeBorder(
+							LinearGradient(
+								colors: [.black.opacity(0.35), .white.opacity(0.1)],
+								startPoint: .top, endPoint: .bottom),
+							lineWidth: 1)
 				}
 		}
 	}
 }
 
-/// The app's push button.
+/// The app's push button — the *only* one.
+///
+/// There used to be three button languages: this, `.borderedProminent`, and a bare green
+/// text button, with no rule for which went where. Enrolment stacked two of them fourteen
+/// points apart. One style with three prominences is what makes a button look like a button
+/// everywhere in the app.
 struct AccentButtonStyle: ButtonStyle {
-	var role: ButtonRole?
 
-	/// Neutral rather than accented, for actions that sit beside a primary one.
-	static let secondary = ButtonRole.cancel
+	enum Prominence {
+		/// Filled and tinted. The action the screen exists for — at most one per screen.
+		case primary
+		/// Tinted background, for anything that isn't.
+		case standard
+		/// No background until hovered. Sits beside another button without competing.
+		case quiet
+	}
+
+	var role: ButtonRole?
+	var prominence: Prominence = .standard
 
 	func makeBody(configuration: Configuration) -> some View {
-		let tint: Color =
-			switch role {
-			case .some(.destructive): Theme.danger
-			default: Theme.label
+		ButtonBody(configuration: configuration, role: role, prominence: prominence)
+	}
+
+	/// A view rather than a bare `configuration.label` chain, because focus and hover are
+	/// state — and a `ButtonStyle` cannot hold state itself.
+	private struct ButtonBody: View {
+
+		let configuration: Configuration
+		let role: ButtonRole?
+		let prominence: Prominence
+
+		/// Custom button styles lose AppKit's focus ring, so the app was unusable by
+		/// keyboard: you could tab onto a button and get no indication you had. This puts
+		/// the ring back. It only ever shows when the user has turned on keyboard access —
+		/// which is exactly the person it is for.
+		@Environment(\.isFocused) private var isFocused
+		@State private var isHovering = false
+
+		/// White unless the button is destructive.
+		///
+		/// A primary action gets its weight from being *filled* — white on the wallpaper,
+		/// with the label knocked out in black — rather than from being coloured. Green here
+		/// would have made the loudest control on the screen the one place green does not
+		/// mean "recognised".
+		private var tint: Color {
+			role == .destructive ? Theme.danger : Theme.label
+		}
+
+		var body: some View {
+			configuration.label
+				.font(Typography.control)
+				.foregroundStyle(prominence == .primary ? Color.black.opacity(0.88) : tint)
+				.padding(.horizontal, 12)
+				.padding(.vertical, 5)
+				.background {
+					RoundedRectangle(cornerRadius: 7, style: .continuous)
+						.fill(tint.opacity(fillOpacity))
+				}
+				.overlay {
+					RoundedRectangle(cornerRadius: 7, style: .continuous)
+						.strokeBorder(Theme.label.opacity(isFocused ? 0.9 : 0), lineWidth: 2)
+						.padding(-2)
+				}
+				.contentShape(.rect(cornerRadius: 7, style: .continuous))
+				.onHover { isHovering = $0 }
+				.animation(.easeOut(duration: 0.12), value: isHovering)
+		}
+
+		private var fillOpacity: Double {
+			switch prominence {
+			case .primary: configuration.isPressed ? 0.78 : (isHovering ? 1 : 0.92)
+			case .standard: configuration.isPressed ? 0.26 : (isHovering ? 0.2 : 0.14)
+			case .quiet: configuration.isPressed ? 0.18 : (isHovering ? 0.1 : 0)
 			}
-		return configuration.label
-			.font(.system(size: 12))
-			.foregroundStyle(tint)
-			.padding(.horizontal, 12)
-			.padding(.vertical, 5)
-			.background {
-				RoundedRectangle(cornerRadius: 7, style: .continuous)
-					.fill(tint.opacity(configuration.isPressed ? 0.26 : 0.14))
-			}
+		}
+	}
+}
+
+extension ButtonStyle where Self == AccentButtonStyle {
+	static var accent: AccentButtonStyle { AccentButtonStyle() }
+	static var quiet: AccentButtonStyle { AccentButtonStyle(prominence: .quiet) }
+	static var destructive: AccentButtonStyle { AccentButtonStyle(role: .destructive) }
+	/// Filled white. At most one per screen — the thing the screen is for.
+	static var primaryAction: AccentButtonStyle {
+		AccentButtonStyle(prominence: .primary)
 	}
 }

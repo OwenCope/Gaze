@@ -3,8 +3,11 @@
 # same shape as Pact.
 set -euo pipefail
 
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=toolchain.sh
+. "$ROOT/toolchain.sh"
+require_toolchain
 APP="$ROOT/build/Face ID.app"
 
 # Built aside and swapped in at the end, rather than deleted and rebuilt in place.
@@ -35,11 +38,11 @@ else
 fi
 
 SDK="$(xcrun --show-sdk-path --sdk macosx)"
-echo "→ Compiling (SDK: $(basename "$SDK"))"
+echo "→ Compiling (SDK: $(basename "$SDK"), $(host_target))"
 xcrun swiftc \
 	-parse-as-library \
 	-O -wmo \
-	-target arm64-apple-macos26.0 \
+	-target "$(host_target)" \
 	-sdk "$SDK" \
 	-framework SwiftUI \
 	-framework AppKit \

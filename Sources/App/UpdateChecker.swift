@@ -50,20 +50,25 @@ final class UpdateChecker {
 
 	/// The checkout this app was built from.
 	///
-	/// Resolved from the bundle's own location when it is running out of `build/`, and
-	/// otherwise from the conventional path — an installed copy in `/Applications` has no
-	/// way to know where its source lives.
+	/// Walks up from the bundle looking for a `.git`, which finds the repository whatever it
+	/// is called and wherever it was cloned. It used to fall back to `~/Developer/FaceID` —
+	/// true on one machine and nobody else's, and a fallback that is wrong is worse than no
+	/// fallback, because it would happily report on a checkout the running app was not
+	/// built from.
+	///
+	/// An installed copy in `/Applications` finds nothing, which is correct: it has no
+	/// source to update.
 	private var repositoryPath: String? {
-		let bundle = Bundle.main.bundleURL
-		let fromBuild = bundle.deletingLastPathComponent().deletingLastPathComponent()
-		if FileManager.default.fileExists(atPath: fromBuild.appending(path: ".git").path) {
-			return fromBuild.path
-		}
+		var directory = Bundle.main.bundleURL.deletingLastPathComponent()
 
-		let conventional = FileManager.default.homeDirectoryForCurrentUser
-			.appending(path: "Developer/FaceID")
-		if FileManager.default.fileExists(atPath: conventional.appending(path: ".git").path) {
-			return conventional.path
+		// Bounded so a bundle somewhere unexpected cannot walk to the filesystem root.
+		for _ in 0..<5 {
+			if FileManager.default.fileExists(atPath: directory.appending(path: ".git").path) {
+				return directory.path
+			}
+			let parent = directory.deletingLastPathComponent()
+			guard parent != directory else { break }
+			directory = parent
 		}
 		return nil
 	}

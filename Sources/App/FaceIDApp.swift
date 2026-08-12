@@ -17,7 +17,10 @@ struct FaceIDApp: App {
 		Window("Face ID", id: "settings") {
 			SettingsView(store: store, lockout: lockout)
 		}
-		.windowResizability(.contentSize)
+		// `.contentMinSize`, not `.contentSize`: the view states a floor and an ideal, and
+		// the user is allowed to go bigger. A settings window that cannot be resized has no
+		// answer for someone who finds the text small.
+		.windowResizability(.contentMinSize)
 		// The sidebar's vibrancy runs the full height of the window, so a title bar drawn
 		// across the top of it would cut it in half. The traffic lights stay; only the bar
 		// behind them goes.
@@ -107,14 +110,17 @@ final class AppServices {
 
 	/// Shows the lock screen panel while unlocked, for inspecting it without locking.
 	///
-	/// Launch with `--preview-capsule`. Cycles scanning → success so the whole sequence
-	/// can be watched and screenshotted.
+	/// Launch with `--preview-capsule`. Cycles the whole sequence the lock screen actually
+	/// plays — resting padlock, scan, success, retract — so every state can be watched and
+	/// screenshotted without locking the machine.
 	func runCapsulePreviewIfRequested() {
 		guard CommandLine.arguments.contains("--preview-capsule") else { return }
 		let capsule = NotchCapsuleController()
 		previewCapsule = capsule
-		capsule.show(phase: .scanning)
+		capsule.show(phase: .locked)
 		Task {
+			try? await Task.sleep(for: .seconds(3))
+			capsule.update(phase: .scanning)
 			try? await Task.sleep(for: .seconds(4))
 			capsule.update(phase: .success)
 			try? await Task.sleep(for: .seconds(4))
@@ -223,12 +229,33 @@ struct EnrollmentWindow: View {
 	let store: FaceEnrollmentStore
 
 	@Environment(\.dismissWindow) private var dismissWindow
+	@Environment(\.openWindow) private var openWindow
 
 	var body: some View {
 		EnrollmentView(store: store) {
 			dismissWindow(id: "enrollment")
 		}
 		.task {
+			// Settings has no way in but the menu bar, which makes it the one window that
+			// cannot be opened from a script — so checking a change to it meant clicking
+			// through the menu by hand every rebuild. `--settings` opens it straight from
+			// the command line, the same way `--preview-capsule` shows the lock panel.
+			//
+			// It lives here because this window is the only scene guaranteed to exist at
+			// launch, so it is the only place holding an `openWindow` this early.
+			if CommandLine.arguments.contains("--settings") {
+				// One runloop turn before opening. `openWindow` called while the scene graph
+				// is still being set up is dropped silently — the flag looked ignored.
+				//
+				// Open first, dismiss second, too: dismissing this window tears down the
+				// view running this very task, so anything after it never runs.
+				try? await Task.sleep(for: .milliseconds(200))
+				AppActivation.bringToFront()
+				openWindow(id: "settings")
+				dismissWindow(id: "enrollment")
+				return
+			}
+
 			// Launch presents this window unconditionally; step back out if the user is
 			// already set up and simply started the app.
 			// Also close on a background launch: a launchd-started agent must not put a

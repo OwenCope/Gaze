@@ -14,8 +14,12 @@ struct EnrollmentRing: View {
 	/// Whether the head is turned far enough to be filling ticks right now.
 	let isEngaged: Bool
 
-	/// Apple's Face ID green.
-	private let filled = Color(red: 0.20, green: 0.82, blue: 0.35)
+	/// Apple's Face ID green — the one in `Theme`, not a second copy of it.
+	///
+	/// This was `0.20, 0.82, 0.35` while the token was `0.20, 0.78, 0.35`, and the lock
+	/// screen used a third value again. Three greens all meaning "recognised", none of them
+	/// matching, in an app whose design system exists to prevent exactly that.
+	private let filled = Theme.faceID
 	private let empty = Color(red: 0.34, green: 0.34, blue: 0.36)
 
 	private let tickWidth: CGFloat = 3.5

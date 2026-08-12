@@ -52,19 +52,19 @@ struct EnrollmentView: View {
 			// explanation reads as failure, so the step is stated before it happens.
 			if let pass = currentPass {
 				Text("Step \(pass) of 2")
-					.font(.system(size: 11, weight: .semibold))
+					.font(Typography.metricLabel)
 					.foregroundStyle(Theme.faceID)
 					.tracking(0.6)
 					.transition(.opacity)
 			}
 
 			Text(title)
-				.font(.system(size: 26, weight: .bold))
-				.foregroundStyle(.white)
+				.font(.system(.largeTitle, weight: .bold))
+				.foregroundStyle(Theme.label)
 
 			Text(model?.instruction ?? "Starting the camera…")
-				.font(.system(size: 14))
-				.foregroundStyle(.white.opacity(0.6))
+				.font(Typography.row)
+				.foregroundStyle(Theme.secondaryLabel)
 				.multilineTextAlignment(.center)
 				.frame(height: 40)
 				.animation(.easeInOut(duration: 0.2), value: model?.instruction)
@@ -142,13 +142,13 @@ struct EnrollmentView: View {
 		VStack(spacing: 8) {
 			Image(systemName: "exclamationmark.triangle.fill")
 				.font(.system(size: 26))
-				.foregroundStyle(.orange)
+				.foregroundStyle(Theme.warning)
 			Text(title)
-				.font(.system(size: 15, weight: .semibold))
-				.foregroundStyle(.white)
+				.font(Typography.heroTitle)
+				.foregroundStyle(Theme.label)
 			Text(detail)
-				.font(.system(size: 12))
-				.foregroundStyle(.white.opacity(0.55))
+				.font(Typography.detail)
+				.foregroundStyle(Theme.secondaryLabel)
 				.multilineTextAlignment(.center)
 		}
 		.padding(.horizontal, 28)
@@ -175,27 +175,48 @@ struct EnrollmentView: View {
 		.opacity(currentPass == nil ? 0 : 1)
 	}
 
+	/// One button language, not three.
+	///
+	/// This stacked a `.borderedProminent` system button fourteen points above a bare green
+	/// text button, with a third style waiting in the settings window — so a button looked
+	/// like a different kind of object depending on which screen you were on. Both are the
+	/// app's own style now: whichever action moves you forward is the filled one, and the
+	/// way out is quiet beneath it.
 	private var footer: some View {
-		VStack(spacing: 14) {
+		VStack(spacing: 10) {
 			if let saveError {
 				Text(saveError)
-					.font(.system(size: 12))
-					.foregroundStyle(.red)
+					.font(Typography.detail)
+					.foregroundStyle(Theme.danger)
 					.multilineTextAlignment(.center)
+					.fixedSize(horizontal: false, vertical: true)
 			}
 
 			if case .failed = model?.phase {
-				Button("Try Again") { model?.reset() }
-					.buttonStyle(.borderedProminent)
-					.controlSize(.large)
-					.keyboardShortcut(.defaultAction)
+				Button {
+					model?.reset()
+				} label: {
+					Text("Try Again").frame(maxWidth: .infinity)
+				}
+				.buttonStyle(.primaryAction)
+				.keyboardShortcut(.defaultAction)
+				.frame(width: 150)
 			}
 
-			Button(model?.phase == .complete ? "Done" : "Cancel") { onFinish() }
-				.buttonStyle(.plain)
-				.foregroundStyle(Color(red: 0.20, green: 0.82, blue: 0.35))
-				.font(.system(size: 14, weight: .medium))
-				.keyboardShortcut(.cancelAction)
+			if model?.phase == .complete {
+				Button {
+					onFinish()
+				} label: {
+					Text("Done").frame(maxWidth: .infinity)
+				}
+				.buttonStyle(.primaryAction)
+				.keyboardShortcut(.defaultAction)
+				.frame(width: 150)
+			} else {
+				Button("Cancel") { onFinish() }
+					.buttonStyle(.quiet)
+					.keyboardShortcut(.cancelAction)
+			}
 		}
 	}
 

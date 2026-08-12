@@ -15,6 +15,11 @@ struct NotchSettingsSection: View {
 	/// Read once — decoding the desktop picture on every redraw would be wasteful.
 	@State private var wallpaper: NSImage? = WallpaperBrightness.notchStripThumbnail()
 
+	/// The same measurement the real panel adapts to, so the preview shows the panel the
+	/// user will actually get rather than the un-boosted one.
+	@State private var wallpaperIsLight: Bool =
+		NSScreen.main.map(WallpaperBrightness.isLight(on:)) ?? false
+
 	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			SettingsSection(title: "Notch", footer: styleFooter) {
@@ -23,7 +28,7 @@ struct NotchSettingsSection: View {
 					RowDivider()
 					SliderRow(
 						title: "Transparency",
-						symbol: "circle.righthalf.filled", symbolTint: Theme.teal,
+						symbol: "circle.righthalf.filled",
 						value: $settings.notchTransparency,
 						range: 0...1,
 						format: { String(format: "%.2f", $0) })
@@ -36,14 +41,14 @@ struct NotchSettingsSection: View {
 			) {
 				SliderRow(
 					title: "Height",
-					symbol: "arrow.up.and.down", symbolTint: Theme.blue,
+					symbol: "arrow.up.and.down",
 					value: $settings.notchHeightAdjust,
 					range: -20...20,
 					format: { "\(Int($0)) px" })
 				RowDivider()
 				SliderRow(
 					title: "Width",
-					symbol: "arrow.left.and.right", symbolTint: Theme.blue,
+					symbol: "arrow.left.and.right",
 					value: $settings.notchWidthAdjust,
 					range: -40...40,
 					format: { "\(Int($0)) px" })
@@ -66,9 +71,9 @@ struct NotchSettingsSection: View {
 	private var styleRow: some View {
 		VStack(alignment: .leading, spacing: 12) {
 			HStack(spacing: 12) {
-				IconTile(symbol: "paintbrush.fill", tint: Theme.purple)
+				IconTile(symbol: "paintbrush.fill")
 				Text("Style")
-					.font(.system(size: 13))
+					.font(Typography.row)
 					.foregroundStyle(Theme.label)
 				Spacer()
 			}
@@ -80,7 +85,8 @@ struct NotchSettingsSection: View {
 						isSelected: settings.notchStyle == style,
 						select: { settings.notchStyle = style },
 						transparency: settings.notchTransparency,
-						wallpaper: wallpaper)
+						wallpaper: wallpaper,
+						wallpaperIsLight: wallpaperIsLight)
 				}
 			}
 			.padding(.leading, 38)
@@ -98,6 +104,7 @@ private struct StylePreview: View {
 	let select: () -> Void
 	let transparency: Double
 	let wallpaper: NSImage?
+	let wallpaperIsLight: Bool
 
 	var body: some View {
 		Button(action: select) {
@@ -142,16 +149,26 @@ private struct StylePreview: View {
 							lineWidth: isSelected ? 2 : 1)
 				}
 
+				// No `minimumScaleFactor`. It let "Semi Liquid Glass" shrink to 8pt — under
+				// the size macOS draws text at legibly — to avoid a wrap the layout can
+				// simply absorb.
 				Text(style.title)
-					.font(.system(size: 10))
+					.font(Typography.caption)
 					.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
-					.lineLimit(1)
-					.minimumScaleFactor(0.8)
+					.lineLimit(2)
+					.multilineTextAlignment(.center)
+					.frame(height: 26, alignment: .top)
 			}
 		}
 		.buttonStyle(.plain)
+		.accessibilityLabel(style.title)
+		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
 		.animation(.easeOut(duration: 0.15), value: isSelected)
 	}
+
+	/// The panel deepens itself over a light wallpaper, so the preview has to as well —
+	/// otherwise it advertises a paler glass than the lock screen will actually show.
+	private var boost: Double { wallpaperIsLight ? 0.22 : 0 }
 
 	private var shape: UnevenRoundedRectangle {
 		UnevenRoundedRectangle(
@@ -159,37 +176,39 @@ private struct StylePreview: View {
 			bottomTrailingRadius: 8, topTrailingRadius: 0, style: .continuous)
 	}
 
-	/// Mirrors `NotchCapsule.background` exactly, fade and all.
+	/// Mirrors `NotchCapsule.background` exactly — same fills, same fade, same exemption.
 	///
-	/// Including the gradient mask matters as much as the fill: the real panel has no hard
-	/// bottom edge, and a preview with one sets an expectation the lock screen does not
-	/// meet.
+	/// "Exactly" is a duty, not a nicety: the preview fading Normal to clear is why all
+	/// three thumbnails looked like variations of the same grey wash and the user reasonably
+	/// concluded the setting did nothing. Normal is solid to its bottom edge here because it
+	/// is solid to its bottom edge on the lock screen.
 	@ViewBuilder
 	private var panel: some View {
-		Group {
-			switch style {
-			case .normal:
-				shape.fill(.black)
-			case .semiLiquidGlass:
-				shape
-					.fill(.black.opacity(0.55 + 0.35 * (1 - transparency)))
-					.background { shape.fill(.ultraThinMaterial) }
-			case .liquidGlass:
-				Color.clear
-					.glassEffect(.regular.tint(.black.opacity(0.18)), in: shape)
-			}
+		switch style {
+		case .normal:
+			shape.fill(.black)
+		case .semiLiquidGlass:
+			shape
+				.fill(.black.opacity(NotchGlass.semiTint(transparency: transparency, boost: boost)))
+				.background { shape.fill(.ultraThinMaterial) }
+				.mask { fade }
+		case .liquidGlass:
+			Color.clear
+				.glassEffect(.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: boost))), in: shape)
+				.mask { fade }
 		}
-		.mask {
-			LinearGradient(
-				stops: [
-					.init(color: .black, location: 0),
-					.init(color: .black, location: 0.36),
-					.init(color: .black.opacity(0.72), location: 0.55),
-					.init(color: .black.opacity(0.38), location: 0.76),
-					.init(color: .black.opacity(0.12), location: 0.92),
-					.init(color: .clear, location: 1),
-				],
-				startPoint: .top, endPoint: .bottom)
-		}
+	}
+
+	private var fade: some View {
+		LinearGradient(
+			stops: [
+				.init(color: .black, location: 0),
+				.init(color: .black, location: 0.36),
+				.init(color: .black.opacity(0.72), location: 0.55),
+				.init(color: .black.opacity(0.38), location: 0.76),
+				.init(color: .black.opacity(0.12), location: 0.92),
+				.init(color: .clear, location: 1),
+			],
+			startPoint: .top, endPoint: .bottom)
 	}
 }

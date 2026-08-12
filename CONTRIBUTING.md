@@ -53,8 +53,29 @@ log stream --predicate 'subsystem == "app.faceid.FaceID"'
 ./build.sh && open "build/Face ID.app"
 ```
 
-Needs the macOS 26 SDK. `build.sh` defaults `DEVELOPER_DIR` to `Xcode-beta.app` and signs
-with whatever Apple Development identity is in your keychain.
+### What you need
+
+**Xcode 26 or newer.** The app targets macOS 26 and uses APIs from it, and the recognition
+model is compiled with `coremlc`, which ships only with the full Xcode — Command Line Tools
+on its own will not do.
+
+You don't have to configure anything. `toolchain.sh` looks for a suitable install: an
+explicit `DEVELOPER_DIR` first, then whatever `xcode-select` points at, then any
+`/Applications/Xcode*.app`. It skips ones that are too old or that lack `coremlc`, and if
+nothing qualifies it says so instead of failing halfway through a compile. Release and beta
+Xcode are both fine.
+
+If you keep Xcode somewhere unusual:
+
+```sh
+DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer ./build.sh
+```
+
+The build targets the architecture of the machine running it, so Apple silicon and Intel
+both work.
+
+Signing uses whatever Apple Development or Developer ID identity is in your keychain, and
+falls back to ad-hoc if there isn't one.
 
 **Sign with a real identity, not ad-hoc.** The Keychain ACL protecting the vault key is
 bound to the app's code identity, and an ad-hoc signature is regenerated every build — so

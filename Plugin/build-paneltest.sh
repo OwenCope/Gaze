@@ -3,8 +3,11 @@
 # lock screen. See PanelTest/main.swift for why this is needed.
 set -euo pipefail
 
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=../toolchain.sh
+. "$ROOT/../toolchain.sh"
+require_toolchain
 APP="$ROOT/build/PanelTest.app"
 
 rm -rf "$APP"
@@ -28,7 +31,7 @@ PLIST
 SDK="$(xcrun --show-sdk-path --sdk macosx)"
 xcrun swiftc \
 	-O \
-	-target arm64-apple-macos26.0 \
+	-target "$(host_target)" \
 	-sdk "$SDK" \
 	-framework AppKit \
 	-framework Security \

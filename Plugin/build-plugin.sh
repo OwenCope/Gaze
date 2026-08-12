@@ -3,8 +3,11 @@
 # Building is safe. Installing is not — see install.sh.
 set -euo pipefail
 
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=../toolchain.sh
+. "$ROOT/../toolchain.sh"
+require_toolchain
 BUNDLE="$ROOT/build/FaceID.bundle"
 BIN="$BUNDLE/Contents/MacOS/FaceID"
 
@@ -24,7 +27,7 @@ xcrun clang \
 	-fobjc-arc \
 	-O2 \
 	-Wall -Wextra -Wno-unused-parameter \
-	-target arm64-apple-macos26.0 \
+	-target "$(host_target)" \
 	-isysroot "$SDK" \
 	-framework Cocoa \
 	-framework QuartzCore \

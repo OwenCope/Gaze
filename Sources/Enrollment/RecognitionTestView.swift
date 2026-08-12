@@ -41,11 +41,18 @@ struct RecognitionTestView: View {
 			header
 			preview
 			readout
-			Spacer(minLength: 0)
 		}
 		.padding(26)
-		.frame(width: 420, height: 620)
-		.background(Theme.background)
+		// Room for the traffic lights: the title bar is transparent and content runs under
+		// it, so the top inset is the window's own chrome now.
+		.padding(.top, 18)
+		// No trailing `Spacer`. It existed to fill a fixed 620pt frame, and once the frame
+		// went content-sized it did nothing but manufacture dead air under the Reset button.
+		.frame(width: 420)
+		// The same glass as the settings window. This was the one surface still painted
+		// opaque, and next to the glazed settings window it read as a prop from a different
+		// app. The camera disc and score bar sit on glass just as legibly.
+		.background(WindowGlass(keepsTitle: true))
 		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
@@ -60,27 +67,29 @@ struct RecognitionTestView: View {
 
 	// MARK: - Sections
 
+	/// No title.
+	///
+	/// The window's own title bar already says "Test Recognition" an inch above this, and it
+	/// said it in a different size and weight — two headings for one window, disagreeing
+	/// about how to draw the same six words. What is left is the line that says something
+	/// the title bar cannot.
 	private var header: some View {
-		VStack(spacing: 6) {
-			Text("Test Recognition")
-				.font(.system(size: 19, weight: .semibold))
-				.foregroundStyle(Theme.label)
-			Text(store.isEnrolled
-				? "Nothing is unlocked here. Look at the camera and watch the score."
-				: "No face is enrolled yet.")
-				.font(.system(size: 12))
-				.foregroundStyle(Theme.secondaryLabel)
-				.multilineTextAlignment(.center)
-		}
+		Text(store.isEnrolled
+			? "Nothing is unlocked here. Look at the camera and watch the score."
+			: "No face is enrolled yet.")
+			.font(Typography.detail)
+			.foregroundStyle(Theme.secondaryLabel)
+			.multilineTextAlignment(.center)
+			.fixedSize(horizontal: false, vertical: true)
 	}
 
 	/// The verdict, as a pill rather than bare text.
 	private var verdict: some View {
 		HStack(spacing: 7) {
 			Image(systemName: matched ? "checkmark.circle.fill" : verdictSymbol)
-				.font(.system(size: 13, weight: .semibold))
+				.font(.system(.body, weight: .semibold))
 			Text(statusText)
-				.font(.system(size: 14, weight: .medium))
+				.font(.system(.body, weight: .medium))
 		}
 		.foregroundStyle(matched ? Theme.faceID : Theme.secondaryLabel)
 		.padding(.horizontal, 14)
@@ -158,25 +167,37 @@ struct RecognitionTestView: View {
 					Text("threshold \(String(format: "%.2f", store.embedder.matchThreshold))")
 						.foregroundStyle(Theme.tertiaryLabel)
 				}
-				.font(.system(size: 11, weight: .medium, design: .monospaced))
+				.font(Typography.mono)
 			}
 
 			// The two numbers that actually decide whether a threshold is usable: how low
 			// the enrolled face drops, and how high anyone else reaches.
-			HStack(spacing: 10) {
-				statTile(
-					label: "Lowest", value: floor == 1 ? 0 : floor,
-					tint: Theme.warning, symbol: "arrow.down")
-				statTile(
-					label: "Highest", value: peak,
-					tint: Theme.faceID, symbol: "arrow.up")
+			//
+			// The sample count belongs to the run, not to either figure. Printing it under
+			// both tiles put the same number on screen twice, side by side, reading as two
+			// measurements that happened to agree.
+			VStack(spacing: 8) {
+				HStack(spacing: 10) {
+					statTile(
+						label: "Lowest", value: floor == 1 ? 0 : floor,
+						tint: Theme.warning, symbol: "arrow.down")
+					statTile(
+						label: "Highest", value: peak,
+						tint: Theme.faceID, symbol: "arrow.up")
+				}
+
+				Text("\(samples) \(samples == 1 ? "sample" : "samples")")
+					.font(Typography.caption)
+					.foregroundStyle(Theme.tertiaryLabel)
+					.contentTransition(.numericText())
 			}
 
-			VStack(spacing: 8) {
+			VStack(spacing: 10) {
 				Text("If this is you, watch the lowest. If it isn't, watch the highest.")
-					.font(.system(size: 11))
+					.font(Typography.detail)
 					.foregroundStyle(Theme.tertiaryLabel)
 					.multilineTextAlignment(.center)
+					.fixedSize(horizontal: false, vertical: true)
 
 				Button("Reset") {
 					pending.peak = 0
@@ -184,7 +205,7 @@ struct RecognitionTestView: View {
 					pending.samples = 0
 					publish()
 				}
-				.buttonStyle(AccentButtonStyle(role: .cancel))
+				.buttonStyle(.accent)
 			}
 		}
 	}
@@ -193,27 +214,26 @@ struct RecognitionTestView: View {
 		VStack(spacing: 4) {
 			HStack(spacing: 4) {
 				Image(systemName: symbol)
-					.font(.system(size: 9, weight: .bold))
-				Text(label.uppercased())
-					.font(.system(size: 10, weight: .semibold))
-					.tracking(0.5)
+					.font(.system(.caption2, weight: .bold))
+				Text(label)
+					.font(Typography.metricLabel)
 			}
-			.foregroundStyle(tint.opacity(0.9))
+			// Sentence case. `LOWEST` letterspaced is an iOS group header, and this is a
+			// caption on a figure, not a header at all.
+			.foregroundStyle(tint)
 
 			Text(String(format: "%.3f", value))
-				.font(.system(size: 20, weight: .semibold, design: .rounded))
+				.font(Typography.metric)
 				.foregroundStyle(Theme.label)
+				.monospacedDigit()
 				.contentTransition(.numericText())
-
-			Text("\(samples) samples")
-				.font(.system(size: 9))
-				.foregroundStyle(Theme.tertiaryLabel)
 		}
 		.frame(maxWidth: .infinity)
 		.padding(.vertical, 12)
-		.background(
-			RoundedRectangle(cornerRadius: 12, style: .continuous)
-				.fill(Theme.surface))
+		.glassSurface()
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel("\(label) score")
+		.accessibilityValue(String(format: "%.3f", value))
 	}
 
 	private var statusText: String {
