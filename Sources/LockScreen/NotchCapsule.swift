@@ -263,7 +263,7 @@ struct NotchCapsule: View {
 			background
 				.frame(
 					width: isIsland ? compactBarWidth : backgroundWidth,
-					height: expanded ? (isIsland ? notchInset : currentHeight) : notchInset)
+					height: expanded ? (isIsland ? restingBarHeight : currentHeight) : notchInset)
 
 			if isIsland {
 				islandBody
@@ -496,9 +496,9 @@ struct NotchCapsule: View {
 			// *lighter* than what surrounds it, which is what made it look like a sticker
 			// pasted next to the notch rather than part of it.
 			//
-			// Optically centred in the ear: the visible band is the notch inset, and the
-			// glyph belongs in the middle of that, clear of the lip below it.
-			.frame(width: earWidth, height: notchInset)
+			// Optically centred in the bar it stands on, lip included — centring it on the
+			// housing alone pushed it up against the top edge once the bar grew.
+			.frame(width: earWidth, height: restingBarHeight)
 	}
 
 	/// Flush with the cutout while resting, the full drop once it is scanning.
@@ -509,8 +509,15 @@ struct NotchCapsule: View {
 	/// and no more, and its corners round *within* that band, which is what the radius floor
 	/// is for.
 	private var currentHeight: CGFloat {
-		model.phase.isCompact ? notchInset : height
+		model.phase.isCompact ? restingBarHeight : height
 	}
+
+	/// The bar that carries the padlock: exactly the height of the housing beside it.
+	///
+	/// It looked short once, but that was the bottom fade dissolving its lower third rather
+	/// than the height being wrong — and a lip added to "fix" it made the bar hang below the
+	/// notch, which is worse than either. Flush is what matches, so flush is what it is.
+	private var restingBarHeight: CGFloat { notchInset }
 
 	/// Narrower while resting, full width once it drops.
 	///
