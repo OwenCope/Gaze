@@ -663,10 +663,10 @@ struct SettingsView: View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			SettingsSection(
 				title: "Built on other people's work",
-				footer: "Both of them build Mac apps worth your time. Go and look at them."
+				footer: "All three of them build Mac apps worth your time. Go and look at them."
 			) {
 				SettingRow(
-					title: "DanFQ",
+					title: "cshariq",
 					detail: "Sapphire — the recognition model this app matches faces with",
 					symbol: "brain.head.profile"
 				) {
@@ -677,10 +677,20 @@ struct SettingsView: View {
 				RowDivider()
 				SettingRow(
 					title: "Aviorrok",
-					detail: "Dynamic Lake Pro — the notch panel and this window follow its lead",
+					detail: "DynamicLake — the notch panel and this window follow its lead",
 					symbol: "macbook"
 				) {
-					Button("Dynamic Lake") { Self.open("https://dynamiclake.com/") }
+					Button("DynamicLake") { Self.open("https://dynamiclake.com") }
+						.buttonStyle(AccentButtonStyle.quiet)
+				}
+
+				RowDivider()
+				SettingRow(
+					title: "DanFQ",
+					detail: "Atoll — and for reading this code more carefully than I did",
+					symbol: "hammer.fill"
+				) {
+					Button("Atoll") { Self.open("https://getatoll.app") }
 						.buttonStyle(AccentButtonStyle.quiet)
 				}
 			}

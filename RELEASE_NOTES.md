@@ -72,7 +72,13 @@ Worth reading before you pick the second mode.
 
 ## Thanks
 
-DanFQ, for Sapphire and for the recognition model this uses — <https://sapphire-app.tech/>
+cshariq, for [Sapphire](https://sapphire-app.tech) — the recognition model this app matches
+faces with is theirs.
+
+Aviorrok, for [DynamicLake](https://dynamiclake.com) — the notch panel and the settings window
+both follow its lead.
+
+DanFQ, for [Atoll](https://getatoll.app), and for reading this code more carefully than I did.
 
 Everyone in the Discord who looked at early screenshots and said what was wrong with them. A
 good deal of this release is other people's feedback.
