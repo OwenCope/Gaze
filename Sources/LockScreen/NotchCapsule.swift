@@ -435,7 +435,11 @@ struct NotchCapsule: View {
 	/// crisp as the housing it continues, and every other notch app's bar is crisp there.
 	private var fade: some View {
 		LinearGradient(
-			stops: model.phase.isCompact
+			// Also suppressed in island mode. The bar there is only ever the resting bar —
+			// the drop is a separate object below it — so a gradient meant for a tall panel
+			// was dissolving the bottom third of a shape exactly one notch tall, and the bar
+			// came out visibly shorter than the housing beside it.
+			stops: model.phase.isCompact || isIsland
 				? [
 					.init(color: .black, location: 0),
 					.init(color: .black, location: 1),
