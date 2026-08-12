@@ -30,6 +30,14 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		}
 	}
 
+	/// The pane header draws much larger than the sidebar tile, and not every symbol
+	/// survives the scale. `info` is a bare lowercase i — inside a 24pt tile it reads as the
+	/// familiar ⓘ because the tile supplies the enclosure, but at 34pt on open background it
+	/// is a stick with a dot over it.
+	var headerSymbol: String {
+		self == .about ? "info.circle" : symbol
+	}
+
 	/// Green for the app's own mark, neutral for everything else.
 	///
 	/// The one exception to monochrome icons, and it earns it: green means Face ID
@@ -165,7 +173,7 @@ struct SettingsView: View {
 				// you already knew. The icon carries the app's identity and the sentence
 				// tells someone opening this for the first time what they are looking at.
 				HStack(alignment: .top, spacing: 14) {
-					Image(systemName: pane.symbol)
+					Image(systemName: pane.headerSymbol)
 						.font(Typography.glyph)
 						.foregroundStyle(pane.tint)
 						.frame(width: 44, height: 44)
@@ -605,20 +613,24 @@ struct SettingsView: View {
 
 	private var aboutSection: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-			SettingsSection {
-				VStack(spacing: 10) {
-					Image(systemName: "faceid")
-						.font(Typography.glyphLarge)
-						.foregroundStyle(Theme.faceID)
-					Text("Face ID")
-						.font(Typography.heroTitle)
-						.foregroundStyle(Theme.label)
-					Text("Version \(updates.currentVersion)")
-						.font(Typography.detail)
+			// No second identity block.
+			//
+			// This pane used to open with a centred glyph, the app's name and its version in
+			// a card of its own — directly beneath a header carrying the same glyph and the
+			// same name. Two of them stacked, and the card was mostly empty space. The facts
+			// are facts; they belong in rows.
+			SettingsSection(title: "This app") {
+				SettingRow(title: "Version") {
+					Text(updates.currentVersion)
+						.font(Typography.control)
 						.foregroundStyle(Theme.secondaryLabel)
 				}
-				.frame(maxWidth: .infinity)
-				.padding(.vertical, 22)
+				RowDivider(inset: Theme.rowInset)
+				SettingRow(title: "Recognition model") {
+					Text(store.embedder.identifier)
+						.font(Typography.control)
+						.foregroundStyle(Theme.secondaryLabel)
+				}
 			}
 
 			// Said plainly, and said here rather than in a README nobody opens.
@@ -626,28 +638,26 @@ struct SettingsView: View {
 			// atmos raised it in the server: the name invites people to assume this is what
 			// an iPhone does, and it isn't. The built-in camera has no depth sensor, so the
 			// honest version of this app's security claim has to be on its face.
-			SettingsSection(
-				title: "What this is",
-				footer: "Apple's Face ID uses a TrueDepth camera that projects thousands of "
-					+ "infrared dots to measure the shape of your face. Macs have no such "
-					+ "sensor. This app recognises you from the ordinary built-in camera, "
-					+ "which sees a flat image — so it cannot tell a face from a good "
-					+ "photograph of one the way an iPhone can."
-			) {
-				SettingRow(
-					title: "Not Apple's Face ID",
-					detail: "Built-in camera, no depth sensor",
-					symbol: "exclamationmark.triangle.fill", symbolTint: Theme.warning
-				) {
-					EmptyView()
-				}
-				RowDivider()
-				SettingRow(title: "Recognition model", symbol: "brain.head.profile") {
-					Text(store.embedder.identifier)
-						.font(Typography.control)
-						.foregroundStyle(Theme.secondaryLabel)
-				}
+			//
+			// Text, not a row with a warning triangle. An orange hazard icon reads as
+			// something having gone wrong; this is a permanent, unalarming fact about how the
+			// hardware works, and dressing it as an error is its own kind of dishonesty.
+			VStack(alignment: .leading, spacing: 6) {
+				Text("Not Apple's Face ID")
+					.font(Typography.groupTitle)
+					.foregroundStyle(Theme.label)
+				Text(
+					"Apple's Face ID uses a TrueDepth camera that projects thousands of "
+						+ "infrared dots to measure the shape of your face. Macs have no such "
+						+ "sensor. This app recognises you from the ordinary built-in camera, "
+						+ "which sees a flat image — so it cannot tell a face from a good "
+						+ "photograph of one the way an iPhone can."
+				)
+				.font(Typography.detail)
+				.foregroundStyle(Theme.secondaryLabel)
+				.fixedSize(horizontal: false, vertical: true)
 			}
+			.padding(.horizontal, 4)
 
 		}
 	}
