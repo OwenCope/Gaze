@@ -726,9 +726,26 @@ struct AccentButtonStyle: ButtonStyle {
 				.foregroundStyle(prominence == .primary ? Theme.onAccent : tint)
 				.padding(.horizontal, 12)
 				.padding(.vertical, 5)
+				// Glass on the control, flat on the container it sits in.
+				//
+				// Aviorrok's suggestion, and it inverts what the window was doing: groups
+				// were glass and buttons were a wash of white, so the surface you *can't*
+				// touch had the depth and the surface you can had none. Glass here reads as
+				// a physical control lying on the panel, and it gives the system's own
+				// pressed and hover response for free through `.interactive()`.
+				//
+				// `quiet` stays flat until it is hovered. It exists to sit beside another
+				// button without competing, and a second piece of glass beside the first is
+				// exactly the competition it is there to avoid.
 				.background {
-					RoundedRectangle(cornerRadius: 7, style: .continuous)
-						.fill(tint.opacity(fillOpacity))
+					let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+					if prominence == .quiet && !isHovering && !configuration.isPressed {
+						shape.fill(.clear)
+					} else {
+						shape
+							.fill(tint.opacity(fillOpacity))
+							.glassEffect(.regular.interactive(), in: shape)
+					}
 				}
 				.overlay {
 					RoundedRectangle(cornerRadius: 7, style: .continuous)
