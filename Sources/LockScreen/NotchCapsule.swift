@@ -53,6 +53,31 @@ final class NotchCapsuleModel {
 	var isExpanded = false
 }
 
+/// The panel's timings, in one place.
+///
+/// They have to be shared, because the controller tears the window down on a timer and the
+/// view animates on a curve — and when those two numbers lived apart they disagreed. The
+/// teardown fired at 0.5s against a spring whose *response* alone was 0.58, so the last third
+/// of every retract was cut off and the panel appeared to snap out of the notch.
+enum NotchAnimation {
+
+	/// Growing out. Springy, because emerging should feel like it has some life in it.
+	static let expand = Animation.spring(response: 0.44, dampingFraction: 0.78)
+
+	/// Going home. `.smooth` rather than a spring: no overshoot, and a duration that means
+	/// what it says, so the controller can wait exactly long enough.
+	static let retractDuration: TimeInterval = 0.55
+	static var retract: Animation { .smooth(duration: retractDuration) }
+
+	/// Between phases — the drop opening and closing as the state changes.
+	static let phaseDuration: TimeInterval = 0.5
+	static var phase: Animation { .smooth(duration: phaseDuration) }
+
+	/// How long the controller must leave the window alive after asking it to retract.
+	/// The margin is for the frame the animation finishes on.
+	static var teardownDelay: TimeInterval { max(retractDuration, phaseDuration) + 0.12 }
+}
+
 /// The one statement of how the semi-glass tint responds to its slider.
 ///
 /// The lock screen panel and the settings preview both draw this; when the formula lived in
@@ -162,14 +187,10 @@ struct NotchCapsule: View {
 		.frame(width: width, height: height, alignment: .top)
 		// Softer and slower than the grow. A retract that uses the same snappy spring as the
 		// expand reads as a snap-shut; the panel should look absorbed, not swallowed.
-		.animation(
-			expanded
-				? .spring(response: 0.44, dampingFraction: 0.78)
-				: .spring(response: 0.58, dampingFraction: 0.92),
-			value: expanded)
+		.animation(expanded ? NotchAnimation.expand : NotchAnimation.retract, value: expanded)
 		// The grow from padlock to scanner is the same spring, so the two states read as
 		// one object changing rather than two panels swapping.
-		.animation(.spring(response: 0.46, dampingFraction: 0.82), value: model.phase.isCompact)
+		.animation(NotchAnimation.phase, value: model.phase.isCompact)
 		.modifier(Shaker(active: model.phase == .notRecognised))
 		.onAppear {
 			breathe = true
