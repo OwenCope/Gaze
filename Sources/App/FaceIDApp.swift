@@ -18,6 +18,10 @@ struct FaceIDApp: App {
 			SettingsView(store: store, lockout: lockout)
 		}
 		.windowResizability(.contentSize)
+		// The sidebar's vibrancy runs the full height of the window, so a title bar drawn
+		// across the top of it would cut it in half. The traffic lights stay; only the bar
+		// behind them goes.
+		.windowStyle(.hiddenTitleBar)
 
 		Window("Test Recognition", id: "test") {
 			RecognitionTestView(store: store)

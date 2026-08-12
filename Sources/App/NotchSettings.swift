@@ -5,6 +5,9 @@ import SwiftUI
 /// Built around previews rather than descriptions. A paragraph explaining what "Semi
 /// Liquid Glass" means is both longer and less useful than a thumbnail of it — the eye
 /// settles the question before the sentence is finished.
+///
+/// Laid out like System Settings' Appearance row: label at the leading edge, thumbnails at
+/// the trailing edge, names underneath them.
 struct NotchSettingsSection: View {
 
 	@Bindable var settings: Preferences
@@ -13,35 +16,57 @@ struct NotchSettingsSection: View {
 	@State private var wallpaper: NSImage? = WallpaperBrightness.notchStripThumbnail()
 
 	var body: some View {
-		SettingsSection(title: "Notch") {
-			styleRow
-			if settings.notchStyle == .semiLiquidGlass {
-				RowDivider(inset: 55)
-				SliderRow(
-					title: "Transparency",
-					value: $settings.notchTransparency,
-					range: 0...1,
-					format: { String(format: "%.2f", $0) })
+		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+			SettingsSection(title: "Notch", footer: styleFooter) {
+				styleRow
+				if settings.notchStyle == .semiLiquidGlass {
+					RowDivider()
+					SliderRow(
+						title: "Transparency",
+						symbol: "circle.righthalf.filled", symbolTint: Theme.teal,
+						value: $settings.notchTransparency,
+						range: 0...1,
+						format: { String(format: "%.2f", $0) })
+				}
 			}
-			RowDivider(inset: 55)
-			SliderRow(
-				title: "Height",
-				value: $settings.notchHeightAdjust,
-				range: -20...20,
-				format: { "\(Int($0)) px" })
-			RowDivider(inset: 55)
-			SliderRow(
-				title: "Width",
-				value: $settings.notchWidthAdjust,
-				range: -40...40,
-				format: { "\(Int($0)) px" })
+
+			SettingsSection(
+				title: "Notch size",
+				footer: "Nudge these if the panel doesn't line up with your notch."
+			) {
+				SliderRow(
+					title: "Height",
+					symbol: "arrow.up.and.down", symbolTint: Theme.blue,
+					value: $settings.notchHeightAdjust,
+					range: -20...20,
+					format: { "\(Int($0)) px" })
+				RowDivider()
+				SliderRow(
+					title: "Width",
+					symbol: "arrow.left.and.right", symbolTint: Theme.blue,
+					value: $settings.notchWidthAdjust,
+					range: -40...40,
+					format: { "\(Int($0)) px" })
+			}
+		}
+	}
+
+	/// Says what the selected style actually is, so the thumbnail is not the only evidence.
+	private var styleFooter: String {
+		switch settings.notchStyle {
+		case .normal:
+			return "Solid black. On a dark wallpaper it's indistinguishable from the cutout."
+		case .semiLiquidGlass:
+			return "Dark, with the wallpaper coming through a blur."
+		case .liquidGlass:
+			return "The system's glass material, which refracts what's behind it."
 		}
 	}
 
 	private var styleRow: some View {
 		VStack(alignment: .leading, spacing: 12) {
 			HStack(spacing: 12) {
-				IconTile(symbol: "paintbrush.fill")
+				IconTile(symbol: "paintbrush.fill", tint: Theme.purple)
 				Text("Style")
 					.font(.system(size: 13))
 					.foregroundStyle(Theme.label)
@@ -54,11 +79,14 @@ struct NotchSettingsSection: View {
 						style: style,
 						isSelected: settings.notchStyle == style,
 						select: { settings.notchStyle = style },
+						transparency: settings.notchTransparency,
 						wallpaper: wallpaper)
 				}
 			}
+			.padding(.leading, 38)
 		}
-		.padding(Theme.rowPadding)
+		.padding(.horizontal, Theme.rowInset)
+		.padding(.vertical, 11)
 	}
 }
 
@@ -68,11 +96,12 @@ private struct StylePreview: View {
 	let style: Preferences.NotchStyle
 	let isSelected: Bool
 	let select: () -> Void
+	let transparency: Double
 	let wallpaper: NSImage?
 
 	var body: some View {
 		Button(action: select) {
-			VStack(spacing: 6) {
+			VStack(spacing: 5) {
 				ZStack(alignment: .top) {
 					// The user's actual wallpaper, cropped to the strip under the notch.
 					// An invented gradient made all three styles look identical.
@@ -89,20 +118,32 @@ private struct StylePreview: View {
 							startPoint: .topLeading, endPoint: .bottomTrailing)
 					}
 
-					notchShape
-						.frame(height: 26)
+					// A centred drop with wallpaper either side, not a full-width band.
+					//
+					// Spanning the whole thumbnail was the reason all three looked alike:
+					// with nothing but panel across the top there was no unobscured
+					// wallpaper to judge it against, so "darker" and "clearer" landed the
+					// same. Bordered by the picture it sits on, the differences read.
+					panel
+						.frame(width: 60, height: 32)
+						.overlay {
+							Image(systemName: "faceid")
+								.font(.system(size: 12))
+								.foregroundStyle(.white)
+								.padding(.top, 3)
+						}
 				}
-				.frame(height: 56)
-				.clipShape(.rect(cornerRadius: 9, style: .continuous))
+				.frame(width: 112, height: 62)
+				.clipShape(.rect(cornerRadius: 7, style: .continuous))
 				.overlay {
-					RoundedRectangle(cornerRadius: 9, style: .continuous)
+					RoundedRectangle(cornerRadius: 7, style: .continuous)
 						.strokeBorder(
-							isSelected ? Color.white.opacity(0.85) : Color.white.opacity(0.10),
+							isSelected ? Color.white : Color.white.opacity(0.12),
 							lineWidth: isSelected ? 2 : 1)
 				}
 
 				Text(style.title)
-					.font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+					.font(.system(size: 10))
 					.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
 					.lineLimit(1)
 					.minimumScaleFactor(0.8)
@@ -112,70 +153,43 @@ private struct StylePreview: View {
 		.animation(.easeOut(duration: 0.15), value: isSelected)
 	}
 
-	@ViewBuilder
-	private var notchShape: some View {
-		let shape = UnevenRoundedRectangle(
-			topLeadingRadius: 0, bottomLeadingRadius: 5,
-			bottomTrailingRadius: 5, topTrailingRadius: 0, style: .continuous)
-
-		// Mirrors NotchCapsule.background exactly, or the preview lies about the choice.
-		switch style {
-		case .normal:
-			shape.fill(.black)
-		case .semiLiquidGlass:
-			shape.fill(.black.opacity(0.72))
-				.background(shape.fill(.ultraThinMaterial))
-		case .liquidGlass:
-			Color.clear.glassEffect(.regular.tint(.black.opacity(0.18)), in: shape)
-		}
+	private var shape: UnevenRoundedRectangle {
+		UnevenRoundedRectangle(
+			topLeadingRadius: 0, bottomLeadingRadius: 8,
+			bottomTrailingRadius: 8, topTrailingRadius: 0, style: .continuous)
 	}
-}
 
-/// A labelled slider with its value in a pill.
-///
-/// The pill matters: a bare slider tells you there is a value but not what it is, so any
-/// adjustment becomes trial and error.
-struct SliderRow: View {
-
-	let title: String
-	@Binding var value: Double
-	let range: ClosedRange<Double>
-	var format: (Double) -> String
-
-	var body: some View {
-		VStack(spacing: 9) {
-			HStack {
-				Text(title)
-					.font(.system(size: 13))
-					.foregroundStyle(Theme.label)
-				Spacer()
-				Text(format(value))
-					.font(.system(size: 11, weight: .medium, design: .rounded))
-					.foregroundStyle(Theme.secondaryLabel)
-					.padding(.horizontal, 10)
-					.padding(.vertical, 4)
-					.background(Capsule().fill(Theme.surfaceRaised))
-					.contentTransition(.numericText())
-			}
-
-			VStack(spacing: 5) {
-				Slider(value: $value, in: range)
-					.controlSize(.small)
-					.tint(Theme.label.opacity(0.85))
-
-				// Tick marks. They give the track a sense of scale, so a slider reads as a
-				// measured range rather than a smear between two ends.
-				HStack(spacing: 0) {
-					ForEach(0..<9, id: \.self) { index in
-						Circle()
-							.fill(Theme.tertiaryLabel.opacity(0.5))
-							.frame(width: 2, height: 2)
-						if index < 8 { Spacer(minLength: 0) }
-					}
-				}
-				.padding(.horizontal, 6)
+	/// Mirrors `NotchCapsule.background` exactly, fade and all.
+	///
+	/// Including the gradient mask matters as much as the fill: the real panel has no hard
+	/// bottom edge, and a preview with one sets an expectation the lock screen does not
+	/// meet.
+	@ViewBuilder
+	private var panel: some View {
+		Group {
+			switch style {
+			case .normal:
+				shape.fill(.black)
+			case .semiLiquidGlass:
+				shape
+					.fill(.black.opacity(0.55 + 0.35 * (1 - transparency)))
+					.background { shape.fill(.ultraThinMaterial) }
+			case .liquidGlass:
+				Color.clear
+					.glassEffect(.regular.tint(.black.opacity(0.18)), in: shape)
 			}
 		}
-		.padding(Theme.rowPadding)
+		.mask {
+			LinearGradient(
+				stops: [
+					.init(color: .black, location: 0),
+					.init(color: .black, location: 0.36),
+					.init(color: .black.opacity(0.72), location: 0.55),
+					.init(color: .black.opacity(0.38), location: 0.76),
+					.init(color: .black.opacity(0.12), location: 0.92),
+					.init(color: .clear, location: 1),
+				],
+				startPoint: .top, endPoint: .bottom)
+		}
 	}
 }

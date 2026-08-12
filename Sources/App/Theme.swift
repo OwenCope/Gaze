@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Design tokens.
@@ -8,19 +9,34 @@ enum Theme {
 
 	// MARK: - Colour
 
-	static let background = Color(red: 0.043, green: 0.043, blue: 0.047)
-	/// Card fill. Light enough to separate from the ground, dark enough that white text
-	/// stays comfortable.
-	static let surface = Color.white.opacity(0.055)
-	static let surfaceRaised = Color.white.opacity(0.09)
-	static let separator = Color.white.opacity(0.07)
+	/// Opaque ground, for the windows that are not vibrant — enrolment and the recognition
+	/// test, both of which are full of camera preview and want no wallpaper behind them.
+	static let background = Color(red: 0.078, green: 0.078, blue: 0.082)
 
-	/// A hairline along the top of each card.
-	///
-	/// One of the cheapest ways to stop flat dark cards reading as holes: a single light
-	/// edge implies the surface is catching light from above, which is what makes it look
-	/// raised rather than cut out.
-	static let cardHighlight = Color.white.opacity(0.06)
+	/// Sits *over* the window's vibrancy rather than replacing it, so the wallpaper still
+	/// comes through. An opaque fill here is what made the window read as a flat web page
+	/// dropped on the desktop instead of a Mac window.
+	static let contentScrim = Color.black.opacity(0.16)
+	static let sidebarScrim = Color.clear
+
+	/// Group fill. Frosted rather than dark: the window is translucent now, so a group has
+	/// to lift *off* the wallpaper with light instead of sinking into it with black.
+	static let surface = Color.white.opacity(0.13)
+	static let surfaceRaised = Color.white.opacity(0.18)
+	static let separator = Color.white.opacity(0.13)
+
+	// MARK: - Icon palette
+
+	/// Apple's own settings icons are colour-coded, and colour is what makes an icon column
+	/// worth having: a row of identical grey tiles adds a shape to every line without
+	/// telling you anything, which is why they read as filler.
+	static let blue = Color(red: 0.04, green: 0.52, blue: 1.00)
+	static let orange = Color(red: 1.00, green: 0.58, blue: 0.00)
+	static let purple = Color(red: 0.69, green: 0.32, blue: 0.87)
+	static let pink = Color(red: 1.00, green: 0.18, blue: 0.33)
+	static let teal = Color(red: 0.19, green: 0.69, blue: 0.78)
+	static let indigo = Color(red: 0.35, green: 0.34, blue: 0.84)
+	static let grey = Color(red: 0.56, green: 0.56, blue: 0.58)
 
 	static let label = Color.white
 	static let secondaryLabel = Color.white.opacity(0.55)
@@ -41,50 +57,88 @@ enum Theme {
 
 	// MARK: - Metrics
 
-	static let cornerRadius: CGFloat = 14
-	static let rowPadding: CGFloat = 15
-	static let sectionSpacing: CGFloat = 24
+	static let cornerRadius: CGFloat = 12
+	static let rowInset: CGFloat = 13
+	static let sectionSpacing: CGFloat = 20
+}
+
+// MARK: - Window background
+
+/// The window's vibrancy layer.
+///
+/// `NSVisualEffectView` rather than a SwiftUI material: materials inside the content view
+/// blur whatever the *window* has behind them, which on an opaque window is nothing. Only
+/// a view backing the window itself samples the desktop.
+struct VibrantBackground: NSViewRepresentable {
+	var material: NSVisualEffectView.Material = .sidebar
+
+	func makeNSView(context: Context) -> NSVisualEffectView {
+		let view = TransparentHostView()
+		view.material = material
+		view.blendingMode = .behindWindow
+		view.state = .active
+		return view
+	}
+
+	func updateNSView(_ view: NSVisualEffectView, context: Context) {
+		view.material = material
+	}
+
+	/// Clears the window behind itself.
+	///
+	/// `behindWindow` blending samples the desktop *through* the window, which it can only
+	/// do while the window is not opaque. SwiftUI's `Window` ships opaque with a solid
+	/// background, so the material had nothing to sample and rendered as flat grey — the
+	/// window looked painted rather than glazed.
+	private final class TransparentHostView: NSVisualEffectView {
+		override func viewDidMoveToWindow() {
+			super.viewDidMoveToWindow()
+			window?.isOpaque = false
+			window?.backgroundColor = .clear
+		}
+	}
 }
 
 // MARK: - Section
 
 /// A titled group of rows.
+///
+/// Sentence case, not caps. Uppercased letterspaced headers are an iOS convention that
+/// macOS dropped in Ventura.
 struct SettingsSection<Content: View>: View {
 
-	let title: String
+	let title: String?
 	var footer: String?
 	@ViewBuilder var content: Content
 
+	init(title: String? = nil, footer: String? = nil, @ViewBuilder content: () -> Content) {
+		self.title = title
+		self.footer = footer
+		self.content = content()
+	}
+
 	var body: some View {
-		VStack(alignment: .leading, spacing: 8) {
-			Text(title.uppercased())
-				.font(.system(size: 11, weight: .semibold))
-				.foregroundStyle(Theme.tertiaryLabel)
-				.tracking(0.7)
-				.padding(.leading, 6)
+		VStack(alignment: .leading, spacing: 7) {
+			if let title {
+				Text(title)
+					.font(.system(size: 13, weight: .semibold))
+					.foregroundStyle(Theme.label)
+					.padding(.leading, 4)
+			}
 
 			VStack(spacing: 0) {
 				content
 			}
-			.background {
-				RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
-					.fill(Theme.surface)
-					.overlay(alignment: .top) {
-						// The light edge only, not a full border — a stroked outline reads
-						// as a box drawn on the background, a top highlight reads as a
-						// surface lifted off it.
-						Rectangle()
-							.fill(Theme.cardHighlight)
-							.frame(height: 1)
-					}
-					.clipShape(.rect(cornerRadius: Theme.cornerRadius, style: .continuous))
-			}
+			.background(
+				Theme.surface,
+				in: .rect(cornerRadius: Theme.cornerRadius, style: .continuous)
+			)
 			.clipShape(.rect(cornerRadius: Theme.cornerRadius, style: .continuous))
 
 			if let footer {
 				Text(footer)
 					.font(.system(size: 11))
-					.foregroundStyle(Theme.tertiaryLabel)
+					.foregroundStyle(Theme.secondaryLabel)
 					.fixedSize(horizontal: false, vertical: true)
 					.padding(.horizontal, 4)
 			}
@@ -92,10 +146,10 @@ struct SettingsSection<Content: View>: View {
 	}
 }
 
-/// Hairline between rows, inset to line up with the text rather than the card edge.
+/// Hairline between rows, inset to line up with the labels rather than the group edge.
 struct RowDivider: View {
 	/// Rows with an icon tile need a deeper inset so the rule starts under the label.
-	var inset: CGFloat = Theme.rowPadding
+	var inset: CGFloat = 51
 
 	var body: some View {
 		Rectangle()
@@ -111,18 +165,18 @@ struct RowDivider: View {
 /// wants. A consistent icon column gives each row a shape you can navigate by.
 struct IconTile: View {
 	let symbol: String
-	var tint: Color = Theme.accent
+	var tint: Color = Theme.grey
 	var isEnabled = true
 
 	var body: some View {
-		RoundedRectangle(cornerRadius: 7, style: .continuous)
-			.fill(Color.white.opacity(isEnabled ? 0.10 : 0.05))
-			.frame(width: 28, height: 28)
+		RoundedRectangle(cornerRadius: 6.5, style: .continuous)
+			.fill(isEnabled ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Theme.grey.opacity(0.35)))
+			.frame(width: 24, height: 24)
 			.overlay {
 				Image(systemName: symbol)
-					.font(.system(size: 13, weight: .medium))
-					.foregroundStyle(
-						isEnabled ? tint.opacity(tint == Theme.accent ? 0.9 : 1) : Theme.tertiaryLabel)
+					.font(.system(size: 12, weight: .medium))
+					.foregroundStyle(.white)
+					.opacity(isEnabled ? 1 : 0.6)
 			}
 	}
 }
@@ -136,16 +190,16 @@ struct SettingRow<Trailing: View>: View {
 	var detail: String?
 	/// SF Symbol shown in a tinted tile at the leading edge.
 	var symbol: String?
-	var symbolTint: Color = Theme.accent
+	var symbolTint: Color = Theme.grey
 	var isEnabled = true
 	@ViewBuilder var trailing: Trailing
 
 	var body: some View {
-		HStack(alignment: .center, spacing: 12) {
+		HStack(spacing: 12) {
 			if let symbol {
 				IconTile(symbol: symbol, tint: symbolTint, isEnabled: isEnabled)
 			}
-			VStack(alignment: .leading, spacing: 3) {
+			VStack(alignment: .leading, spacing: 2) {
 				Text(title)
 					.font(.system(size: 13))
 					.foregroundStyle(isEnabled ? Theme.label : Theme.tertiaryLabel)
@@ -159,17 +213,19 @@ struct SettingRow<Trailing: View>: View {
 			Spacer(minLength: 8)
 			trailing
 		}
-		.padding(Theme.rowPadding)
+		.padding(.horizontal, Theme.rowInset)
+		.padding(.vertical, 9)
+		.frame(minHeight: 42)
 	}
 }
 
-/// A toggle styled to the palette, with its explanation inline.
+/// A switch row.
 struct SettingToggle: View {
 
 	let title: String
 	var detail: String?
 	var symbol: String?
-	var symbolTint: Color = Theme.accent
+	var symbolTint: Color = Theme.grey
 	var isEnabled = true
 	@Binding var isOn: Bool
 
@@ -181,62 +237,73 @@ struct SettingToggle: View {
 			Toggle("", isOn: $isOn)
 				.labelsHidden()
 				.toggleStyle(.switch)
+				.controlSize(.small)
 				.tint(Theme.accent)
 				.disabled(!isEnabled)
 		}
 	}
 }
 
-/// A selectable option in a radio-style list.
-struct SettingChoice: View {
+/// A labelled slider with its value in a pill.
+///
+/// The pill matters: a bare slider tells you there is a value but not what it is, so any
+/// adjustment becomes trial and error.
+struct SliderRow: View {
 
 	let title: String
-	let detail: String
 	var symbol: String?
-	let isSelected: Bool
-	let select: () -> Void
+	var symbolTint: Color = Theme.grey
+	@Binding var value: Double
+	let range: ClosedRange<Double>
+	var format: (Double) -> String
 
 	var body: some View {
-		Button(action: select) {
-			HStack(alignment: .top, spacing: 12) {
+		VStack(spacing: 8) {
+			HStack(spacing: 12) {
 				if let symbol {
-					IconTile(symbol: symbol, tint: isSelected ? Theme.accent : Theme.tertiaryLabel)
+					IconTile(symbol: symbol, tint: symbolTint)
 				}
-
-				VStack(alignment: .leading, spacing: 3) {
-					Text(title)
-						.font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-						.foregroundStyle(isSelected ? Theme.label : Theme.label.opacity(0.75))
-					Text(detail)
-						.font(.system(size: 11))
-						.foregroundStyle(Theme.secondaryLabel)
-						.fixedSize(horizontal: false, vertical: true)
-						.multilineTextAlignment(.leading)
-				}
-
-				Spacer(minLength: 8)
-
-				// A tick, not a radio button.
-				//
-				// Radio circles put an empty control beside every option, so the row reads
-				// as a form to fill in. A checkmark that only exists on the chosen row —
-				// plus a tinted background — makes the selection the thing you notice.
-				Image(systemName: "checkmark")
-					.font(.system(size: 12, weight: .bold))
+				Text(title)
+					.font(.system(size: 13))
 					.foregroundStyle(Theme.label)
-					.opacity(isSelected ? 1 : 0)
-					.padding(.top, 2)
+				Spacer()
+				Text(format(value))
+					.font(.system(size: 11, weight: .medium, design: .rounded))
+					.foregroundStyle(Theme.secondaryLabel)
+					.padding(.horizontal, 9)
+					.padding(.vertical, 3)
+					.background(Capsule().fill(Theme.surfaceRaised))
+					.contentTransition(.numericText())
 			}
-			.padding(Theme.rowPadding)
-			.background(isSelected ? Color.white.opacity(0.05) : .clear)
-			.contentShape(.rect)
+
+			VStack(spacing: 4) {
+				Slider(value: $value, in: range)
+					.controlSize(.small)
+					.tint(Theme.label.opacity(0.85))
+
+				// Tick marks give the track a sense of scale, so a slider reads as a
+				// measured range rather than a smear between two ends.
+				HStack(spacing: 0) {
+					ForEach(0..<9, id: \.self) { index in
+						Circle()
+							.fill(Theme.tertiaryLabel.opacity(0.5))
+							.frame(width: 2, height: 2)
+						if index < 8 { Spacer(minLength: 0) }
+					}
+				}
+				.padding(.horizontal, 5)
+			}
+			.padding(.leading, symbol == nil ? 0 : 38)
 		}
-		.buttonStyle(.plain)
-		.animation(.easeOut(duration: 0.15), value: isSelected)
+		.padding(.horizontal, Theme.rowInset)
+		.padding(.vertical, 11)
 	}
 }
 
-/// Status pill — readiness, lockout, warnings.
+/// A short status line — readiness, lockout, warnings.
+///
+/// Plain text with a small coloured symbol, not a tinted banner. Full-width colour bars
+/// inside a group shout at a volume the message rarely earns.
 struct StatusPill: View {
 
 	enum Kind {
@@ -253,7 +320,7 @@ struct StatusPill: View {
 		var symbol: String {
 			switch self {
 			case .ok: return "checkmark.circle.fill"
-			case .warning: return "exclamationmark.circle.fill"
+			case .warning: return "exclamationmark.triangle.fill"
 			case .error: return "xmark.circle.fill"
 			}
 		}
@@ -263,24 +330,53 @@ struct StatusPill: View {
 	let message: String
 
 	var body: some View {
-		HStack(alignment: .top, spacing: 8) {
+		HStack(alignment: .firstTextBaseline, spacing: 7) {
 			Image(systemName: kind.symbol)
-				.font(.system(size: 12))
+				.font(.system(size: 10))
 				.foregroundStyle(kind.tint)
-				.padding(.top, 1)
 			Text(message)
 				.font(.system(size: 11))
 				.foregroundStyle(Theme.secondaryLabel)
 				.fixedSize(horizontal: false, vertical: true)
 			Spacer(minLength: 0)
 		}
-		.padding(.horizontal, Theme.rowPadding)
-		.padding(.vertical, 11)
-		.background(kind.tint.opacity(0.09))
+		.padding(.horizontal, Theme.rowInset)
+		.padding(.vertical, 10)
 	}
 }
 
-/// The app's primary button.
+/// A text field matching the group's surface.
+struct SettingsField: View {
+	let placeholder: String
+	@Binding var text: String
+	var isSecure = true
+
+	var body: some View {
+		Group {
+			if isSecure {
+				SecureField(placeholder, text: $text)
+			} else {
+				TextField(placeholder, text: $text)
+			}
+		}
+		.textFieldStyle(.plain)
+		.font(.system(size: 13))
+		.padding(.horizontal, 9)
+		.padding(.vertical, 5)
+		.background {
+			// A shallow rounded rectangle, not a capsule. Capsule fields are a web form
+			// convention; every text field on macOS is 6pt-ish.
+			RoundedRectangle(cornerRadius: 6, style: .continuous)
+				.fill(Color.black.opacity(0.25))
+				.overlay {
+					RoundedRectangle(cornerRadius: 6, style: .continuous)
+						.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+				}
+		}
+	}
+}
+
+/// The app's push button.
 struct AccentButtonStyle: ButtonStyle {
 	var role: ButtonRole?
 
@@ -294,11 +390,13 @@ struct AccentButtonStyle: ButtonStyle {
 			default: Theme.label
 			}
 		return configuration.label
-			.font(.system(size: 12, weight: .medium))
+			.font(.system(size: 12))
 			.foregroundStyle(tint)
-			.padding(.horizontal, 14)
-			.padding(.vertical, 7)
-			.background(tint.opacity(configuration.isPressed ? 0.28 : 0.16))
-			.clipShape(.capsule)
+			.padding(.horizontal, 12)
+			.padding(.vertical, 5)
+			.background {
+				RoundedRectangle(cornerRadius: 7, style: .continuous)
+					.fill(tint.opacity(configuration.isPressed ? 0.26 : 0.14))
+			}
 	}
 }
