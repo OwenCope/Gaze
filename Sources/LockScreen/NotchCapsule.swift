@@ -143,13 +143,30 @@ struct NotchCapsule: View {
 	/// than as the panel with its corners filed off.
 	private static let islandGap: CGFloat = 8
 
-	/// Rounded on all four sides, the way Apple Pay's card drops from the Dynamic Island.
+	/// A square with one radius on all four corners, the way Apple Pay's card drops from the
+	/// Dynamic Island.
+	///
+	/// It was a wide rectangle, which reads as a panel that happens to be detached rather
+	/// than as an object the notch handed you. Equal sides and equal corners is what makes it
+	/// a *thing*.
 	private var islandShape: RoundedRectangle {
-		RoundedRectangle(cornerRadius: min(26, islandHeight / 2.1), style: .continuous)
+		RoundedRectangle(cornerRadius: islandSide * 0.28, style: .continuous)
 	}
 
-	private var islandHeight: CGFloat { max(0, height - notchInset - Self.islandGap) }
-	private var islandWidth: CGFloat { width * 0.86 }
+	/// One dimension, used for both.
+	private var islandSide: CGFloat {
+		max(0, min(width * 0.52, height - notchInset - Self.islandGap))
+	}
+
+	private var islandHeight: CGFloat { islandSide }
+	private var islandWidth: CGFloat { islandSide }
+
+	/// How far the island travels on its way out of the housing.
+	///
+	/// Collapsed, it sits *inside* the notch — up behind the cutout and scaled down to
+	/// almost nothing — so growing it is the notch handing something down rather than a
+	/// panel appearing under it, and retracting is the notch taking it back.
+	private var islandHiddenOffset: CGFloat { -(Self.islandGap + islandSide / 2) }
 
 	/// Nebulark's gradient: black at the top running into green at the bottom.
 	///
@@ -162,8 +179,8 @@ struct NotchCapsule: View {
 				.init(color: .black.opacity(0.96), location: 0),
 				.init(color: .black.opacity(0.93), location: 0.20),
 				.init(color: .black.opacity(0.74), location: 0.46),
-				.init(color: Theme.faceID.opacity(0.34), location: 0.74),
-				.init(color: Theme.faceID.opacity(0.72), location: 1),
+				.init(color: Theme.faceID.opacity(0.16), location: 0.76),
+				.init(color: Theme.faceID.opacity(0.34), location: 1),
 			],
 			startPoint: .top,
 			endPoint: .bottom)
@@ -188,10 +205,15 @@ struct NotchCapsule: View {
 			// physical cutout — nothing appears or disappears, it emerges.
 			if isIsland {
 				islandBody
-					.frame(width: islandWidth, height: expanded ? islandHeight : 0)
+					.frame(width: islandWidth, height: islandHeight)
 					.padding(.top, notchInset + Self.islandGap)
+					// Travels, rather than growing in place. Collapsed it is up inside the
+					// cutout at almost no size; expanded it has come down to where it sits.
+					// Same two values in reverse on the way back, so it leaves the way it
+					// arrived instead of simply disappearing.
+					.offset(y: expanded ? 0 : islandHiddenOffset)
+					.scaleEffect(expanded ? 1 : 0.24, anchor: .top)
 					.opacity(expanded ? 1 : 0)
-					.scaleEffect(expanded ? 1 : 0.86, anchor: .top)
 			} else {
 				background
 					.frame(
@@ -262,8 +284,8 @@ struct NotchCapsule: View {
 				LinearGradient(
 					colors: [
 						.black,
-						Color(red: 0, green: 0.22, blue: 0.16),
-						Color(red: 0, green: 0.62, blue: 0.20),
+						Color(red: 0, green: 0.12, blue: 0.09),
+						Color(red: 0, green: 0.32, blue: 0.13),
 					],
 					startPoint: .top, endPoint: .bottom)
 			)

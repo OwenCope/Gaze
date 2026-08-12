@@ -130,7 +130,7 @@ final class NotchCapsuleController {
 		// The island is a separate object below the housing, so the window has to carry the
 		// gap and the island's own height on top of what an attached drop needs.
 		let isIsland = Preferences.shared.panelShape == .island
-		let dropHeight = (isIsland ? 92 : 66) + Preferences.shared.notchHeightAdjust
+		let dropHeight = (isIsland ? 152 : 66) + Preferences.shared.notchHeightAdjust
 		let size = CGSize(width: notchWidth, height: notchHeight + dropHeight)
 
 		let frame = NSRect(
