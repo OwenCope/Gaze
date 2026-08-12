@@ -165,10 +165,16 @@ struct WindowGlass: View {
 
 /// A group's surface: material, a breath of white, and a rim that catches light at the top.
 ///
-/// Three layers rather than one fill. The material blurs what is behind the group — which
-/// is the window's own glass, not the desktop — so the group sits at a different depth from
-/// its background instead of being painted onto it. That depth is the whole difference
-/// between this and a grey box.
+/// Flat, now that the buttons carry the glass.
+///
+/// This used to be material plus a lit rim, on the argument that depth is what separates a
+/// group from its background. The argument was right and applied to the wrong element: with
+/// glass on the containers *and* the controls, everything on screen had depth and none of it
+/// meant anything. Aviorrok's point — flat containers, glass controls — puts the depth on
+/// the thing you can actually touch.
+///
+/// One fill and one hairline. The group still reads as a surface because the window behind it
+/// is glass and this isn't.
 struct GlassSurface: ViewModifier {
 
 	var cornerRadius: CGFloat = Theme.cornerRadius
@@ -181,23 +187,11 @@ struct GlassSurface: ViewModifier {
 
 	func body(content: Content) -> some View {
 		content
-			.background {
-				shape
-					.fill(.ultraThinMaterial)
-					.overlay { shape.fill(fill) }
-			}
+			.background { shape.fill(fill) }
 			.overlay {
-				// Bright along the top, gone by the bottom — a rim lit from above, not a
-				// border drawn evenly around a box.
-				shape.strokeBorder(
-					LinearGradient(
-						colors: [
-							.white.opacity(0.28),
-							.white.opacity(0.08),
-							.white.opacity(0.03),
-						],
-						startPoint: .top, endPoint: .bottom),
-					lineWidth: 1)
+				// A single even hairline, not a lit rim. A gradient edge is how you draw a
+				// raised surface, and this one is deliberately not raised any more.
+				shape.strokeBorder(Theme.separator, lineWidth: 1)
 			}
 			.clipShape(shape)
 	}
@@ -344,10 +338,12 @@ struct SettingsSection<Content: View>: View {
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 7) {
+			// Secondary, not primary. A group title labels the rows under it; setting it in
+			// full-strength white made it compete with the row labels it was introducing.
 			if let title {
 				Text(title)
 					.font(Typography.groupTitle)
-					.foregroundStyle(Theme.label)
+					.foregroundStyle(Theme.secondaryLabel)
 					.padding(.leading, 4)
 			}
 
@@ -774,5 +770,46 @@ extension ButtonStyle where Self == AccentButtonStyle {
 	/// Filled white. At most one per screen — the thing the screen is for.
 	static var primaryAction: AccentButtonStyle {
 		AccentButtonStyle(prominence: .primary)
+	}
+}
+
+/// A small ⓘ that opens a popover.
+///
+/// For the explanation that is too long to sit in a row's subtitle but too important to leave
+/// in a file on GitHub. A footer under the group would hold it, but a footer is read by
+/// nobody who has already decided — this is read by the person hesitating.
+struct InfoButton<Content: View>: View {
+
+	let title: String
+	@ViewBuilder var content: Content
+
+	@State private var isShowing = false
+
+	var body: some View {
+		Button {
+			isShowing.toggle()
+		} label: {
+			Image(systemName: "info.circle")
+				.font(Typography.control)
+				.foregroundStyle(Theme.secondaryLabel)
+				.contentShape(.circle)
+		}
+		.buttonStyle(.plain)
+		.help(title)
+		.accessibilityLabel(title)
+		.popover(isPresented: $isShowing, arrowEdge: .bottom) {
+			VStack(alignment: .leading, spacing: 10) {
+				Text(title)
+					.font(Typography.groupTitle)
+					.foregroundStyle(Theme.label)
+				content
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+			.multilineTextAlignment(.leading)
+			.padding(16)
+			.frame(width: 300)
+		}
 	}
 }

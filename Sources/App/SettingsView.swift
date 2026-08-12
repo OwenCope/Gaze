@@ -38,6 +38,20 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		self == .face ? Theme.faceID : Theme.grey
 	}
 
+	/// One line under the pane's title, saying what the pane is for.
+	var summary: String {
+		switch self {
+		case .general:
+			return "How Face ID looks on the lock screen, and what it's allowed to do"
+		case .face:
+			return "Unlock your Mac by looking at it"
+		case .credits:
+			return "The people whose work this is built on"
+		case .about:
+			return "What this app is, and what it isn't"
+		}
+	}
+
 	/// About sits apart from the panes you actually configure things in.
 	var isPrecededBySeparator: Bool { self == .about }
 }
@@ -145,10 +159,29 @@ struct SettingsView: View {
 	private var detail: some View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-				Text(pane.title)
-					.font(Typography.paneTitle)
-					.foregroundStyle(Theme.label)
-					.padding(.bottom, 2)
+				// The pane's own mark and a line saying what it is for.
+				//
+				// A bare word at the top of a column tells you which tab you clicked, which
+				// you already knew. The icon carries the app's identity and the sentence
+				// tells someone opening this for the first time what they are looking at.
+				HStack(alignment: .top, spacing: 14) {
+					Image(systemName: pane.symbol)
+						.font(Typography.glyph)
+						.foregroundStyle(pane.tint)
+						.frame(width: 44, height: 44)
+
+					VStack(alignment: .leading, spacing: 2) {
+						Text(pane.title)
+							.font(Typography.paneTitle)
+							.foregroundStyle(Theme.label)
+						Text(pane.summary)
+							.font(Typography.detail)
+							.foregroundStyle(Theme.secondaryLabel)
+							.fixedSize(horizontal: false, vertical: true)
+					}
+					Spacer(minLength: 0)
+				}
+				.padding(.bottom, 2)
 
 				switch pane {
 				case .face:
@@ -256,12 +289,12 @@ struct SettingsView: View {
 
 	private var heroDetail: String {
 		if store.isCorrupted {
-			return "Your enrolled face couldn't be read and has been ignored."
+			return "Your enrolled face couldn't be read and has been ignored"
 		}
 		if let enrollment = store.enrollment {
-			return "\(enrollment.prints.count) angles captured on \(enrollment.enrolledAt.formatted(date: .abbreviated, time: .shortened))."
+			return "\(enrollment.prints.count) angles captured on \(enrollment.enrolledAt.formatted(date: .abbreviated, time: .shortened))"
 		}
-		return "Enrol your face to unlock this Mac by looking at it."
+		return "Enrol your face to unlock this Mac by looking at it"
 	}
 
 	private var manageSection: some View {
@@ -315,7 +348,7 @@ struct SettingsView: View {
 	// MARK: - Unlocking
 
 	private var unlockSection: some View {
-		SettingsSection(footer: unlockFooter) {
+		SettingsSection(title: "Use Face ID for", footer: unlockFooter) {
 			// A pop-up menu, not three cards with icons and checkmarks.
 			//
 			// The cards spent a third of the window explaining options the user picks once
@@ -390,7 +423,7 @@ struct SettingsView: View {
 		VStack(spacing: 0) {
 			SettingRow(
 				title: "Account password",
-				detail: "Checked against your account before it's stored.",
+				detail: "Checked against your account before it's stored",
 				symbol: "key.fill"
 			) {
 				HStack(spacing: 6) {
@@ -400,6 +433,31 @@ struct SettingsView: View {
 						.buttonStyle(.accent)
 						.disabled(passwordEntry.isEmpty)
 						.fixedSize()
+
+					// The answer where the question gets asked.
+					//
+					// "How is my password stored?" is the first thing anyone security-minded
+					// wants to know, and it was only answered in a file on GitHub. It belongs
+					// at the field you type the password into, at the moment you are deciding
+					// whether to.
+					InfoButton(title: "How your password is stored") {
+						Text(
+							"It's encrypted with a key generated inside this Mac's Secure "
+								+ "Enclave, which never leaves it. Copied to another Mac, the "
+								+ "stored file is useless."
+						)
+						Text(
+							"It is not hashed. The app has to reproduce your exact password in "
+								+ "order to type it, so it keeps something it can decrypt — and "
+								+ "anything running as your user account could decrypt it too. "
+								+ "Your face decides when it gets typed; it isn't part of the "
+								+ "encryption."
+						)
+						Text(
+							"Choose \"Just recognise me\" instead and no password is asked for "
+								+ "or stored at all."
+						)
+					}
 				}
 			}
 			if let passwordError {
@@ -485,6 +543,7 @@ struct SettingsView: View {
 
 	private var updatesSection: some View {
 		SettingsSection(
+			title: "Updates",
 			footer: "\(updateDetail) Your settings and enrolled face survive a rebuild."
 		) {
 			SettingRow(
@@ -577,7 +636,7 @@ struct SettingsView: View {
 			) {
 				SettingRow(
 					title: "Not Apple's Face ID",
-					detail: "Built-in camera, no depth sensor.",
+					detail: "Built-in camera, no depth sensor",
 					symbol: "exclamationmark.triangle.fill", symbolTint: Theme.warning
 				) {
 					EmptyView()
@@ -608,7 +667,7 @@ struct SettingsView: View {
 			) {
 				SettingRow(
 					title: "DanFQ",
-					detail: "Sapphire — the recognition model this app matches faces with.",
+					detail: "Sapphire — the recognition model this app matches faces with",
 					symbol: "brain.head.profile"
 				) {
 					Button("Sapphire") { Self.open("https://sapphire-app.tech/") }
@@ -618,7 +677,7 @@ struct SettingsView: View {
 				RowDivider()
 				SettingRow(
 					title: "Aviorrok",
-					detail: "Dynamic Lake Pro — the notch panel and this window follow its lead.",
+					detail: "Dynamic Lake Pro — the notch panel and this window follow its lead",
 					symbol: "macbook"
 				) {
 					Button("Dynamic Lake") { Self.open("https://dynamiclake.com/") }
