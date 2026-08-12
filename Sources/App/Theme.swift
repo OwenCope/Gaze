@@ -3,25 +3,56 @@ import SwiftUI
 
 /// Design tokens.
 ///
-/// Face ID is dark on every Apple platform and accents in the system green, so the whole
-/// palette is derived from those two facts rather than following the system appearance.
+/// The palette follows the system appearance. It used to be dark unconditionally, on the
+/// reasoning that Face ID is dark on every Apple platform — but that is true of Apple's
+/// *sheet*, which appears over whatever you were doing, not of a settings window that sits
+/// among your other windows. A window that stays black while everything around it turns
+/// white is the one that looks broken.
 enum Theme {
+
+	/// A colour that resolves against whichever appearance it is drawn in.
+	///
+	/// AppKit does the resolving, not a `@Environment(\.colorScheme)` read, because these are
+	/// static tokens with no view to read an environment from — and because it then works
+	/// inside `NSHostingView`, popovers and menus, which do not always inherit the
+	/// environment the way the view tree suggests.
+	static func dynamic(light: Color, dark: Color) -> Color {
+		Color(
+			nsColor: NSColor(name: nil) { appearance in
+				appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+					? NSColor(dark) : NSColor(light)
+			})
+	}
+
+	/// Glass tint, in whichever direction the appearance calls for.
+	///
+	/// This is the pair that has to flip. Every scrim in the window is black over a dark
+	/// appearance, and the *same* black in light mode turns the glass into a grey smear —
+	/// light glass is tinted with white.
+	static func scrim(_ opacity: Double) -> Color {
+		dynamic(light: .white.opacity(opacity), dark: .black.opacity(opacity))
+	}
 
 	// MARK: - Colour
 
 	/// Opaque ground, for the windows that are not vibrant — enrolment and the recognition
 	/// test, both of which are full of camera preview and want no wallpaper behind them.
-	static let background = Color(red: 0.078, green: 0.078, blue: 0.082)
+	static let background = dynamic(
+		light: Color(red: 0.93, green: 0.93, blue: 0.94),
+		dark: Color(red: 0.078, green: 0.078, blue: 0.082))
 
 	/// Group fill, over the glass rather than instead of it.
 	///
-	/// A flat `white.opacity(0.13)` rectangle is what made every group read as a grey slab:
-	/// it is a *painted* panel, so it sits at the same depth as everything else and the
-	/// window flattens into one sheet of cardboard. Real glass has a blur of its own, which
-	/// is what separates a group from the thing behind it.
-	static let surface = Color.white.opacity(0.07)
-	static let surfaceRaised = Color.white.opacity(0.12)
-	static let separator = Color.white.opacity(0.09)
+	/// A flat rectangle is what made every group read as a grey slab: it is a *painted*
+	/// panel, so it sits at the same depth as everything else and the window flattens into
+	/// one sheet of cardboard. Real glass has a blur of its own, which is what separates a
+	/// group from the thing behind it.
+	///
+	/// Light mode takes white rather than a lightened black — Jis G Jacob's point, and the
+	/// right one: a group in light mode is a white card, not a pale grey one.
+	static let surface = dynamic(light: .white.opacity(0.55), dark: .white.opacity(0.07))
+	static let surfaceRaised = dynamic(light: .white.opacity(0.85), dark: .white.opacity(0.12))
+	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
 
 	// MARK: - Icon palette
 
@@ -45,9 +76,9 @@ enum Theme {
 	/// happens to have. Tuned on a dark desktop, 0.35 looked like a restrained tertiary; on a
 	/// light one it was gone. These are the lowest values that still hold up over a bright
 	/// wallpaper coming through the glass.
-	static let label = Color.white
-	static let secondaryLabel = Color.white.opacity(0.68)
-	static let tertiaryLabel = Color.white.opacity(0.52)
+	static let label = dynamic(light: .black, dark: .white)
+	static let secondaryLabel = dynamic(light: .black.opacity(0.62), dark: .white.opacity(0.68))
+	static let tertiaryLabel = dynamic(light: .black.opacity(0.45), dark: .white.opacity(0.52))
 
 	/// Controls are neutral.
 	///
@@ -55,7 +86,12 @@ enum Theme {
 	/// undifferentiated colour, so the green stopped meaning anything. Reserving it for
 	/// Face ID itself — the glyph, the enrolment ring, the success tick — is what gives it
 	/// back its meaning: green here says *recognised*, not *this is a control*.
-	static let accent = Color.white
+	/// Black and white, which is exactly what an accent of "no colour" means in each
+	/// appearance — and what makes a filled button read as filled in both.
+	static let accent = dynamic(light: .black, dark: .white)
+
+	/// What a filled control's label is knocked out in: the opposite of `accent`.
+	static let onAccent = dynamic(light: .white.opacity(0.95), dark: .black.opacity(0.88))
 
 	/// Apple's system green. Face ID identity only, never chrome.
 	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
@@ -93,10 +129,10 @@ struct WindowGlass: View {
 
 			LinearGradient(
 				stops: [
-					.init(color: .black.opacity(0.74), location: 0),
-					.init(color: .black.opacity(0.62), location: 0.32),
-					.init(color: .black.opacity(0.44), location: 0.68),
-					.init(color: .black.opacity(0.26), location: 1),
+					.init(color: Theme.scrim(0.74), location: 0),
+					.init(color: Theme.scrim(0.62), location: 0.32),
+					.init(color: Theme.scrim(0.44), location: 0.68),
+					.init(color: Theme.scrim(0.26), location: 1),
 				],
 				startPoint: .top,
 				endPoint: .bottom)
@@ -613,12 +649,12 @@ struct SettingsField: View {
 		// darker fill and an inner rim, the opposite of a group's lit top edge.
 		.background {
 			RoundedRectangle(cornerRadius: 8, style: .continuous)
-				.fill(Color.black.opacity(0.22))
+				.fill(Theme.dynamic(light: .white.opacity(0.9), dark: .black.opacity(0.22)))
 				.overlay {
 					RoundedRectangle(cornerRadius: 8, style: .continuous)
 						.strokeBorder(
 							LinearGradient(
-								colors: [.black.opacity(0.35), .white.opacity(0.1)],
+								colors: [Theme.dynamic(light: .black.opacity(0.18), dark: .black.opacity(0.35)), .white.opacity(0.1)],
 								startPoint: .top, endPoint: .bottom),
 							lineWidth: 1)
 				}
@@ -678,7 +714,7 @@ struct AccentButtonStyle: ButtonStyle {
 		var body: some View {
 			configuration.label
 				.font(Typography.control)
-				.foregroundStyle(prominence == .primary ? Color.black.opacity(0.88) : tint)
+				.foregroundStyle(prominence == .primary ? Theme.onAccent : tint)
 				.padding(.horizontal, 12)
 				.padding(.vertical, 5)
 				.background {

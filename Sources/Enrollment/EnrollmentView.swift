@@ -31,7 +31,6 @@ struct EnrollmentView: View {
 		.padding(.horizontal, 40)
 		.frame(width: 480, height: 620)
 		.background(Color.black)
-		.preferredColorScheme(.dark)
 		.task { await begin() }
 		.onDisappear { camera.stop() }
 		// Driven by the frame counter, not the pose: identical consecutive poses are

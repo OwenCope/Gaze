@@ -53,7 +53,6 @@ struct RecognitionTestView: View {
 		// opaque, and next to the glazed settings window it read as a prop from a different
 		// app. The camera disc and score bar sit on glass just as legibly.
 		.background(WindowGlass(keepsTitle: true))
-		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
 			await camera.start(pinnedDeviceID: store.enrollment?.cameraID)

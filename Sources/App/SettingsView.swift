@@ -64,7 +64,6 @@ struct SettingsView: View {
 		// sidebar". On one unbroken sheet, the sidebar is just the left margin of the glass —
 		// the way the Siri panel and Spotlight treat their edges.
 		.background(WindowGlass())
-		.preferredColorScheme(.dark)
 		.onAppear { AppActivation.bringToFront() }
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
 	}

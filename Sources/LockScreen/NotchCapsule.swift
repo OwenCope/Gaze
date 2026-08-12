@@ -102,7 +102,9 @@ struct NotchCapsule: View {
 			// shape is exactly the notch's height, so it is completely hidden behind the
 			// physical cutout — nothing appears or disappears, it emerges.
 			background
-				.frame(height: expanded ? currentHeight : notchInset)
+				.frame(
+					width: backgroundWidth,
+					height: expanded ? currentHeight : notchInset)
 
 			// Locked: a padlock beside the cutout, at menu bar height.
 			//
@@ -252,6 +254,22 @@ struct NotchCapsule: View {
 	/// retracted and the left ear carries the state instead.
 	private var currentHeight: CGFloat {
 		model.phase.isCompact ? notchInset : height
+	}
+
+	/// Only as wide as the cutout while resting, full width once it drops.
+	///
+	/// The window is deliberately wider than the physical notch — it has to be, so the panel
+	/// matches the island other notch apps draw rather than the housing behind it. But at
+	/// rest the panel is exactly `notchInset` tall, and drawing *that* at full window width
+	/// put a square-cornered black bar across the menu bar either side of the cutout: no
+	/// corner radius, because the radius is derived from a visible height of zero, and no
+	/// notch to hide in, because the ears are open screen.
+	///
+	/// Matching the cutout puts the whole shape behind the physical housing, where it is
+	/// invisible — which is what "fully retracted" was always supposed to mean. It widens
+	/// on the same spring as the drop, so the panel still grows out of the notch.
+	private var backgroundWidth: CGFloat {
+		model.phase.isCompact ? cutoutWidth : width
 	}
 
 	/// The part of the panel that actually shows below the cutout.
