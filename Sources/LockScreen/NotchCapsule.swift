@@ -82,7 +82,12 @@ struct NotchCapsule: View {
 	/// its last twenty points kept a 15pt radius on a shape only a few points tall — which
 	/// is what made the retract go square and hard right before it vanished. Tying the
 	/// radius to the visible drop lets it round off to nothing as the panel closes.
-	private var cornerRadius: CGFloat { min(15, max(0, visibleHeight) / 2.2) }
+	/// Floored, not just derived.
+	///
+	/// A radius proportional to the drop goes to nothing as the panel retracts, and the last
+	/// thing you see before it disappears is a hard-cornered rectangle. The floor keeps the
+	/// resting lip rounded, which is the whole reason it hangs below the cutout at all.
+	private var cornerRadius: CGFloat { min(15, max(9, max(0, visibleHeight) / 1.9)) }
 
 	private var shape: UnevenRoundedRectangle {
 		UnevenRoundedRectangle(
@@ -245,58 +250,45 @@ struct NotchCapsule: View {
 		Image(systemName: "lock.fill")
 			.font(.system(size: 11, weight: .semibold))
 			.foregroundStyle(.white)
-			.frame(width: 26, height: 19)
-			// A chip, because the glyph no longer stands on anything.
+			// No chip behind it.
 			//
-			// It was a bare glyph, and the reasoning was sound at the time: it sat on the
-			// panel's own black band, so a translucent dark fill laid over black came out
-			// *lighter* than its surroundings and read as a grey sticker.
+			// It briefly had one, added when the resting panel was hidden behind the housing
+			// and the padlock was left standing on bare wallpaper with nothing to read
+			// against. Now that the panel is back to full width, the glyph stands on the
+			// panel's own black again — and a translucent dark chip laid over black comes out
+			// *lighter* than what surrounds it, which is what made it look like a sticker
+			// pasted next to the notch rather than part of it.
 			//
-			// Then the resting panel was shrunk to the cutout — correctly, it was overhanging
-			// the notch — and that took the black band away with it. The padlock has sat on
-			// bare menu bar ever since, which is wallpaper: no guaranteed contrast, and white
-			// on a pale desktop is barely there. Now it carries its own ground, the way every
-			// notch app draws its resting indicators.
-			.background {
-				RoundedRectangle(cornerRadius: 6, style: .continuous)
-					.fill(.black.opacity(0.55))
-					.background {
-						RoundedRectangle(cornerRadius: 6, style: .continuous)
-							.fill(.ultraThinMaterial)
-					}
-					.overlay {
-						// A hairline, so the chip has an edge against a dark wallpaper too —
-						// without it the black fill dissolves into a dark desktop and the
-						// padlock goes back to floating.
-						RoundedRectangle(cornerRadius: 6, style: .continuous)
-							.strokeBorder(.white.opacity(0.14), lineWidth: 1)
-					}
-			}
-			// Centred in the menu bar strip, and held clear of the cutout's edge.
+			// Optically centred in the ear: the visible band is the notch inset, and the
+			// glyph belongs in the middle of that, clear of the lip below it.
 			.frame(width: earWidth, height: notchInset)
 	}
 
-	/// Nothing hangs below the cutout while it is only a padlock — the panel stays fully
-	/// retracted and the left ear carries the state instead.
+	/// A shallow lip while resting, the full drop once it is scanning.
+	///
+	/// The lip is what makes the resting state read as the notch rather than as a bar stuck
+	/// under the menu bar: it is wider than the housing and hangs just far enough below it to
+	/// round off, so the black reads as one continuous shape with the cutout. Sitting flush
+	/// at exactly the cutout's height gave it square corners and nothing to be a shape *of*.
 	private var currentHeight: CGFloat {
-		model.phase.isCompact ? notchInset : height
+		model.phase.isCompact ? notchInset + Self.compactDrop : height
 	}
 
-	/// Only as wide as the cutout while resting, full width once it drops.
+	/// Enough to clear the menu bar and take a corner radius, and no more — this is a
+	/// resting indicator, not an open panel.
+	private static let compactDrop: CGFloat = 11
+
+	/// Full width in every phase.
 	///
-	/// The window is deliberately wider than the physical notch — it has to be, so the panel
-	/// matches the island other notch apps draw rather than the housing behind it. But at
-	/// rest the panel is exactly `notchInset` tall, and drawing *that* at full window width
-	/// put a square-cornered black bar across the menu bar either side of the cutout: no
-	/// corner radius, because the radius is derived from a visible height of zero, and no
-	/// notch to hide in, because the ears are open screen.
+	/// This was briefly narrowed to the cutout while resting, to stop a square-cornered bar
+	/// running across the menu bar either side of the housing. It did stop that, by hiding
+	/// the panel behind the physical notch entirely — which left the padlock as a chip
+	/// floating in open menu bar next to a notch it had no visible connection to.
 	///
-	/// Matching the cutout puts the whole shape behind the physical housing, where it is
-	/// invisible — which is what "fully retracted" was always supposed to mean. It widens
-	/// on the same spring as the drop, so the panel still grows out of the notch.
-	private var backgroundWidth: CGFloat {
-		model.phase.isCompact ? cutoutWidth : width
-	}
+	/// The squareness was never about the width. It came from a resting height of exactly
+	/// `notchInset`: nothing below the cutout, so a corner radius derived from the visible
+	/// drop was zero. The fix is a drop to round, not a shape to hide.
+	private var backgroundWidth: CGFloat { width }
 
 	/// The part of the panel that actually shows below the cutout.
 	private var visibleHeight: CGFloat { currentHeight - notchInset }
