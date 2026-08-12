@@ -173,14 +173,33 @@ struct NotchCapsule: View {
 	/// Green only ever appears while the island is doing something — it has no resting
 	/// state — so this keeps the rule the rest of the app follows, that green means Face ID
 	/// and nothing else, while taking the look he built.
+	/// Two gradients, not one, because they were two jobs sharing a stop list.
+	///
+	/// Turning the green down also turned the *black* down — the stops ran from black at the
+	/// top to green at the bottom, so the bottom of the panel had nothing dark left in it and
+	/// the glass simply showed the wallpaper through. Over a bright desktop the island came
+	/// out pale blue.
+	///
+	/// The dark keeps the panel legible from top to bottom. The green is a separate wash on
+	/// top of it, so it can be dialled to a hint without taking the ground with it.
 	private var islandTint: LinearGradient {
 		LinearGradient(
 			stops: [
-				.init(color: .black.opacity(0.96), location: 0),
-				.init(color: .black.opacity(0.93), location: 0.20),
-				.init(color: .black.opacity(0.74), location: 0.46),
-				.init(color: Theme.faceID.opacity(0.16), location: 0.76),
-				.init(color: Theme.faceID.opacity(0.34), location: 1),
+				.init(color: .black.opacity(0.94 + lightWallpaperBoost), location: 0),
+				.init(color: .black.opacity(0.90 + lightWallpaperBoost), location: 0.45),
+				.init(color: .black.opacity(0.84 + lightWallpaperBoost), location: 1),
+			],
+			startPoint: .top,
+			endPoint: .bottom)
+	}
+
+	/// A hint, at the bottom, and nowhere else.
+	private var islandGreen: LinearGradient {
+		LinearGradient(
+			stops: [
+				.init(color: .clear, location: 0.42),
+				.init(color: Theme.faceID.opacity(0.05), location: 0.72),
+				.init(color: Theme.faceID.opacity(0.15), location: 1),
 			],
 			startPoint: .top,
 			endPoint: .bottom)
@@ -284,8 +303,8 @@ struct NotchCapsule: View {
 				LinearGradient(
 					colors: [
 						.black,
-						Color(red: 0, green: 0.12, blue: 0.09),
-						Color(red: 0, green: 0.32, blue: 0.13),
+						.black,
+						Color(red: 0, green: 0.10, blue: 0.05),
 					],
 					startPoint: .top, endPoint: .bottom)
 			)
@@ -296,6 +315,9 @@ struct NotchCapsule: View {
 					// `sourceAtop` so the gradient tints the glass rather than covering it —
 					// the frost and its highlights still read through.
 					.blendMode(.sourceAtop)
+			}
+			.overlay {
+				islandShape.fill(islandGreen).blendMode(.sourceAtop)
 			}
 			.overlay {
 				islandShape.strokeBorder(.white.opacity(0.16), lineWidth: 1)
