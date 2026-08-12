@@ -24,12 +24,13 @@ final class NotchCapsuleModel {
 		/// under the notch; one that sits flush and grows when it has something to say is
 		/// a status indicator.
 		///
-		/// Success is compact too. The unlock is the *same padlock* opening, in the same
-		/// place and at the same size it has been sitting at — not a second, larger glyph in
-		/// a panel that drops to announce it. Dropping the panel to say "done" makes the
-		/// final beat the loudest one, when it should be the quietest: the lock lets go and
-		/// the notch takes the panel back.
-		var isCompact: Bool { self == .locked || self == .success }
+		/// Success is not compact: the panel stays open to carry the tick. What it *also*
+		/// does is open the padlock in the ear, so the two halves of the confirmation happen
+		/// at once — the tick says it worked, the padlock says what "it" was.
+		var isCompact: Bool { self == .locked }
+
+		/// Phases that draw the padlock beside the cutout.
+		var showsLockChip: Bool { self == .locked || self == .success }
 	}
 
 	var phase: Phase = .scanning
@@ -124,14 +125,18 @@ struct NotchCapsule: View {
 			// it said the panel was doing something when it was doing nothing. Notch apps
 			// put a resting indicator in the screen either side of the housing instead, and
 			// that is space this window already covers.
-			if model.phase.isCompact {
+			// The padlock stays for the unlock, so success shows both: the tick in the drop
+			// and the same padlock opening where it has sat all along.
+			if model.phase.showsLockChip {
 				lockChip
 					// Positioned against the *resting* bar, not the window — the window is
 					// wider, so aligning to it put the padlock outside the black.
 					.frame(width: backgroundWidth, alignment: .leading)
 					.opacity(expanded ? 1 : 0)
 					.transition(.opacity.combined(with: .scale(scale: 0.7)))
-			} else {
+			}
+
+			if !model.phase.isCompact {
 				content
 					.frame(width: glyphSide, height: glyphSide)
 					// Centred in the solid band — not the whole window (whose top third is
@@ -339,10 +344,10 @@ struct NotchCapsule: View {
 	private var content: some View {
 		Image(systemName: symbolName)
 			.font(.system(size: glyphSide, weight: model.phase == .success ? .semibold : .regular))
-			// Monochrome throughout now. Hierarchical existed for the tick's disc, where the
-			// softened ring read as frosted; an open padlock has no disc to soften, and
-			// hierarchical only bleeds the shackle away from the body.
-			.symbolRenderingMode(.monochrome)
+			// Hierarchical only for the tick, where the softened disc is what makes it read
+			// as frosted rather than as a sticker. On the Face ID mark it just dims the whole
+			// glyph, which left it washed out against the glass.
+			.symbolRenderingMode(model.phase == .success ? .hierarchical : .monochrome)
 			.foregroundStyle(symbolTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
 			// Breathing while it looks — the system effect, not an opacity loop.
@@ -370,7 +375,7 @@ struct NotchCapsule: View {
 	private var symbolName: String {
 		switch model.phase {
 		case .locked: return "lock.fill"
-		case .success: return "lock.open.fill"
+		case .success: return "checkmark.circle.fill"
 		case .scanning, .notRecognised: return "faceid"
 		}
 	}
