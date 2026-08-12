@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import os
 
 @main
 struct FaceIDApp: App {
@@ -196,46 +197,85 @@ final class AppServices {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
+	private var invisibleWindowSweep: Timer?
+
 	func applicationDidFinishLaunching(_ notification: Notification) {
 		MainActor.assumeIsolated {
 			TamperGuard.shared.start()
 			AppServices.shared.startUnlockTrigger()
 			AppServices.shared.runCapsulePreviewIfRequested()
-			sweepInvisibleWindowsAfterMenus()
+			startInvisibleWindowSweep()
 		}
 	}
 
-	/// Orders out the invisible window left behind when the menu bar menu is dismissed by
-	/// choosing an item.
+	/// Makes any invisible window of ours click-through, for as long as the app runs.
 	///
-	/// Reported as clicks near the top-right of the screen doing nothing, in *other*
-	/// applications. Reproduced exactly: open the menu and press Escape and nothing is left
-	/// behind; open it and choose an item — which is what anyone actually does — and a
-	/// 191×128 window stays on screen at alpha 0, layer 101, sitting under the menu bar item.
-	/// Layer 101 is above every ordinary window, and an invisible window still takes clicks,
-	/// so that rectangle becomes a dead zone for the rest of the session.
+	/// SwiftUI's `MenuBarExtra` leaves a window behind at alpha 0, layer 101, parked under
+	/// the menu bar item — 191×128 of dead screen in the top-right corner. Layer 101 is above
+	/// every ordinary window and an invisible window still swallows clicks, so that rectangle
+	/// stops working *in other applications* until this app quits.
 	///
-	/// Switching the scene to `.menuBarExtraStyle(.menu)` was necessary but not sufficient:
-	/// it removed the panel that was there permanently, leaving this one that arrives when
-	/// the menu is used.
+	/// Two earlier attempts did not hold. `.menuBarExtraStyle(.menu)` removed the panel that
+	/// was there permanently but not this one, which arrives when the menu is used; and
+	/// hanging the cleanup off `NSMenu.didEndTrackingNotification` assumed a notification that
+	/// evidently does not always arrive. Guessing at *when* it appears has been wrong twice,
+	/// so this stops guessing and simply checks.
 	///
-	/// The sweep is deliberately narrow — *visible* windows with an alpha of exactly zero.
-	/// Nothing this app legitimately shows is invisible, so ordering these out changes
-	/// nothing anyone can see, and it is scoped to our own process either way.
+	/// It does not order the window out — SwiftUI owns that window and closing something it
+	/// thinks is open invites a different bug. Making it click-through fixes precisely the
+	/// reported problem and changes nothing anyone can see, since the window is invisible.
+	///
+	/// The window is found through the window server rather than `NSApp.windows`, because it
+	/// is not reliably in that list, then matched back to an `NSWindow` by number.
 	@MainActor
-	private func sweepInvisibleWindowsAfterMenus() {
-		NotificationCenter.default.addObserver(
-			forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main
-		) { _ in
-			// Deferred: at the moment tracking ends the window is still up, and the action
-			// the user chose has not run yet.
-			DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-				MainActor.assumeIsolated {
-					for window in NSApp.windows where window.isVisible && window.alphaValue == 0 {
-						window.orderOut(nil)
-					}
+	private func startInvisibleWindowSweep() {
+		Self.clearInvisibleWindows()
+		let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+			MainActor.assumeIsolated {
+				Self.clearInvisibleWindows()
+				if CommandLine.arguments.contains("--debug-windows") {
+					Self.logAppWindows("tick")
 				}
 			}
+		}
+		// Common modes, or it stops firing while a menu is open — which is exactly when the
+		// window in question appears.
+		RunLoop.main.add(timer, forMode: .common)
+		invisibleWindowSweep = timer
+	}
+
+	/// Dumps what `NSApp.windows` actually contains, for diagnosing windows we cannot reach.
+	@MainActor
+	static func logAppWindows(_ note: String) {
+		let logger = Logger(subsystem: "app.faceid.FaceID", category: "Windows")
+		logger.notice("--- NSApp.windows (\(note, privacy: .public)) ---")
+		for w in NSApp.windows {
+			logger.notice(
+				"num=\(w.windowNumber) level=\(w.level.rawValue) alpha=\(w.alphaValue) visible=\(w.isVisible) ignoresMouse=\(w.ignoresMouseEvents) class=\(String(describing: type(of: w)), privacy: .public) frame=\(NSStringFromRect(w.frame), privacy: .public)"
+			)
+		}
+	}
+
+	@MainActor
+	static func clearInvisibleWindows() {
+		let pid = ProcessInfo.processInfo.processIdentifier
+		guard
+			let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
+				as? [[String: Any]]
+		else { return }
+
+		for entry in list {
+			guard
+				(entry[kCGWindowOwnerPID as String] as? Int32) == pid,
+				let alpha = entry[kCGWindowAlpha as String] as? Double, alpha < 0.01,
+				let number = entry[kCGWindowNumber as String] as? Int,
+				let window = NSApp.window(withWindowNumber: number),
+				!window.ignoresMouseEvents
+			else { continue }
+
+			window.ignoresMouseEvents = true
+			Logger(subsystem: "app.faceid.FaceID", category: "Windows")
+				.notice("Made an invisible window click-through: \(number)")
 		}
 	}
 
