@@ -39,6 +39,7 @@ final class NotchCapsuleController {
 			model.prefersOpaque = WallpaperBrightness.isLight(on: screen)
 		}
 		model.style = Preferences.shared.notchStyle
+		model.shape = Preferences.shared.panelShape
 		model.transparency = Preferences.shared.notchTransparency
 
 		if window == nil {
@@ -126,7 +127,10 @@ final class NotchCapsuleController {
 		// part behind the cutout is simply never seen.
 		// Also measured: the panel hangs ~66pt below the menu bar, not the 38 I guessed.
 		// The short drop was what made it read as a stub rather than a panel.
-		let dropHeight = 66 + Preferences.shared.notchHeightAdjust
+		// The island is a separate object below the housing, so the window has to carry the
+		// gap and the island's own height on top of what an attached drop needs.
+		let isIsland = Preferences.shared.panelShape == .island
+		let dropHeight = (isIsland ? 92 : 66) + Preferences.shared.notchHeightAdjust
 		let size = CGSize(width: notchWidth, height: notchHeight + dropHeight)
 
 		let frame = NSRect(

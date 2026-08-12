@@ -47,6 +47,8 @@ final class NotchCapsuleModel {
 	var prefersOpaque = false
 	/// Mirrors `Preferences.notchStyle`, captured when the panel is shown.
 	var style: Preferences.NotchStyle = .normal
+	/// Mirrors `Preferences.panelShape`, captured when the panel is shown.
+	var shape: Preferences.PanelShape = .attached
 	var transparency: Double = 0.3
 	/// Drives the grow-out and retract-back. False collapses the panel to the notch's own
 	/// height, where it is hidden behind the cutout.
@@ -129,6 +131,44 @@ struct NotchCapsule: View {
 	/// resting lip rounded, which is the whole reason it hangs below the cutout at all.
 	private var cornerRadius: CGFloat { min(15, max(9, max(0, visibleHeight) / 1.9)) }
 
+	// MARK: - Island
+
+	/// Whether this panel is the detached island rather than the attached drop.
+	///
+	/// Compact phases stay attached whatever the setting: the resting padlock lives in the
+	/// menu bar band, and an island cannot be at rest — it is the thing that pops out.
+	private var isIsland: Bool { model.shape == .island && !model.phase.isCompact }
+
+	/// The gap between the housing and the island, so it reads as a separate object rather
+	/// than as the panel with its corners filed off.
+	private static let islandGap: CGFloat = 8
+
+	/// Rounded on all four sides, the way Apple Pay's card drops from the Dynamic Island.
+	private var islandShape: RoundedRectangle {
+		RoundedRectangle(cornerRadius: min(26, islandHeight / 2.1), style: .continuous)
+	}
+
+	private var islandHeight: CGFloat { max(0, height - notchInset - Self.islandGap) }
+	private var islandWidth: CGFloat { width * 0.86 }
+
+	/// Nebulark's gradient: black at the top running into green at the bottom.
+	///
+	/// Green only ever appears while the island is doing something — it has no resting
+	/// state — so this keeps the rule the rest of the app follows, that green means Face ID
+	/// and nothing else, while taking the look he built.
+	private var islandTint: LinearGradient {
+		LinearGradient(
+			stops: [
+				.init(color: .black.opacity(0.96), location: 0),
+				.init(color: .black.opacity(0.93), location: 0.20),
+				.init(color: .black.opacity(0.74), location: 0.46),
+				.init(color: Theme.faceID.opacity(0.34), location: 0.74),
+				.init(color: Theme.faceID.opacity(0.72), location: 1),
+			],
+			startPoint: .top,
+			endPoint: .bottom)
+	}
+
 	private var shape: UnevenRoundedRectangle {
 		UnevenRoundedRectangle(
 			topLeadingRadius: 0,
@@ -146,10 +186,18 @@ struct NotchCapsule: View {
 			// Grows downward out of the cutout and retracts back into it. Collapsed, the
 			// shape is exactly the notch's height, so it is completely hidden behind the
 			// physical cutout — nothing appears or disappears, it emerges.
-			background
-				.frame(
-					width: backgroundWidth,
-					height: expanded ? currentHeight : notchInset)
+			if isIsland {
+				islandBody
+					.frame(width: islandWidth, height: expanded ? islandHeight : 0)
+					.padding(.top, notchInset + Self.islandGap)
+					.opacity(expanded ? 1 : 0)
+					.scaleEffect(expanded ? 1 : 0.86, anchor: .top)
+			} else {
+				background
+					.frame(
+						width: backgroundWidth,
+						height: expanded ? currentHeight : notchInset)
+			}
 
 			// Locked: a padlock beside the cutout, at menu bar height.
 			//
@@ -201,6 +249,36 @@ struct NotchCapsule: View {
 		}
 		// The controller still owns the retract, so mirror it back in.
 		.onChange(of: model.isExpanded) { _, wanted in expanded = wanted }
+	}
+
+	/// The detached island: glass, Nebulark's gradient over it, and a lit rim.
+	private var islandBody: some View {
+		islandShape
+			// The backdrop, behind the glass. Nebulark's concept had both this and the tint
+			// over the top, and the pair is the point: glass frosts whatever is behind it,
+			// so without something back there the material has nothing to work with and the
+			// green never arrives.
+			.fill(
+				LinearGradient(
+					colors: [
+						.black,
+						Color(red: 0, green: 0.22, blue: 0.16),
+						Color(red: 0, green: 0.62, blue: 0.20),
+					],
+					startPoint: .top, endPoint: .bottom)
+			)
+			.glassEffect(.regular, in: islandShape)
+			.overlay {
+				islandShape
+					.fill(islandTint)
+					// `sourceAtop` so the gradient tints the glass rather than covering it —
+					// the frost and its highlights still read through.
+					.blendMode(.sourceAtop)
+			}
+			.overlay {
+				islandShape.strokeBorder(.white.opacity(0.16), lineWidth: 1)
+			}
+			.shadow(color: .black.opacity(0.5), radius: 14, y: 6)
 	}
 
 	/// The panel body.
@@ -367,11 +445,18 @@ struct NotchCapsule: View {
 	/// Sized against the visible drop. The mask does not touch the glyph, so it only has
 	/// to fit — it does not have to stay inside the opaque part.
 	private var glyphSide: CGFloat {
-		min(width, visibleHeight) * 0.52
+		isIsland ? min(islandWidth, islandHeight) * 0.46 : min(width, visibleHeight) * 0.52
 	}
 
 	/// Sits high in the drop, where the panel is still dark enough to carry it.
-	private var glyphTop: CGFloat { notchInset + visibleHeight * 0.30 - glyphSide / 2 }
+	private var glyphTop: CGFloat {
+		guard !isIsland else {
+			// Centred, because an island has no fade to stay clear of and no housing to sit
+			// under — it is a panel in its own right.
+			return notchInset + Self.islandGap + (islandHeight - glyphSide) / 2
+		}
+		return notchInset + visibleHeight * 0.30 - glyphSide / 2
+	}
 
 	/// Apple's own symbols, animated by Apple's own effects.
 	///

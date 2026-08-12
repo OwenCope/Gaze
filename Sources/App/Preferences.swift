@@ -33,7 +33,37 @@ final class Preferences {
 		}
 	}
 
+	/// Whether the panel hangs off the notch or detaches from it.
+	///
+	/// Nebulark's idea, and Owen's refinement of it: rather than the panel growing out of
+	/// the housing, a separate rounded island pops out below it — the shape Apple Pay drops
+	/// from the Dynamic Island. Kept as a setting rather than a replacement because the two
+	/// read very differently and people wanted different things in the server.
+	enum PanelShape: String, CaseIterable, Sendable {
+		/// Grows out of the housing, square across the top, rounded below.
+		case attached
+		/// A separate rounded island, detached from the notch and floating under it.
+		case island
+
+		var title: String {
+			switch self {
+			case .attached: return "Attached"
+			case .island: return "Island"
+			}
+		}
+
+		var detail: String {
+			switch self {
+			case .attached:
+				return "Grows out of the notch, the way the Dynamic Island expands"
+			case .island:
+				return "A separate rounded panel that drops below the notch"
+			}
+		}
+	}
+
 	private enum Key {
+		static let panelShape = "notchPanelShape"
 		static let notchStyle = "notchStyle"
 		static let notchTransparency = "notchTransparency"
 		static let notchHeightAdjust = "notchHeightAdjust"
@@ -85,6 +115,10 @@ final class Preferences {
 		didSet { defaults.set(notchStyle.rawValue, forKey: Key.notchStyle) }
 	}
 
+	var panelShape: PanelShape {
+		didSet { defaults.set(panelShape.rawValue, forKey: Key.panelShape) }
+	}
+
 	/// 0 = fully opaque, 1 = fully clear. Only applies to the semi-glass style.
 	var notchTransparency: Double {
 		didSet { defaults.set(notchTransparency, forKey: Key.notchTransparency) }
@@ -112,6 +146,9 @@ final class Preferences {
 		notchStyle =
 			defaults.string(forKey: Key.notchStyle)
 			.flatMap(NotchStyle.init(rawValue:)) ?? .normal
+		panelShape =
+			defaults.string(forKey: Key.panelShape)
+			.flatMap(PanelShape.init(rawValue:)) ?? .attached
 		notchTransparency = defaults.object(forKey: Key.notchTransparency) as? Double ?? 0.3
 		notchHeightAdjust = defaults.double(forKey: Key.notchHeightAdjust)
 		notchWidthAdjust = defaults.double(forKey: Key.notchWidthAdjust)

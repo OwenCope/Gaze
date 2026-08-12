@@ -23,6 +23,23 @@ struct NotchSettingsSection: View {
 	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			SettingsSection(title: "Notch", footer: styleFooter) {
+				// Shape before style: it decides what the style is even applied to.
+				SettingRow(
+					title: "Shape", symbol: "rectangle.portrait.topthird.inset.filled",
+					symbolTint: Theme.grey
+				) {
+					Picker("", selection: $settings.panelShape) {
+						ForEach(Preferences.PanelShape.allCases, id: \.self) { shape in
+							Text(shape.title).tag(shape)
+						}
+					}
+					.labelsHidden()
+					.pickerStyle(.menu)
+					.controlSize(.small)
+					.tint(Theme.label)
+					.fixedSize()
+				}
+				RowDivider()
 				styleRow
 				if settings.notchStyle == .semiLiquidGlass {
 					RowDivider()
@@ -58,6 +75,10 @@ struct NotchSettingsSection: View {
 
 	/// Says what the selected style actually is, so the thumbnail is not the only evidence.
 	private var styleFooter: String {
+		if settings.panelShape == .island {
+			return Preferences.PanelShape.island.detail
+				+ ". Nebulark's idea, built from his concept."
+		}
 		switch settings.notchStyle {
 		case .normal:
 			return "Solid black. On a dark wallpaper it's indistinguishable from the cutout."

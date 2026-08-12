@@ -87,10 +87,29 @@ enum AppActivation {
 	}
 
 	/// Drops back to a menu bar-only app once no windows remain.
+	///
+	/// Deferred, and deliberately.
+	///
+	/// unxnown reported the Dock icon appearing and then, on clicking it, "shows something
+	/// then vanishes instantly". This was why. Windows close and open in the same runloop
+	/// turn — the enrolment window dismisses itself at launch, Settings opens from the menu
+	/// while another window is still tearing down — and `onDisappear` fires in the gap where
+	/// the closing window is gone and the opening one is not yet on screen. Seeing no
+	/// windows, this dropped the app to `.accessory`, and switching activation policy while
+	/// a window is coming up orders it straight back out.
+	///
+	/// Waiting a beat and asking again means the question is answered once the runloop has
+	/// settled, rather than in the middle of a handover.
 	static func returnToBackgroundIfIdle() {
-		let hasVisibleWindow = NSApp.windows.contains { $0.isVisible && $0.canBecomeKey }
-		guard !hasVisibleWindow else { return }
-		NSApp.setActivationPolicy(.accessory)
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+			MainActor.assumeIsolated {
+				// `canBecomeKey` excludes the lock screen panel, which must never hold the
+				// app in `.regular` — it is on screen for most of the time the Mac is locked.
+				let hasWindow = NSApp.windows.contains { $0.isVisible && $0.canBecomeKey }
+				guard !hasWindow else { return }
+				NSApp.setActivationPolicy(.accessory)
+			}
+		}
 	}
 }
 
