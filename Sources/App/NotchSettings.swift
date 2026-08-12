@@ -173,6 +173,8 @@ private struct StylePreview: View {
 	let wallpaper: NSImage?
 	let wallpaperIsLight: Bool
 
+	@State private var isHovering = false
+
 	var body: some View {
 		Button(action: select) {
 			VStack(spacing: 5) {
@@ -209,20 +211,27 @@ private struct StylePreview: View {
 				}
 				.frame(width: 112, height: 62)
 				.clipShape(.rect(cornerRadius: 7, style: .continuous))
-				.overlay { SelectionRing(isSelected: isSelected, isHovering: false) }
+				.overlay {
+					RoundedRectangle(cornerRadius: 7, style: .continuous)
+						.strokeBorder(Theme.separator, lineWidth: 1)
+				}
 
 				// No `minimumScaleFactor`. It let "Semi Liquid Glass" shrink to 8pt — under
 				// the size macOS draws text at legibly — to avoid a wrap the layout can
 				// simply absorb.
 				Text(style.title)
 					.font(Typography.caption)
+					.fontWeight(isSelected ? .semibold : .regular)
 					.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
 					.lineLimit(2)
 					.multilineTextAlignment(.center)
 					.frame(height: 26, alignment: .top)
 			}
+			.padding(6)
+			.background { SelectionPlatter(isSelected: isSelected, isHovering: isHovering) }
 		}
 		.buttonStyle(.plain)
+		.onHover { isHovering = $0 }
 		.accessibilityLabel(style.title)
 		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
 		.animation(.easeOut(duration: 0.15), value: isSelected)
@@ -275,48 +284,31 @@ private struct StylePreview: View {
 	}
 }
 
-/// The selected state for a thumbnail.
+/// The glass the selected thumbnail sits on.
 ///
-/// A single ring cannot do this job. The tiles are photographs of the user's own wallpaper,
-/// so the ring has no known background to contrast against — and drawing it in `Theme.label`
-/// meant black-on-a-dark-photo in light mode, which is where "I can't see what is selected"
-/// came from.
+/// A ring was the wrong instrument. The tiles are photographs of the user's own wallpaper,
+/// so an outline has no known background to contrast against — every colour chosen for it is
+/// wrong over some picture, and stacking a halo and a tick on top to compensate was three
+/// devices doing one job badly.
 ///
-/// Three things together, so no one of them has to work alone: a ring in the accent, a dark
-/// halo just outside it that separates the ring from whatever the picture is doing, and a
-/// filled tick in the corner. The tick is the part that never fails — it is a different
-/// *shape*, not a different shade.
-private struct SelectionRing: View {
+/// Glass does not need contrast. It refracts what is behind it and carries its own specular
+/// edge, so the selected tile reads as *lifted* rather than as outlined — which works over
+/// any wallpaper and in either appearance, and is the same material the buttons in this
+/// window already use.
+private struct SelectionPlatter: View {
 
 	let isSelected: Bool
 	let isHovering: Bool
-	var cornerRadius: CGFloat = 7
 
 	private var shape: RoundedRectangle {
-		RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+		RoundedRectangle(cornerRadius: 13, style: .continuous)
 	}
 
 	var body: some View {
-		ZStack(alignment: .topTrailing) {
-			if isSelected {
-				// The halo is the accent's opposite, not a fixed black. Fixed black works in
-				// dark mode, where the ring is white — and in light mode the ring is black
-				// too, so the pair would have been black on black and failed in exactly the
-				// appearance the ring was added to fix.
-				shape.strokeBorder(Theme.onAccent.opacity(0.7), lineWidth: 4)
-				shape.strokeBorder(Theme.accent, lineWidth: 2)
-			} else {
-				shape.strokeBorder(
-					isHovering ? Theme.label.opacity(0.45) : Theme.separator, lineWidth: 1)
-			}
-
-			if isSelected {
-				Image(systemName: "checkmark.circle.fill")
-					.font(.system(size: 15, weight: .semibold))
-					.symbolRenderingMode(.palette)
-					.foregroundStyle(Theme.onAccent, Theme.accent)
-					.padding(4)
-			}
+		if isSelected {
+			Color.clear.glassEffect(.regular.interactive(), in: shape)
+		} else if isHovering {
+			shape.fill(Theme.hoverFill)
 		}
 	}
 }
@@ -355,15 +347,22 @@ private struct PreviewTile<Content: View>: View {
 				}
 				.frame(width: 112, height: 62)
 				.clipShape(.rect(cornerRadius: 7, style: .continuous))
-				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
+				// A hairline on the picture itself, so a pale wallpaper still has an edge.
+				.overlay {
+					RoundedRectangle(cornerRadius: 7, style: .continuous)
+						.strokeBorder(Theme.separator, lineWidth: 1)
+				}
 
 				Text(title)
 					.font(Typography.caption)
+					.fontWeight(isSelected ? .semibold : .regular)
 					.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
 					.lineLimit(2)
 					.multilineTextAlignment(.center)
 					.frame(height: 26, alignment: .top)
 			}
+			.padding(6)
+			.background { SelectionPlatter(isSelected: isSelected, isHovering: isHovering) }
 		}
 		.buttonStyle(.plain)
 		.onHover { isHovering = $0 }
