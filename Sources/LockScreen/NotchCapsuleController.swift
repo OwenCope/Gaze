@@ -140,9 +140,7 @@ final class NotchCapsuleController {
 		let isIsland = Preferences.shared.panelShape == .island
 		let cutout = NotchMetrics.width(on: screen) ?? 180
 		let dropHeight =
-			(isIsland
-				? IslandMetrics.dropHeight(cutoutWidth: cutout, windowWidth: notchWidth)
-				: 66)
+			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout) : 66)
 			+ Preferences.shared.notchHeightAdjust
 		let size = CGSize(width: notchWidth, height: notchHeight + dropHeight)
 

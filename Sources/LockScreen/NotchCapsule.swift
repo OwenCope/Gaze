@@ -75,16 +75,9 @@ enum IslandMetrics {
 	/// Empty space below the island for its shadow to fall into.
 	static let shadowRoom: CGFloat = 24
 
-	/// The bar at rest: the housing plus a short ear either side. The island matches it.
-	static let restingEar: CGFloat = 36
-
-	static func barWidth(cutoutWidth: CGFloat, windowWidth: CGFloat) -> CGFloat {
-		min(windowWidth, cutoutWidth + 2 * restingEar)
-	}
-
-	/// The window's drop for an island as wide as that bar.
-	static func dropHeight(cutoutWidth: CGFloat, windowWidth: CGFloat) -> CGFloat {
-		gap + barWidth(cutoutWidth: cutoutWidth, windowWidth: windowWidth) + shadowRoom
+	/// The window's drop for an island of a given cutout width.
+	static func dropHeight(cutoutWidth: CGFloat) -> CGFloat {
+		gap + cutoutWidth + shadowRoom
 	}
 }
 
@@ -185,15 +178,14 @@ struct NotchCapsule: View {
 	}
 
 	/// One dimension, used for both.
-	/// As wide as the bar it comes out of.
+	/// As wide as the housing it comes out of.
 	///
-	/// "As wide as the notch" means the notch you can *see* — the black bar with the padlock
-	/// on it — not the physical cutout hiding inside it. The bar is the housing plus an ear
-	/// either side, so an island matched to the cutout came out narrower than the thing above
-	/// it and read as a smaller object that happened to be nearby.
+	/// It was a fraction of the window, and the window is deliberately wider than the cutout
+	/// — so the island came out narrower than the notch and read as unrelated to it. Matching
+	/// the cutout is what makes it look like the thing the notch handed down.
 	private var islandSide: CGFloat {
 		let available = height - notchInset - Self.islandGap - Self.islandShadowRoom
-		return max(0, min(compactBarWidth, available))
+		return max(0, min(cutoutWidth > 0 ? cutoutWidth : width * 0.52, available))
 	}
 
 	private static var islandShadowRoom: CGFloat { IslandMetrics.shadowRoom }
@@ -548,7 +540,8 @@ struct NotchCapsule: View {
 		min(width, cutoutWidth + 2 * Self.restingEar)
 	}
 
-	private static var restingEar: CGFloat { IslandMetrics.restingEar }
+	/// Screen either side of the housing that the resting bar covers.
+	private static let restingEar: CGFloat = 36
 
 	/// The part of the panel that actually shows below the cutout.
 	private var visibleHeight: CGFloat { currentHeight - notchInset }
