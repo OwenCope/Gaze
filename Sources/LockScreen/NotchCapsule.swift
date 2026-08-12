@@ -331,13 +331,20 @@ struct NotchCapsule: View {
 		.onChange(of: model.isExpanded) { _, wanted in expanded = wanted }
 	}
 
-	/// The detached island: glass, Nebulark's gradient over it, and a lit rim.
+	/// The detached island: Nebulark's gradient, a tint over it, and a lit rim.
+	///
+	/// No `.glassEffect`, and the reason is written six lines below in `background` — where
+	/// it was already learned once. This window lives in its own SkyLight space, so there is
+	/// nothing behind it in the compositor for a material to sample. Unbacked glass does not
+	/// fail invisibly; it falls back to a pale grey slab, and a pale grey slab under a dark
+	/// island is exactly the faint rectangle that gives away that the floating object is a
+	/// window. It looked right on the desktop, where there *is* something behind it, which is
+	/// why the desktop preview never showed the problem.
+	///
+	/// The gradient does the work instead. That is also what the attached styles do, for the
+	/// same reason, and now the whole panel is honest about the space it lives in.
 	private var islandBody: some View {
 		islandShape
-			// The backdrop, behind the glass. Nebulark's concept had both this and the tint
-			// over the top, and the pair is the point: glass frosts whatever is behind it,
-			// so without something back there the material has nothing to work with and the
-			// green never arrives.
 			.fill(
 				LinearGradient(
 					colors: [
@@ -347,12 +354,9 @@ struct NotchCapsule: View {
 					],
 					startPoint: .top, endPoint: .bottom)
 			)
-			.glassEffect(.regular, in: islandShape)
 			.overlay {
 				islandShape
 					.fill(islandTint)
-					// `sourceAtop` so the gradient tints the glass rather than covering it —
-					// the frost and its highlights still read through.
 					.blendMode(.sourceAtop)
 			}
 			.overlay {

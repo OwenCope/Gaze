@@ -50,7 +50,11 @@ final class LockWatcher {
 	private static let requiredMatchDuration: TimeInterval = 2.0
 
 	/// How long the opened padlock stays before the panel goes home.
-	private static let unlockAnimationDuration: TimeInterval = 0.7
+	///
+	/// Three seconds, not one. The Mac is already unlocked by this point, so the padlock is
+	/// costing nobody anything — and it is the only part of the sequence you get to look at
+	/// without a login window in front of it.
+	private static let unlockAnimationDuration: TimeInterval = 3.0
 
 	/// How long to wait for the Mac to actually unlock before giving up on it.
 	private static let unlockGracePeriod: TimeInterval = 3.0

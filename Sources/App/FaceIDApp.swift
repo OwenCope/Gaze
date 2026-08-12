@@ -152,9 +152,10 @@ final class AppServices {
 			// The tick, while the password goes in.
 			capsule.update(phase: .success)
 			try? await Task.sleep(for: .seconds(2))
-			// Then the Mac opens, and the padlock lets go where it has been sitting.
+			// Then the Mac opens, and the padlock lets go where it has been sitting. Held for
+			// the same three seconds `LockWatcher.unlockAnimationDuration` holds it.
 			capsule.update(phase: .unlocked)
-			try? await Task.sleep(for: .seconds(2))
+			try? await Task.sleep(for: .seconds(3))
 			capsule.hide()
 		}
 	}
