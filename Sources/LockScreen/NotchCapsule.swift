@@ -672,7 +672,11 @@ struct NotchCapsule: View {
 			.font(
 				.system(
 					size: glyphFontSize,
-					weight: showsGlassTick ? .bold : (model.phase == .success ? .semibold : .regular)))
+					// Heavy inside the disc. `checkmark` is a stroked glyph, and at bold it
+					// came out as a thin diagonal scrawl against a large filled circle —
+					// the stroke has to thicken with the disc or the tick reads as a
+					// scratch on it rather than a mark in it.
+					weight: showsGlassTick ? .heavy : (model.phase == .success ? .semibold : .regular)))
 			// Hierarchical only for the tick, where the softened disc is what makes it read
 			// as frosted rather than as a sticker. On the Face ID mark it just dims the whole
 			// glyph, which left it washed out against the glass.
@@ -731,7 +735,7 @@ struct NotchCapsule: View {
 	/// The bare tick is drawn inside a disc, so it has to be smaller than a symbol that
 	/// *is* the disc.
 	private var glyphFontSize: CGFloat {
-		showsGlassTick ? glyphSide * 0.46 : glyphSide
+		showsGlassTick ? glyphSide * 0.5 : glyphSide
 	}
 
 	/// The filled variant, rendered hierarchically.
