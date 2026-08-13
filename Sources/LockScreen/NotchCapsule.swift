@@ -271,17 +271,30 @@ struct NotchCapsule: View {
 						? (isIsland || isOnEar ? restingBarHeight : currentHeight)
 						: notchInset)
 
-			if isIsland && showsDrop {
+			// Always in the hierarchy while this is island mode, shown or not.
+			//
+			// It used to be inserted the moment scanning began, so its offset and scale were
+			// already at their final values when it appeared — it popped into place with no
+			// travel at all, while the attached panel got the full spring. Keeping the view
+			// mounted and animating a *value* is what gives both shapes the same timing.
+			if model.shape == .island && !isOnEar {
 				islandBody
 					.frame(width: islandWidth, height: islandHeight)
+					// The mark rides *inside* the island rather than being positioned against
+					// the window. Drawn separately it stayed at its final place while the
+					// island travelled, so the two came apart mid-animation and the glyph
+					// hung below a panel that had not arrived yet.
+					.overlay { content.frame(width: glyphSide, height: glyphSide) }
 					.padding(.top, notchInset + Self.islandGap)
-					// Travels, rather than growing in place. Collapsed it is up inside the
-					// cutout at almost no size; expanded it has come down to where it sits.
-					// Same two values in reverse on the way back, so it leaves the way it
-					// arrived instead of simply disappearing.
-					.offset(y: expanded ? 0 : islandHiddenOffset)
-					.scaleEffect(expanded ? 1 : 0.24, anchor: .top)
-					.opacity(expanded ? 1 : 0)
+					// Collapsed it is up inside the cutout at almost no size; out, it has come
+					// down to where it sits. The same two values in reverse on the way back,
+					// so it leaves the way it arrived rather than simply disappearing.
+					.offset(y: islandIsOut ? 0 : islandHiddenOffset)
+					.scaleEffect(islandIsOut ? 1 : 0.24, anchor: .top)
+					.opacity(islandIsOut ? 1 : 0)
+					.animation(
+						islandIsOut ? NotchAnimation.expand : NotchAnimation.retract,
+						value: islandIsOut)
 			}
 
 			// Locked: a padlock beside the cutout, at menu bar height.
@@ -314,7 +327,7 @@ struct NotchCapsule: View {
 					.transition(.opacity.combined(with: .scale(scale: 0.7)))
 			}
 
-			if showsDrop {
+			if showsDrop && !isIsland {
 				content
 					.frame(width: glyphSide, height: glyphSide)
 					// Centred in the solid band — not the whole window (whose top third is
@@ -619,6 +632,9 @@ struct NotchCapsule: View {
 		isOnEar ? .normal : model.style
 	}
 
+	/// Whether the island is currently down out of the notch.
+	private var islandIsOut: Bool { isIsland && expanded }
+
 	/// True when the background shape is the panel that hangs below the housing, rather than
 	/// just the bar the padlock sits on.
 	private var barIsTheDrop: Bool { showsDrop && !isIsland }
@@ -653,11 +669,14 @@ struct NotchCapsule: View {
 	/// the genuine article rather than an imitation of it.
 	private var content: some View {
 		Image(systemName: symbolName)
-			.font(.system(size: glyphSide, weight: model.phase == .success ? .semibold : .regular))
+			.font(
+				.system(
+					size: glyphFontSize,
+					weight: showsGlassTick ? .bold : (model.phase == .success ? .semibold : .regular)))
 			// Hierarchical only for the tick, where the softened disc is what makes it read
 			// as frosted rather than as a sticker. On the Face ID mark it just dims the whole
 			// glyph, which left it washed out against the glass.
-			.symbolRenderingMode(model.phase == .success ? .hierarchical : .monochrome)
+			.symbolRenderingMode(model.phase == .success && !showsGlassTick ? .hierarchical : .monochrome)
 			.foregroundStyle(symbolTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
 			// Breathing while it looks — the system effect, not an opacity loop.
@@ -678,6 +697,41 @@ struct NotchCapsule: View {
 			// thing, and it lets go all at once.
 			.symbolEffect(.bounce.up, options: .speed(0.9), value: model.phase == .unlocked)
 			.animation(.spring(response: 0.36, dampingFraction: 0.72), value: model.phase)
+			// The glass disc, on the style that is made of glass.
+			//
+			// Behind the symbol rather than around it, so the Image keeps its identity and
+			// `.replace.magic` still morphs the mark into the tick. Building it as a separate
+			// glyph would have swapped one view for another and lost the morph — the mistake
+			// that made this transition choppy last time.
+			.background {
+				if showsGlassTick {
+					// Tinted, not just glazed.
+					//
+					// `.glassEffect` alone came out flat grey: the disc sits *inside* the
+					// panel, which is nearly black, so the material had almost nothing to
+					// refract and fell back to a wash. The same trap the island fell into.
+					// A green fill carries the colour, the material adds the depth, and a lit
+					// rim gives it an edge — the disc reads as green glass on any wallpaper.
+					Circle()
+						.fill(Theme.faceID.opacity(0.30))
+						.background { Circle().fill(.ultraThinMaterial) }
+						.overlay { Circle().strokeBorder(.white.opacity(0.32), lineWidth: 1) }
+						.frame(width: glyphSide, height: glyphSide)
+						.transition(.opacity.combined(with: .scale(scale: 0.75)))
+				}
+			}
+			.animation(.spring(response: 0.34, dampingFraction: 0.8), value: showsGlassTick)
+	}
+
+	/// True when the tick should sit in a disc of glass rather than carry its own filled one.
+	private var showsGlassTick: Bool {
+		model.phase == .success && effectiveStyle == .liquidGlass
+	}
+
+	/// The bare tick is drawn inside a disc, so it has to be smaller than a symbol that
+	/// *is* the disc.
+	private var glyphFontSize: CGFloat {
+		showsGlassTick ? glyphSide * 0.46 : glyphSide
 	}
 
 	/// The filled variant, rendered hierarchically.
@@ -695,7 +749,9 @@ struct NotchCapsule: View {
 	private var symbolName: String {
 		switch model.phase {
 		case .locked, .unlocked: return "lock.fill"
-		case .success: return "checkmark.circle.fill"
+		// A bare tick when a glass disc is drawn behind it — two circles, one filled and one
+		// of glass, would read as a badge stuck on a badge.
+		case .success: return showsGlassTick ? "checkmark" : "checkmark.circle.fill"
 		case .scanning, .notRecognised: return "faceid"
 		}
 	}
@@ -708,7 +764,9 @@ struct NotchCapsule: View {
 	/// needs to be unambiguous.
 	private var symbolTint: Color {
 		switch model.phase {
-		case .success: return Theme.faceID
+		// White inside the glass disc: the green is in the glass, and a green tick on a green
+		// disc loses the shape that carries the meaning.
+		case .success: return showsGlassTick ? .white : Theme.faceID
 		case .notRecognised: return Theme.danger
 		case .locked, .scanning, .unlocked: return .white
 		}
