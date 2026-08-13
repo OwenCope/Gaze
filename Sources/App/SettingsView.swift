@@ -562,8 +562,8 @@ struct SettingsView: View {
 		SettingsSection(
 			title: "Appearance",
 			footer: settings.appTheme == .glass
-				? "Lets much more of your desktop through. Follows whether your Mac is set to "
-					+ "light or dark."
+				? "The same material as the notch panel: dark at the top, thinning to clear at "
+					+ "the bottom. Always dark, since the gradient is."
 				: "Applies to this window. Setup and the recognition test stay dark so the "
 					+ "camera preview has a neutral surround, and the lock screen panel has "
 					+ "its own Style above."

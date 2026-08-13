@@ -92,7 +92,7 @@ final class Preferences {
 		case system
 		case light
 		case dark
-		/// Follows the system, but with far more of the desktop coming through.
+		/// The notch panel's own material: dark at the top, thinning to clear at the foot.
 		case glass
 
 		var title: String {
@@ -108,8 +108,11 @@ final class Preferences {
 		var colorScheme: ColorScheme? {
 			switch self {
 			case .light: return .light
-			case .dark: return .dark
-			case .system, .glass: return nil
+			// Dark, and not by preference. The glass theme is a *black* gradient thinning
+			// downward, so the ground is dark whatever the Mac is set to — light labels on
+			// it would be the one combination that cannot be read.
+			case .dark, .glass: return .dark
+			case .system: return nil
 			}
 		}
 	}

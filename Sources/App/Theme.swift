@@ -141,11 +141,18 @@ enum Theme {
 /// out of the notch and the window you configure it from should be made of one material.
 struct WindowGlass: View {
 	var keepsTitle = false
-	/// Lets far more of the desktop through, for the theme named after it.
+	/// The Semi Liquid Glass theme: the notch panel's material, on a window.
 	var extraTranslucent = false
 
+	/// Black, always, when this is the glass theme.
+	///
+	/// `Theme.scrim` flips to white in a light appearance, which is right for a window that
+	/// is trying to look like the system's own — and wrong here. This gradient *is* the
+	/// theme: dark at the top thinning to clear at the foot, the same thing the notch panel
+	/// does. Flipped white it came out as a pale slab, which is not the material anyone
+	/// picked.
 	private func scrim(_ opacity: Double) -> Color {
-		Theme.scrim(extraTranslucent ? opacity * 0.5 : opacity)
+		extraTranslucent ? .black.opacity(opacity) : Theme.scrim(opacity)
 	}
 
 	var body: some View {
@@ -154,10 +161,10 @@ struct WindowGlass: View {
 
 			LinearGradient(
 				stops: [
-					.init(color: scrim(0.74), location: 0),
-					.init(color: scrim(0.62), location: 0.32),
-					.init(color: scrim(0.44), location: 0.68),
-					.init(color: scrim(0.26), location: 1),
+					.init(color: scrim(extraTranslucent ? 0.86 : 0.74), location: 0),
+					.init(color: scrim(extraTranslucent ? 0.66 : 0.62), location: 0.32),
+					.init(color: scrim(extraTranslucent ? 0.38 : 0.44), location: 0.68),
+					.init(color: scrim(extraTranslucent ? 0.12 : 0.26), location: 1),
 				],
 				startPoint: .top,
 				endPoint: .bottom)
