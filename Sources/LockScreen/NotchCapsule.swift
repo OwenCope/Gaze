@@ -291,9 +291,13 @@ struct NotchCapsule: View {
 			// and the same padlock opening where it has sat all along.
 			if model.phase.showsLockChip {
 				lockChip
-					// Positioned against the *resting* bar, not the window — the window is
-					// wider, so aligning to it put the padlock outside the black.
-					.frame(width: backgroundWidth, alignment: .leading)
+					// Always positioned against the *resting* bar, never the panel.
+					//
+					// This used `backgroundWidth`, which is the resting bar while compact and
+					// the full window once a panel drops — so the padlock slid outward the
+					// moment scanning began, ending up further left than the ear it had been
+					// sitting in. The bar it belongs to does not move, so neither should it.
+					.frame(width: compactBarWidth, alignment: .leading)
 					.opacity(expanded ? 1 : 0)
 					.transition(.opacity.combined(with: .scale(scale: 0.7)))
 			}
@@ -526,7 +530,7 @@ struct NotchCapsule: View {
 			.font(.system(size: 12, weight: .semibold))
 			.foregroundStyle(earTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
-			.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
+			.modifier(Breathing(isActive: model.phase == .scanning))
 			.symbolEffect(.bounce, value: model.phase == .notRecognised)
 			.frame(width: earWidth, height: restingBarHeight)
 	}
@@ -643,7 +647,7 @@ struct NotchCapsule: View {
 			.foregroundStyle(symbolTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
 			// Breathing while it looks — the system effect, not an opacity loop.
-			.symbolEffect(.breathe, options: .repeating, isActive: model.phase == .scanning)
+			.modifier(Breathing(isActive: model.phase == .scanning))
 			.symbolEffect(.bounce, value: model.phase == .notRecognised)
 			// The shackle springing open. `.bounce` on the padlock is the one moment in the
 			// sequence that should feel mechanical rather than smooth — a lock is a physical
@@ -683,6 +687,24 @@ struct NotchCapsule: View {
 		case .success: return Theme.faceID
 		case .notRecognised: return Theme.danger
 		case .locked, .scanning, .unlocked: return .white
+		}
+	}
+}
+
+/// Breathing, and only while it is meant to.
+///
+/// `.symbolEffect(.breathe, isActive:)` finishes the cycle it is in before it stops, so the
+/// tick inherited one last pulse from the Face ID mark it replaced — a confirmation that
+/// throbs reads as still working rather than as done. Attaching the effect only while it
+/// applies means the tick never carries it at all.
+private struct Breathing: ViewModifier {
+	let isActive: Bool
+
+	func body(content: Content) -> some View {
+		if isActive {
+			content.symbolEffect(.breathe, options: .repeating)
+		} else {
+			content
 		}
 	}
 }
