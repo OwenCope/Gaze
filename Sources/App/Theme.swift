@@ -161,10 +161,14 @@ struct WindowGlass: View {
 
 			LinearGradient(
 				stops: [
-					.init(color: scrim(extraTranslucent ? 0.86 : 0.74), location: 0),
-					.init(color: scrim(extraTranslucent ? 0.66 : 0.62), location: 0.32),
-					.init(color: scrim(extraTranslucent ? 0.38 : 0.44), location: 0.68),
-					.init(color: scrim(extraTranslucent ? 0.12 : 0.26), location: 1),
+					// The glass theme runs a longer way than the default: nearly opaque at the
+					// top so headings sit on something solid, and nearly clear at the foot.
+					// A gradient that only travels from 0.86 to 0.12 reads as "slightly
+					// uneven"; one that travels from 0.94 to 0.04 reads as a gradient.
+					.init(color: scrim(extraTranslucent ? 0.94 : 0.74), location: 0),
+					.init(color: scrim(extraTranslucent ? 0.78 : 0.62), location: 0.32),
+					.init(color: scrim(extraTranslucent ? 0.34 : 0.44), location: 0.68),
+					.init(color: scrim(extraTranslucent ? 0.04 : 0.26), location: 1),
 				],
 				startPoint: .top,
 				endPoint: .bottom)
