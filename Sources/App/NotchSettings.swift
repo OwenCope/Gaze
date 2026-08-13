@@ -43,10 +43,10 @@ struct NotchSettingsSection: View {
 
 				// Ruken's suggestion, as a choice rather than a change.
 				//
-				// Only shown for the island. Attached mode *is* a panel with the mark in it,
-				// so offering to move the mark out of it is offering to turn attached into
-				// something else — the choice belongs where both answers are coherent.
-				if settings.panelShape == .island {
+				// Only shown for the attached panel. The island *is* a panel built to carry
+				// the mark, so taking the mark out of it leaves an empty square hanging under
+				// the notch — the choice only has two sensible answers in attached mode.
+				if settings.panelShape == .attached {
 					RowDivider()
 					choiceRow(
 						title: "Face ID mark",
@@ -403,24 +403,43 @@ private struct ShapeSketch: View {
 			} else {
 				switch shape {
 				case .attached:
+					// One shape: the housing continuing downward, square across the top and
+					// rounded only along the bottom.
 					UnevenRoundedRectangle(
 						topLeadingRadius: 0, bottomLeadingRadius: 7,
 						bottomTrailingRadius: 7, topTrailingRadius: 0, style: .continuous
 					)
 					.fill(.black.opacity(0.88))
-					.frame(width: 62, height: barHeight + 20)
-					.overlay(alignment: .center) { glyph(.face).padding(.top, 6) }
+					.frame(width: 62, height: barHeight + 18)
+					.overlay(alignment: .center) { glyph(.face).padding(.top, 5) }
 
 				case .island:
-					// The bar it comes out of, then the island itself, detached from it.
+					// Two shapes, proportioned against the real ones.
+					//
+					// The bar is one notch tall and wider than the island; the island is a
+					// square with the same radius ratio the panel uses, separated by a gap
+					// small enough to read as "just detached" rather than as two unrelated
+					// objects. It was a tall bar over a small square with a wide gap, which
+					// described neither.
 					Rectangle()
-						.fill(.black.opacity(0.88))
-						.frame(width: 46, height: barHeight)
-					RoundedRectangle(cornerRadius: 8, style: .continuous)
 						.fill(.black.opacity(0.9))
-						.frame(width: 30, height: 30)
+						.frame(width: 54, height: 9)
+					RoundedRectangle(cornerRadius: 10, style: .continuous)
+						.fill(.black.opacity(0.92))
+						.frame(width: 36, height: 36)
+						// The hint of green the real island carries at its foot.
+						.overlay {
+							RoundedRectangle(cornerRadius: 10, style: .continuous)
+								.fill(
+									LinearGradient(
+										stops: [
+											.init(color: .clear, location: 0.45),
+											.init(color: Theme.faceID.opacity(0.22), location: 1),
+										],
+										startPoint: .top, endPoint: .bottom))
+						}
 						.overlay { glyph(.face) }
-						.padding(.top, 4)
+						.padding(.top, 2)
 				}
 			}
 			Spacer(minLength: 0)
