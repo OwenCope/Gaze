@@ -98,7 +98,10 @@ struct SettingsView: View {
 		// with two different fills either side is what cut the window into a "web app with a
 		// sidebar". On one unbroken sheet, the sidebar is just the left margin of the glass —
 		// the way the Siri panel and Spotlight treat their edges.
-		.background(WindowGlass())
+		.background(WindowGlass(extraTranslucent: settings.appTheme == .glass))
+		// Nil for "follow system", which is what following the system means — forcing a
+		// scheme is the thing this setting exists to make optional.
+		.preferredColorScheme(settings.appTheme.colorScheme)
 		.onAppear { AppActivation.bringToFront() }
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
 	}
@@ -202,6 +205,7 @@ struct SettingsView: View {
 					securitySection
 					behaviourSection
 					updatesSection
+					appearanceSection
 				case .credits:
 					creditsSection
 				case .about:
@@ -545,6 +549,38 @@ struct SettingsView: View {
 		}
 		notes.append("Face ID only watches for your screen locking while it's running.")
 		return notes.joined(separator: " ")
+	}
+
+	// MARK: - Appearance
+
+	/// The app's own look, at the foot of the pane.
+	///
+	/// Last on purpose: everything above it configures what Face ID *does*, and this
+	/// configures what the window you are reading is made of. It is the one setting whose
+	/// effect you can see the instant you change it, so it does not need to be found first.
+	private var appearanceSection: some View {
+		SettingsSection(
+			title: "Appearance",
+			footer: settings.appTheme == .glass
+				? "Lets much more of your desktop through. Follows whether your Mac is set to "
+					+ "light or dark."
+				: "Applies to this window. Setup and the recognition test stay dark so the "
+					+ "camera preview has a neutral surround, and the lock screen panel has "
+					+ "its own Style above."
+		) {
+			SettingRow(title: "Theme", symbol: "circle.lefthalf.filled") {
+				Picker("", selection: $settings.appTheme) {
+					ForEach(Preferences.AppTheme.allCases, id: \.self) { theme in
+						Text(theme.title).tag(theme)
+					}
+				}
+				.labelsHidden()
+				.pickerStyle(.menu)
+				.controlSize(.small)
+				.tint(Theme.label)
+				.fixedSize()
+			}
+		}
 	}
 
 	// MARK: - Updates

@@ -361,43 +361,46 @@ struct NotchCapsule: View {
 		.onChange(of: model.isExpanded) { _, wanted in expanded = wanted }
 	}
 
-	/// The detached island: Nebulark's gradient, a tint over it, and a lit rim.
+	/// The detached island.
 	///
-	/// No `.glassEffect`, and the reason is written six lines below in `background` — where
-	/// it was already learned once. This window lives in its own SkyLight space, so there is
-	/// nothing behind it in the compositor for a material to sample. Unbacked glass does not
-	/// fail invisibly; it falls back to a pale grey slab, and a pale grey slab under a dark
-	/// island is exactly the faint rectangle that gives away that the floating object is a
-	/// window. It looked right on the desktop, where there *is* something behind it, which is
-	/// why the desktop preview never showed the problem.
+	/// Honours Style, which it did not before: the fill was hardcoded, so choosing Normal or
+	/// Liquid Glass changed the bar above the island and left the island itself identical.
+	/// A style setting that visibly applies to one half of the panel is worse than none.
 	///
-	/// The gradient does the work instead. That is also what the attached styles do, for the
-	/// same reason, and now the whole panel is honest about the space it lives in.
+	/// Nebulark's green stays in every style — it is the island's own identity rather than a
+	/// property of the material, and it is the one thing that makes this shape *this* shape.
 	private var islandBody: some View {
 		islandShape
-			.fill(
-				LinearGradient(
-					colors: [
-						.black,
-						.black,
-						Color(red: 0, green: 0.10, blue: 0.05),
-					],
-					startPoint: .top, endPoint: .bottom)
-			)
-			.overlay {
-				islandShape
-					.fill(islandTint)
-					.blendMode(.sourceAtop)
-			}
-			.overlay {
-				islandShape.fill(islandGreen).blendMode(.sourceAtop)
-			}
-			.overlay {
-				islandShape.strokeBorder(.white.opacity(0.16), lineWidth: 1)
-			}
+			.fill(islandFill)
+			.background { islandBacking }
+			.overlay { islandShape.fill(islandGreen).blendMode(.sourceAtop) }
+			.overlay { islandShape.strokeBorder(.white.opacity(0.16), lineWidth: 1) }
 			// Softer and tighter than it was. A shadow large enough to need a lot of margin
 			// is a shadow large enough to get clipped by something.
 			.shadow(color: .black.opacity(0.42), radius: 10, y: 4)
+	}
+
+	/// The island's own colour, at the density the chosen style asks for.
+	private var islandFill: Color {
+		switch model.style {
+		case .normal:
+			return .black
+		case .semiLiquidGlass:
+			return .black.opacity(
+				NotchGlass.semiTint(transparency: model.transparency, boost: lightWallpaperBoost))
+		case .liquidGlass:
+			return .black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))
+		}
+	}
+
+	/// A blur behind the translucent styles, and nothing behind the solid one.
+	@ViewBuilder
+	private var islandBacking: some View {
+		if model.style == .normal {
+			islandShape.fill(.black)
+		} else {
+			islandShape.fill(.ultraThinMaterial)
+		}
 	}
 
 	/// The panel body.

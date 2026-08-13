@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Observation
 
 /// User-facing feature switches.
@@ -85,7 +86,36 @@ final class Preferences {
 		}
 	}
 
+	/// How the app's own windows are drawn.
+	enum AppTheme: String, CaseIterable, Sendable {
+		/// Whatever the Mac is set to.
+		case system
+		case light
+		case dark
+		/// Follows the system, but with far more of the desktop coming through.
+		case glass
+
+		var title: String {
+			switch self {
+			case .system: return "Follow system"
+			case .light: return "Light"
+			case .dark: return "Dark"
+			case .glass: return "Semi Liquid Glass"
+			}
+		}
+
+		/// Nil means "do not force one", which is what following the system means.
+		var colorScheme: ColorScheme? {
+			switch self {
+			case .light: return .light
+			case .dark: return .dark
+			case .system, .glass: return nil
+			}
+		}
+	}
+
 	private enum Key {
+		static let appTheme = "appTheme"
 		static let glyphPlacement = "notchGlyphPlacement"
 		static let panelShape = "notchPanelShape"
 		static let notchStyle = "notchStyle"
@@ -147,6 +177,10 @@ final class Preferences {
 		didSet { defaults.set(glyphPlacement.rawValue, forKey: Key.glyphPlacement) }
 	}
 
+	var appTheme: AppTheme {
+		didSet { defaults.set(appTheme.rawValue, forKey: Key.appTheme) }
+	}
+
 	/// 0 = fully opaque, 1 = fully clear. Only applies to the semi-glass style.
 	var notchTransparency: Double {
 		didSet { defaults.set(notchTransparency, forKey: Key.notchTransparency) }
@@ -180,6 +214,9 @@ final class Preferences {
 		glyphPlacement =
 			defaults.string(forKey: Key.glyphPlacement)
 			.flatMap(GlyphPlacement.init(rawValue:)) ?? .centred
+		appTheme =
+			defaults.string(forKey: Key.appTheme)
+			.flatMap(AppTheme.init(rawValue:)) ?? .system
 		notchTransparency = defaults.object(forKey: Key.notchTransparency) as? Double ?? 0.3
 		notchHeightAdjust = defaults.double(forKey: Key.notchHeightAdjust)
 		notchWidthAdjust = defaults.double(forKey: Key.notchWidthAdjust)

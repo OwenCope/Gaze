@@ -141,6 +141,12 @@ enum Theme {
 /// out of the notch and the window you configure it from should be made of one material.
 struct WindowGlass: View {
 	var keepsTitle = false
+	/// Lets far more of the desktop through, for the theme named after it.
+	var extraTranslucent = false
+
+	private func scrim(_ opacity: Double) -> Color {
+		Theme.scrim(extraTranslucent ? opacity * 0.5 : opacity)
+	}
 
 	var body: some View {
 		ZStack {
@@ -148,10 +154,10 @@ struct WindowGlass: View {
 
 			LinearGradient(
 				stops: [
-					.init(color: Theme.scrim(0.74), location: 0),
-					.init(color: Theme.scrim(0.62), location: 0.32),
-					.init(color: Theme.scrim(0.44), location: 0.68),
-					.init(color: Theme.scrim(0.26), location: 1),
+					.init(color: scrim(0.74), location: 0),
+					.init(color: scrim(0.62), location: 0.32),
+					.init(color: scrim(0.44), location: 0.68),
+					.init(color: scrim(0.26), location: 1),
 				],
 				startPoint: .top,
 				endPoint: .bottom)
