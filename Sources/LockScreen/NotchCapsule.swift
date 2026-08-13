@@ -388,7 +388,7 @@ struct NotchCapsule: View {
 	/// back to a pale grey slab on a dark lock screen.
 	private var background: some View {
 		Group {
-			switch model.style {
+			switch effectiveStyle {
 			case .normal:
 				// Genuinely opaque, and genuinely *un-faded*.
 				//
@@ -429,26 +429,28 @@ struct NotchCapsule: View {
 	/// fade has nothing to resolve into — it just softens the one edge that should be as
 	/// crisp as the housing it continues, and every other notch app's bar is crisp there.
 	private var fade: some View {
-		LinearGradient(
-			// Also suppressed in island mode. The bar there is only ever the resting bar —
-			// the drop is a separate object below it — so a gradient meant for a tall panel
-			// was dissolving the bottom third of a shape exactly one notch tall, and the bar
-			// came out visibly shorter than the housing beside it.
-			stops: model.phase.isCompact || isIsland
-				? [
-					.init(color: .black, location: 0),
-					.init(color: .black, location: 1),
-				]
-				: [
-					.init(color: .black, location: 0),
-					.init(color: .black, location: 0.36),
-					.init(color: .black.opacity(0.72), location: 0.55),
-					.init(color: .black.opacity(0.38), location: 0.76),
-					.init(color: .black.opacity(0.12), location: 0.92),
-					.init(color: .clear, location: 1),
-				],
-			startPoint: .top,
-			endPoint: .bottom)
+		// Applied only when this shape *is* the panel that hangs below the housing.
+		//
+		// In island and ear modes the background is the resting bar and nothing more — the
+		// island is a separate object below it, and on the ear nothing drops at all. A
+		// gradient meant for a tall panel was dissolving the bottom third of a shape exactly
+		// one notch tall, so the bar came out visibly shorter than the housing beside it.
+		// Stating the condition positively is what stops this needing fixing once per mode.
+		let stops: [Gradient.Stop] =
+			barIsTheDrop
+			? [
+				.init(color: .black, location: 0),
+				.init(color: .black, location: 0.36),
+				.init(color: .black.opacity(0.72), location: 0.55),
+				.init(color: .black.opacity(0.38), location: 0.76),
+				.init(color: .black.opacity(0.12), location: 0.92),
+				.init(color: .clear, location: 1),
+			]
+			: [
+				.init(color: .black, location: 0),
+				.init(color: .black, location: 1),
+			]
+		return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
 	}
 
 	private var glassTint: Double {
@@ -586,6 +588,22 @@ struct NotchCapsule: View {
 	/// to fit — it does not have to stay inside the opaque part.
 	/// True when the mark sits on the ear rather than in a panel.
 	private var isOnEar: Bool { model.glyphPlacement == .ear }
+
+	/// The style actually drawn, which is not always the one that is selected.
+	///
+	/// On the ear the bar is pure black whatever the setting says. It sits *inside* the menu
+	/// bar band, flush against a camera housing that is true black — glass there does not read
+	/// as glass, it reads as the notch being slightly the wrong colour, and a translucent
+	/// panel laid over a black cutout comes out lighter than the hole beside it. Solid is the
+	/// only finish that disappears into the hardware, which is the whole point of a bar that
+	/// never leaves the band.
+	private var effectiveStyle: Preferences.NotchStyle {
+		isOnEar ? .normal : model.style
+	}
+
+	/// True when the background shape is the panel that hangs below the housing, rather than
+	/// just the bar the padlock sits on.
+	private var barIsTheDrop: Bool { showsDrop && !isIsland }
 
 	/// Whether anything drops out of the notch at all.
 	///

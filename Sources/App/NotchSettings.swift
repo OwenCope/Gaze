@@ -42,15 +42,21 @@ struct NotchSettingsSection: View {
 				styleRow
 
 				// Ruken's suggestion, as a choice rather than a change.
-				RowDivider()
-				choiceRow(
-					title: "Face ID mark",
-					values: Preferences.GlyphPlacement.allCases,
+				//
+				// Only shown for the island. Attached mode *is* a panel with the mark in it,
+				// so offering to move the mark out of it is offering to turn attached into
+				// something else — the choice belongs where both answers are coherent.
+				if settings.panelShape == .island {
+					RowDivider()
+					choiceRow(
+						title: "Face ID mark",
+						values: Preferences.GlyphPlacement.allCases,
 					titleFor: \.title,
-					isSelected: { settings.glyphPlacement == $0 },
-					select: { settings.glyphPlacement = $0 }
-				) { placement in
-					ShapeSketch(shape: settings.panelShape, placement: placement)
+						isSelected: { settings.glyphPlacement == $0 },
+						select: { settings.glyphPlacement = $0 }
+					) { placement in
+						ShapeSketch(shape: settings.panelShape, placement: placement)
+					}
 				}
 				if settings.notchStyle == .semiLiquidGlass {
 					RowDivider()
@@ -123,6 +129,9 @@ struct NotchSettingsSection: View {
 				.font(Typography.row)
 				.foregroundStyle(Theme.label)
 
+			// Leading, not centred. A row of two tiles was centring itself under a heading
+			// pinned to the left, so the two rows with two options each sat off-axis from
+			// everything above and below them.
 			HStack(spacing: 10) {
 				ForEach(values, id: \.self) { value in
 					PreviewTile(
@@ -134,6 +143,7 @@ struct NotchSettingsSection: View {
 						sketch(value)
 					}
 				}
+				Spacer(minLength: 0)
 			}
 		}
 		.padding(.horizontal, Theme.rowInset)
@@ -156,6 +166,7 @@ struct NotchSettingsSection: View {
 						wallpaper: wallpaper,
 						wallpaperIsLight: wallpaperIsLight)
 				}
+				Spacer(minLength: 0)
 			}
 		}
 		.padding(.horizontal, Theme.rowInset)
@@ -211,10 +222,7 @@ private struct StylePreview: View {
 				}
 				.frame(width: 112, height: 62)
 				.clipShape(.rect(cornerRadius: 7, style: .continuous))
-				.overlay {
-					RoundedRectangle(cornerRadius: 7, style: .continuous)
-						.strokeBorder(Theme.separator, lineWidth: 1)
-				}
+				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
 
 				// No `minimumScaleFactor`. It let "Semi Liquid Glass" shrink to 8pt — under
 				// the size macOS draws text at legibly — to avoid a wrap the layout can
@@ -227,8 +235,6 @@ private struct StylePreview: View {
 					.multilineTextAlignment(.center)
 					.frame(height: 26, alignment: .top)
 			}
-			.padding(6)
-			.background { SelectionPlatter(isSelected: isSelected, isHovering: isHovering) }
 		}
 		.buttonStyle(.plain)
 		.onHover { isHovering = $0 }
@@ -284,32 +290,31 @@ private struct StylePreview: View {
 	}
 }
 
-/// The glass the selected thumbnail sits on.
+/// The ring around the selected thumbnail.
 ///
-/// A ring was the wrong instrument. The tiles are photographs of the user's own wallpaper,
-/// so an outline has no known background to contrast against — every colour chosen for it is
-/// wrong over some picture, and stacking a halo and a tick on top to compensate was three
-/// devices doing one job badly.
+/// Two wrong turns to get here. A ring in `Theme.label` was black on a dark photo in light
+/// mode; a glass platter behind the tile solved the contrast but read as a stray pale box
+/// sitting in the group, because glass on top of a card that is already glass has nothing to
+/// separate itself from.
 ///
-/// Glass does not need contrast. It refracts what is behind it and carries its own specular
-/// edge, so the selected tile reads as *lifted* rather than as outlined — which works over
-/// any wallpaper and in either appearance, and is the same material the buttons in this
-/// window already use.
-private struct SelectionPlatter: View {
+/// A coloured ring is what System Settings uses for wallpapers and appearance, and what
+/// Dynamic Lake uses for exactly this control. Colour is the point: it belongs to neither the
+/// photograph nor the panel, so it cannot be lost in either, in either appearance.
+private struct SelectionRing: View {
 
 	let isSelected: Bool
 	let isHovering: Bool
 
 	private var shape: RoundedRectangle {
-		RoundedRectangle(cornerRadius: 13, style: .continuous)
+		RoundedRectangle(cornerRadius: 7, style: .continuous)
 	}
 
 	var body: some View {
-		if isSelected {
-			Color.clear.glassEffect(.regular.interactive(), in: shape)
-		} else if isHovering {
-			shape.fill(Theme.hoverFill)
-		}
+		shape.strokeBorder(
+			isSelected
+				? Theme.active
+				: (isHovering ? Theme.label.opacity(0.35) : Theme.separator),
+			lineWidth: isSelected ? 2.5 : 1)
 	}
 }
 
@@ -347,11 +352,7 @@ private struct PreviewTile<Content: View>: View {
 				}
 				.frame(width: 112, height: 62)
 				.clipShape(.rect(cornerRadius: 7, style: .continuous))
-				// A hairline on the picture itself, so a pale wallpaper still has an edge.
-				.overlay {
-					RoundedRectangle(cornerRadius: 7, style: .continuous)
-						.strokeBorder(Theme.separator, lineWidth: 1)
-				}
+				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
 
 				Text(title)
 					.font(Typography.caption)
@@ -361,8 +362,6 @@ private struct PreviewTile<Content: View>: View {
 					.multilineTextAlignment(.center)
 					.frame(height: 26, alignment: .top)
 			}
-			.padding(6)
-			.background { SelectionPlatter(isSelected: isSelected, isHovering: isHovering) }
 		}
 		.buttonStyle(.plain)
 		.onHover { isHovering = $0 }

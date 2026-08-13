@@ -158,7 +158,18 @@ final class NotchCapsuleController {
 		window.backgroundColor = .clear
 		window.hasShadow = false
 		window.ignoresMouseEvents = true
-		window.level = .mainMenu + 2
+		// Above other notch apps, not below them.
+		//
+		// This was `.mainMenu + 2` — level 26 — while Dynamic Lake draws its bar at 104. On
+		// the lock screen that put their bar over ours, which was survivable for the attached
+		// panel and the island because both hang *below* the band and the part underneath
+		// still showed. In ear mode nothing hangs below: the padlock and the mark both live
+		// inside the menu bar band, so the whole indicator disappeared under their bar and
+		// selecting "on the ear" looked like it did nothing at all.
+		//
+		// This window only exists while the screen is locked, and for those few seconds its
+		// status is the thing worth seeing.
+		window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.overlayWindow)) + 4)
 		window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
 		window.hidesOnDeactivate = false
 
