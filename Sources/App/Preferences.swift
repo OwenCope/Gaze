@@ -45,10 +45,13 @@ final class Preferences {
 		/// A separate rounded island, detached from the notch and floating under it.
 		case island
 
+		/// A matched pair, which "Attached" and "Island" were not: one described a
+		/// relationship, the other described an object, so the two never read as two answers
+		/// to the same question. Both of these say what the panel *does*.
 		var title: String {
 			switch self {
-			case .attached: return "Attached"
-			case .island: return "Island"
+			case .attached: return "Connected"
+			case .island: return "Floating"
 			}
 		}
 
@@ -57,7 +60,7 @@ final class Preferences {
 			case .attached:
 				return "Grows out of the notch, the way the Dynamic Island expands"
 			case .island:
-				return "A separate rounded panel that drops below the notch"
+				return "A separate rounded panel that floats below the notch"
 			}
 		}
 	}

@@ -119,8 +119,12 @@ enum NotchGlass {
 		min(0.96, 0.92 - 0.80 * transparency + boost)
 	}
 
+	/// Raised from 0.18. At that tint the panel was so faint you could not tell it was
+	/// there, which makes it not a style but an absence — glass you cannot see is just a
+	/// hole. Dark enough to read as a panel, light enough that the wallpaper still moves
+	/// through it.
 	static func liquidTint(boost: Double) -> Double {
-		min(0.6, 0.18 + boost)
+		min(0.7, 0.36 + boost)
 	}
 }
 
@@ -530,7 +534,17 @@ struct NotchCapsule: View {
 			.font(.system(size: 12, weight: .semibold))
 			.foregroundStyle(earTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
-			.modifier(Breathing(isActive: model.phase == .scanning))
+			// Always attached, never conditional.
+			//
+			// Wrapping this in a conditional modifier stopped the tick inheriting a pulse and
+			// broke the thing that mattered more: two branches are two view identities, so
+			// `.replace.magic` had nothing to morph between and the Face ID mark cut to the
+			// tick instead of becoming it. A stray half-breath is a far smaller price than
+			// losing the transition.
+			//
+			// The cycle is quick, so `isActive` turning false ends it almost immediately.
+			.symbolEffect(
+				.breathe, options: .repeating.speed(1.8), isActive: model.phase == .scanning)
 			.symbolEffect(.bounce, value: model.phase == .notRecognised)
 			.frame(width: earWidth, height: restingBarHeight)
 	}
@@ -647,7 +661,17 @@ struct NotchCapsule: View {
 			.foregroundStyle(symbolTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
 			// Breathing while it looks — the system effect, not an opacity loop.
-			.modifier(Breathing(isActive: model.phase == .scanning))
+			// Always attached, never conditional.
+			//
+			// Wrapping this in a conditional modifier stopped the tick inheriting a pulse and
+			// broke the thing that mattered more: two branches are two view identities, so
+			// `.replace.magic` had nothing to morph between and the Face ID mark cut to the
+			// tick instead of becoming it. A stray half-breath is a far smaller price than
+			// losing the transition.
+			//
+			// The cycle is quick, so `isActive` turning false ends it almost immediately.
+			.symbolEffect(
+				.breathe, options: .repeating.speed(1.8), isActive: model.phase == .scanning)
 			.symbolEffect(.bounce, value: model.phase == .notRecognised)
 			// The shackle springing open. `.bounce` on the padlock is the one moment in the
 			// sequence that should feel mechanical rather than smooth — a lock is a physical
@@ -687,24 +711,6 @@ struct NotchCapsule: View {
 		case .success: return Theme.faceID
 		case .notRecognised: return Theme.danger
 		case .locked, .scanning, .unlocked: return .white
-		}
-	}
-}
-
-/// Breathing, and only while it is meant to.
-///
-/// `.symbolEffect(.breathe, isActive:)` finishes the cycle it is in before it stops, so the
-/// tick inherited one last pulse from the Face ID mark it replaced — a confirmation that
-/// throbs reads as still working rather than as done. Attaching the effect only while it
-/// applies means the tick never carries it at all.
-private struct Breathing: ViewModifier {
-	let isActive: Bool
-
-	func body(content: Content) -> some View {
-		if isActive {
-			content.symbolEffect(.breathe, options: .repeating)
-		} else {
-			content
 		}
 	}
 }
