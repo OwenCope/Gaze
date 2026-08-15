@@ -3,7 +3,7 @@ import SwiftUI
 import os
 
 @main
-struct FaceIDApp: App {
+struct GazeApp: App {
 
 	@NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
@@ -11,7 +11,7 @@ struct FaceIDApp: App {
 	private var lockout: LockoutManager { AppServices.shared.lockout }
 
 	var body: some Scene {
-		MenuBarExtra("Face ID", systemImage: menuBarSymbol) {
+		MenuBarExtra("Gaze", systemImage: menuBarSymbol) {
 			MenuBarContent(store: store, lockout: lockout)
 		}
 		// A real menu, not a window.
@@ -23,7 +23,7 @@ struct FaceIDApp: App {
 		// applications*. The content here is a list of buttons; it wants an NSMenu.
 		.menuBarExtraStyle(.menu)
 
-		Window("Face ID", id: "settings") {
+		Window("Gaze", id: "settings") {
 			SettingsView(store: store, lockout: lockout)
 		}
 		// `.contentMinSize`, not `.contentSize`: the view states a floor and an ideal, and
@@ -40,7 +40,7 @@ struct FaceIDApp: App {
 		}
 		.windowResizability(.contentSize)
 
-		Window("Set Up Face ID", id: "enrollment") {
+		Window("Set Up Gaze", id: "enrollment") {
 			EnrollmentWindow(store: store)
 		}
 		.windowResizability(.contentSize)
@@ -58,7 +58,7 @@ struct FaceIDApp: App {
 
 /// Brings the app forward when it shows a window.
 ///
-/// Face ID runs as an accessory app so it owns a menu bar item rather than a Dock tile.
+/// Gaze runs as an accessory app so it owns a menu bar item rather than a Dock tile.
 /// The cost is that its windows open behind whatever the user was doing, and — worse —
 /// system prompts it raises, like Touch ID, can't come to the front either. Both are
 /// fixed by switching to a regular app for as long as a window is on screen.
@@ -247,7 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 	/// Dumps what `NSApp.windows` actually contains, for diagnosing windows we cannot reach.
 	@MainActor
 	static func logAppWindows(_ note: String) {
-		let logger = Logger(subsystem: "app.faceid.FaceID", category: "Windows")
+		let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Windows")
 		logger.notice("--- NSApp.windows (\(note, privacy: .public)) ---")
 		for w in NSApp.windows {
 			logger.notice(
@@ -274,7 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 			else { continue }
 
 			window.ignoresMouseEvents = true
-			Logger(subsystem: "app.faceid.FaceID", category: "Windows")
+			Logger(subsystem: "com.gazeunlock.Gaze", category: "Windows")
 				.notice("Made an invisible window click-through: \(number)")
 		}
 	}
@@ -299,7 +299,7 @@ struct MenuBarContent: View {
 		if lockout.isLockedOut {
 			Text("Locked out — password required")
 		} else if store.isEnrolled {
-			Text("Face ID is ready")
+			Text("Gaze is ready")
 		} else {
 			Text("No face enrolled")
 		}
@@ -307,7 +307,7 @@ struct MenuBarContent: View {
 		Divider()
 
 		if !store.isEnrolled {
-			Button("Set Up Face ID…") {
+			Button("Set Up Gaze…") {
 				AppActivation.bringToFront()
 				openWindow(id: "enrollment")
 			}
@@ -325,7 +325,7 @@ struct MenuBarContent: View {
 
 		Divider()
 
-		Button("Quit Face ID") { NSApp.terminate(nil) }
+		Button("Quit Gaze") { NSApp.terminate(nil) }
 			.keyboardShortcut("q")
 	}
 }

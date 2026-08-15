@@ -71,7 +71,7 @@ require_toolchain() {
 	cat >&2 <<-EOF
 	✗ No Xcode with the macOS ${MIN_SDK_MAJOR} SDK was found.
 
-	  Face ID targets macOS ${MIN_SDK_MAJOR}, so it needs Xcode ${MIN_SDK_MAJOR} or newer. Command Line
+	  Gaze targets macOS ${MIN_SDK_MAJOR}, so it needs Xcode ${MIN_SDK_MAJOR} or newer. Command Line
 	  Tools on its own is not enough — coremlc, which compiles the recognition
 	  model, ships only with the full Xcode.
 
@@ -82,6 +82,47 @@ require_toolchain() {
 	      DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer $0
 	EOF
 	exit 1
+}
+
+# The oldest macOS SDK on this machine that can still build the project, and its version.
+#
+# For distribution, not for day-to-day builds. Compiling against the newest SDK installed
+# is right when the only Mac that runs the result is this one; hand the build to someone a
+# major version behind and it can reference symbols their system does not have, and their
+# Mac kills it at launch with no dialog and no crash report.
+#
+# Command Line Tools is a fine source here even though `find_developer_dir` rejects it —
+# that rejection is about `coremlc`, which the model compile still gets from a full Xcode.
+# This only needs headers and stubs to link against.
+#
+# Prints "<path> <version>", or nothing if the only SDK installed is the newest.
+oldest_usable_sdk() {
+	local dir sdk name version best_path="" best_version=""
+
+	for dir in /Library/Developer/CommandLineTools /Applications/Xcode*.app/Contents/Developer; do
+		for sdk in "$dir"/SDKs/MacOSX*.sdk "$dir"/Platforms/MacOSX.platform/Developer/SDKs/MacOSX*.sdk; do
+			# Skip the unversioned aliases; they point at the newest, which is the
+			# thing being avoided.
+			[ -d "$sdk" ] || continue
+			[ -L "$sdk" ] && continue
+
+			version="$(/usr/libexec/PlistBuddy -c "Print :Version" "$sdk/SDKSettings.plist" 2>/dev/null)" || continue
+			[ -n "$version" ] || continue
+			[ "${version%%.*}" -ge "$MIN_SDK_MAJOR" ] 2>/dev/null || continue
+
+			if [ -z "$best_version" ] || _version_lt "$version" "$best_version"; then
+				best_version="$version"
+				best_path="$sdk"
+			fi
+		done
+	done
+
+	[ -n "$best_path" ] && printf '%s %s' "$best_path" "$best_version"
+}
+
+# True when $1 sorts before $2 as a dotted version.
+_version_lt() {
+	[ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n | head -1)" = "$1" ]
 }
 
 # The architecture of the machine doing the building.

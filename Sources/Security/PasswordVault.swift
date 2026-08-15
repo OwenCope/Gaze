@@ -9,7 +9,7 @@ import os
 enum PasswordVault {
 
 	private static let account = "account-password"
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "PasswordVault")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "PasswordVault")
 
 	private struct Record: Codable {
 		var password: String

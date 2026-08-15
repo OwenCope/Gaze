@@ -1,5 +1,5 @@
 /*
- The capsule shown on the lock screen while Face ID runs.
+ The capsule shown on the lock screen while Gaze runs.
 
  States follow the iPhone: it scans, and on a face it does not recognise it shakes and
  says so, then scans again. After the attempt budget is spent it stops and hands over to
@@ -14,18 +14,18 @@
 
 #import <Cocoa/Cocoa.h>
 
-typedef NS_ENUM(NSInteger, FaceIDCapsuleState) {
+typedef NS_ENUM(NSInteger, GazeCapsuleState) {
 	/// Looking for a face.
-	FaceIDCapsuleStateScanning,
+	GazeCapsuleStateScanning,
 	/// A face was seen and rejected. Shakes, then returns to scanning.
-	FaceIDCapsuleStateNotRecognised,
+	GazeCapsuleStateNotRecognised,
 	/// Matched. Morphs to a checkmark.
-	FaceIDCapsuleStateSuccess,
+	GazeCapsuleStateSuccess,
 };
 
-@interface FaceIDCapsuleView : NSView
+@interface GazeCapsuleView : NSView
 
-@property (nonatomic, assign) FaceIDCapsuleState state;
+@property (nonatomic, assign) GazeCapsuleState state;
 
 /// Plays the rejection shake, then calls back so the caller can resume scanning.
 - (void)playRejectionThen:(void (^)(void))completion;

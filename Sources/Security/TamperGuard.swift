@@ -17,7 +17,7 @@ final class TamperGuard {
 
 	static let shared = TamperGuard()
 
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "TamperGuard")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "TamperGuard")
 
 	private var bundleWatcher: DispatchSourceFileSystemObject?
 	private(set) var bundleWasModified = false
@@ -42,7 +42,7 @@ final class TamperGuard {
 		guard Preferences.shared.tamperProtection else { return true }
 
 		if requestAdminRights(
-			prompt: "Face ID is protected. Authenticate to quit it.")
+			prompt: "Gaze is protected. Authenticate to quit it.")
 		{
 			Self.logger.notice("Quit authorised by administrator.")
 			return true
@@ -114,7 +114,7 @@ final class TamperGuard {
 			//
 			// An update — `build.sh` swapping in a new bundle, or any installer — renames the
 			// old bundle out and the new one in. The watcher sees the rename and, before this,
-			// raised a critical "Face ID was modified" alert every single time the app was
+			// raised a critical "Gaze was modified" alert every single time the app was
 			// rebuilt. A guard that fires on the normal update path is one people learn to
 			// dismiss without reading, which costs exactly the signal it exists to give.
 			//
@@ -133,7 +133,7 @@ final class TamperGuard {
 				}
 
 				self.bundleWasModified = true
-				Self.logger.fault("The Face ID app bundle was moved or removed.")
+				Self.logger.fault("The Gaze app bundle was moved or removed.")
 				self.warnAboutTampering()
 			}
 		}
@@ -148,9 +148,9 @@ final class TamperGuard {
 		// event handler is what turned one rebuild into a CPU spin.
 		let alert = NSAlert()
 		alert.alertStyle = .critical
-		alert.messageText = "Face ID was modified"
+		alert.messageText = "Gaze was modified"
 		alert.informativeText = """
-			The Face ID application bundle changed while it was running. If you didn't \
+			The Gaze application bundle changed while it was running. If you didn't \
 			update or move it, your enrolled face may no longer be trustworthy — remove \
 			the enrolment and set it up again.
 			"""

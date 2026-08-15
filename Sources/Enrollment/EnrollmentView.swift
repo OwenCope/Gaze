@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The face setup flow: a circular live preview inside the coverage ring.
 ///
-/// Dark throughout, like Face ID setup on every Apple platform. The dark ground is not
+/// Dark throughout, like Gaze setup on every Apple platform. The dark ground is not
 /// decoration — it is what makes the unfilled ticks recede and the green ones read at a
 /// glance, and it keeps the user's own lit face the brightest thing on screen.
 struct EnrollmentView: View {
@@ -85,9 +85,9 @@ struct EnrollmentView: View {
 
 	private var title: String {
 		switch model?.phase {
-		case .complete: return "Face ID Is Set Up"
+		case .complete: return "Gaze Is Set Up"
 		case .capturing(let pass) where pass == 2: return "Second Scan"
-		default: return "Set Up Face ID"
+		default: return "Set Up Gaze"
 		}
 	}
 
@@ -132,7 +132,7 @@ struct EnrollmentView: View {
 		case .denied:
 			message(
 				"Camera Access Is Off",
-				detail: "Allow camera access for Face ID in System Settings › Privacy & Security.")
+				detail: "Allow camera access for Gaze in System Settings › Privacy & Security.")
 		case .failed(let reason):
 			message("Can't Use the Camera", detail: reason)
 		case .idle:

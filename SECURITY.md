@@ -9,7 +9,7 @@ against. Everything here is checkable against the files named at the bottom.
 | --- | --- |
 | Faceprint | Always, once enrolled. Numeric embeddings, not images — no photographs are kept. |
 | Account password | Only under the **Unlock my Mac** backend. The default, **Just recognise me**, never asks for one. |
-| Failed attempt count | Always. Six failures disable Face ID until the account password is entered. |
+| Failed attempt count | Always. Six failures disable Gaze until the account password is entered. |
 
 All three go through the same sealing path.
 
@@ -26,7 +26,7 @@ All three go through the same sealing path.
    it reproduces across launches, computable only inside the Enclave holding the private half.
 4. **AES-GCM seals it.** Authenticated, so a tampered blob fails to open rather than decoding
    to attacker-chosen data. The sealed box is written to the Keychain as a generic password
-   under service `app.faceid.FaceID`, with `kSecAttrAccessibleAfterFirstUnlock`.
+   under service `com.gazeunlock.Gaze`, with `kSecAttrAccessibleAfterFirstUnlock`.
 
 ## Using it
 
@@ -67,7 +67,7 @@ people in testing, but it is not equivalent to a biometric assurance level.
 
 - Only the built-in camera is trusted by default, and it must be the device enrolled on
   (`requireBuiltInCamera`) — this is the defence against frame injection through a virtual camera.
-- Six failed attempts disable Face ID until the account password is entered.
+- Six failed attempts disable Gaze until the account password is entered.
 - The vault key can be destroyed, which renders every stored blob permanently unreadable.
 - Selecting **Just recognise me** removes the password from the design entirely.
 

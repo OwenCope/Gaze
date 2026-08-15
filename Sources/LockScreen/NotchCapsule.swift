@@ -128,7 +128,7 @@ enum NotchGlass {
 	}
 }
 
-/// The panel that drops out of the notch while Face ID runs.
+/// The panel that drops out of the notch while Gaze runs.
 ///
 /// Shaped to read as the notch itself growing downwards: same width as the camera
 /// housing, square across the top where it meets the cutout, rounded only along the
@@ -207,7 +207,7 @@ struct NotchCapsule: View {
 	/// Nebulark's gradient: black at the top running into green at the bottom.
 	///
 	/// Green only ever appears while the island is doing something — it has no resting
-	/// state — so this keeps the rule the rest of the app follows, that green means Face ID
+	/// state — so this keeps the rule the rest of the app follows, that green means Gaze
 	/// and nothing else, while taking the look he built.
 	/// Two gradients, not one, because they were two jobs sharing a stop list.
 	///
@@ -541,7 +541,7 @@ struct NotchCapsule: View {
 		model.phase.isCompact ? restingBarHeight : height
 	}
 
-	/// The Face ID mark in the trailing ear — what the padlock is, on the other side.
+	/// The Gaze mark in the trailing ear — what the padlock is, on the other side.
 	///
 	/// Same size, same band, same idea. Ruken's suggestion and Sapphire's behaviour: the mark
 	/// belongs beside the housing, not in a panel drawn over the lock screen.
@@ -554,7 +554,7 @@ struct NotchCapsule: View {
 			//
 			// Wrapping this in a conditional modifier stopped the tick inheriting a pulse and
 			// broke the thing that mattered more: two branches are two view identities, so
-			// `.replace.magic` had nothing to morph between and the Face ID mark cut to the
+			// `.replace.magic` had nothing to morph between and the Gaze mark cut to the
 			// tick instead of becoming it. A stray half-breath is a far smaller price than
 			// losing the transition.
 			//
@@ -665,7 +665,7 @@ struct NotchCapsule: View {
 
 	/// Apple's own symbols, animated by Apple's own effects.
 	///
-	/// Hand-drawing the Face ID mark and morphing it to a tick was the wrong instinct:
+	/// Hand-drawing the Gaze mark and morphing it to a tick was the wrong instinct:
 	/// every version was a guess at the real animation and read as an approximation.
 	/// `faceid` and `checkmark.circle.fill` are both system symbols, and
 	/// `.replace.magic` is the transition Apple uses to morph between them — so this is
@@ -681,7 +681,7 @@ struct NotchCapsule: View {
 					// scratch on it rather than a mark in it.
 					weight: showsGlassTick ? .heavy : (model.phase == .success ? .semibold : .regular)))
 			// Hierarchical only for the tick, where the softened disc is what makes it read
-			// as frosted rather than as a sticker. On the Face ID mark it just dims the whole
+			// as frosted rather than as a sticker. On the Gaze mark it just dims the whole
 			// glyph, which left it washed out against the glass.
 			.symbolRenderingMode(model.phase == .success && !showsGlassTick ? .hierarchical : .monochrome)
 			.foregroundStyle(symbolTint)
@@ -691,7 +691,7 @@ struct NotchCapsule: View {
 			//
 			// Wrapping this in a conditional modifier stopped the tick inheriting a pulse and
 			// broke the thing that mattered more: two branches are two view identities, so
-			// `.replace.magic` had nothing to morph between and the Face ID mark cut to the
+			// `.replace.magic` had nothing to morph between and the Gaze mark cut to the
 			// tick instead of becoming it. A stray half-breath is a far smaller price than
 			// losing the transition.
 			//

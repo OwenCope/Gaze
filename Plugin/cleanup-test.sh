@@ -12,16 +12,16 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 echo "→ Removing the throwaway right"
-security authorizationdb remove app.faceid.testunlock 2>/dev/null \
+security authorizationdb remove com.gazeunlock.Gaze.testunlock 2>/dev/null \
 	&& echo "  ✓ removed" || echo "  (not present)"
 
 echo "→ Unloading the agent"
 CONSOLE_UID="$(stat -f %u /dev/console)"
-sudo -u "${SUDO_USER:-$(stat -f %Su /dev/console)}" launchctl bootout "gui/$CONSOLE_UID/app.faceid.agent" 2>/dev/null || true
-rm -f /Library/LaunchAgents/app.faceid.agent.plist
+sudo -u "${SUDO_USER:-$(stat -f %Su /dev/console)}" launchctl bootout "gui/$CONSOLE_UID/com.gazeunlock.Gaze.agent" 2>/dev/null || true
+rm -f /Library/LaunchAgents/com.gazeunlock.Gaze.agent.plist
 
 echo "→ Removing the plugin"
-rm -rf /Library/Security/SecurityAgentPlugins/FaceID.bundle
-rm -f /tmp/faceid-test-right.plist
+rm -rf /Library/Security/SecurityAgentPlugins/Gaze.bundle
+rm -f /tmp/gaze-test-right.plist
 
 echo "✓ Clean. Your lock screen was never modified by the test."

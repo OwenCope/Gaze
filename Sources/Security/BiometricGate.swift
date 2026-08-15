@@ -15,7 +15,7 @@ enum BiometricGate {
 
 	enum Reason: String {
 		case removeEnrollment = "remove your enrolled face"
-		case changeSettings = "change Face ID settings"
+		case changeSettings = "change Gaze settings"
 		case disableTamperProtection = "turn off tamper protection"
 		case storePassword = "store your account password"
 	}
@@ -48,7 +48,7 @@ enum BiometricGate {
 		do {
 			return try await context.evaluatePolicy(
 				.deviceOwnerAuthentication,
-				localizedReason: "Face ID needs to confirm it's you to \(reason.rawValue).")
+				localizedReason: "Gaze needs to confirm it's you to \(reason.rawValue).")
 		} catch {
 			return false
 		}

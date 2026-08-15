@@ -120,15 +120,15 @@ struct NoUnlockBackend: UnlockBackend {
 struct KeystrokeUnlockBackend: UnlockBackend {
 	let kind = UnlockBackendKind.keystroke
 
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "Keystroke")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Keystroke")
 
 	@MainActor func readiness() -> BackendReadiness {
 		if let blocker = UnlockGuard.embedderBlocker() { return blocker }
 		guard PasswordVault.hasPassword else {
-			return .needsSetup("Face ID needs your account password to unlock the Mac.")
+			return .needsSetup("Gaze needs your account password to unlock the Mac.")
 		}
 		guard AXIsProcessTrusted() else {
-			return .needsSetup("Face ID needs Accessibility access to type your password.")
+			return .needsSetup("Gaze needs Accessibility access to type your password.")
 		}
 		return .ready
 	}
@@ -179,13 +179,13 @@ struct KeystrokeUnlockBackend: UnlockBackend {
 struct AuthPluginUnlockBackend: UnlockBackend {
 	let kind = UnlockBackendKind.authPlugin
 
-	static let pluginPath = "/Library/Security/SecurityAgentPlugins/FaceID.bundle"
+	static let pluginPath = "/Library/Security/SecurityAgentPlugins/Gaze.bundle"
 
 	@MainActor func readiness() -> BackendReadiness {
 		if let blocker = UnlockGuard.embedderBlocker() { return blocker }
 		guard FileManager.default.fileExists(atPath: Self.pluginPath) else {
 			return .needsSetup(
-				"The Face ID authorization plugin isn't installed yet. Installing it needs "
+				"The Gaze authorization plugin isn't installed yet. Installing it needs "
 					+ "administrator authentication and disables Touch ID on the lock screen.")
 		}
 		guard AuthorizationRules.screensaverUsesPlugins() else {

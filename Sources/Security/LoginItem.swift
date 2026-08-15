@@ -2,7 +2,7 @@ import Foundation
 import ServiceManagement
 import os
 
-/// Starts Face ID when you log in.
+/// Starts Gaze when you log in.
 ///
 /// Uses `SMAppService.mainApp` rather than a LaunchAgent plist. The plist approach is
 /// what the authorization-plugin path needed — only launchd can vend a mach service — but
@@ -15,7 +15,7 @@ import os
 /// exits it stays exited.
 enum LoginItem {
 
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "LoginItem")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "LoginItem")
 
 	static var isEnabled: Bool {
 		SMAppService.mainApp.status == .enabled

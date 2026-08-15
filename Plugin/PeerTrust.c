@@ -18,7 +18,7 @@
 */
 extern void xpc_connection_get_audit_token(xpc_connection_t connection, audit_token_t *token);
 
-bool FaceIDPeerSatisfiesRequirement(xpc_connection_t connection, const char *requirement)
+bool GazePeerSatisfiesRequirement(xpc_connection_t connection, const char *requirement)
 {
 	if (connection == NULL || requirement == NULL) {
 		return false;
@@ -49,7 +49,7 @@ bool FaceIDPeerSatisfiesRequirement(xpc_connection_t connection, const char *req
 	OSStatus status = SecCodeCopyGuestWithAttributes(NULL, attributes, kSecCSDefaultFlags, &code);
 	CFRelease(attributes);
 	if (status != errSecSuccess || code == NULL) {
-		os_log_error(OS_LOG_DEFAULT, "Face ID: could not identify peer (%d)", (int)status);
+		os_log_error(OS_LOG_DEFAULT, "Gaze: could not identify peer (%d)", (int)status);
 		return false;
 	}
 
@@ -64,7 +64,7 @@ bool FaceIDPeerSatisfiesRequirement(xpc_connection_t connection, const char *req
 	status = SecRequirementCreateWithString(requirementString, kSecCSDefaultFlags, &parsed);
 	CFRelease(requirementString);
 	if (status != errSecSuccess || parsed == NULL) {
-		os_log_error(OS_LOG_DEFAULT, "Face ID: bad peer requirement (%d)", (int)status);
+		os_log_error(OS_LOG_DEFAULT, "Gaze: bad peer requirement (%d)", (int)status);
 		CFRelease(code);
 		return false;
 	}
@@ -77,7 +77,7 @@ bool FaceIDPeerSatisfiesRequirement(xpc_connection_t connection, const char *req
 	CFRelease(code);
 
 	if (status != errSecSuccess) {
-		os_log_error(OS_LOG_DEFAULT, "Face ID: peer failed requirement (%d)", (int)status);
+		os_log_error(OS_LOG_DEFAULT, "Gaze: peer failed requirement (%d)", (int)status);
 		return false;
 	}
 

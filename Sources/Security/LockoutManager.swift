@@ -7,7 +7,7 @@ import os
 /// Face matching is a similarity threshold, not a secret, so an attacker who can keep
 /// presenting faces gets unlimited attempts at finding one that scores above the line.
 /// Capping attempts is what turns "close enough eventually works" into "you get six
-/// tries, then type your password" — the same reason iOS locks Face ID out.
+/// tries, then type your password" — the same reason iOS locks Gaze out.
 ///
 /// State lives in the Secure Enclave-backed vault rather than a preference file, so it
 /// cannot be reset by deleting a plist, and a tampered record fails closed.
@@ -19,7 +19,7 @@ final class LockoutManager {
 	static let maxAttempts = 6
 
 	private static let account = "lockout-state"
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "Lockout")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Lockout")
 
 	private struct State: Codable {
 		var consecutiveFailures: Int = 0

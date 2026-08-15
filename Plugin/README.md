@@ -45,7 +45,7 @@ session**. A broken plugin in this path can leave a lock screen that will not au
 ## What has to be built
 
 1. **The bundle** — an `SFAuthorizationPluginView` subclass in a `.bundle` installed to
-   `/Library/Security/SecurityAgentPlugins/FaceID.bundle`. Objective-C; the API predates
+   `/Library/Security/SecurityAgentPlugins/Gaze.bundle`. Objective-C; the API predates
    Swift and is not bridged usefully. It supplies an `NSView` that SecurityAgent hosts, so
    `FaceScanView` has to be re-implemented in AppKit/Core Animation, or rendered by the
    agent and passed across as frames.

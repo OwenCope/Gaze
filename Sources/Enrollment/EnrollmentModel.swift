@@ -51,7 +51,7 @@ final class EnrollmentModel {
 			if progress > 0.92 { return pass == 1 ? "Almost done" : "Nearly there" }
 			return pass == 1 ? "Move your head slowly to complete the circle" : "One more time"
 		case .complete:
-			return "Face ID is set up"
+			return "Gaze is set up"
 		case .failed(let message):
 			return message
 		}

@@ -15,7 +15,7 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	var title: String {
 		switch self {
 		case .general: return "General"
-		case .face: return "Face ID"
+		case .face: return "Gaze"
 		case .credits: return "Credits"
 		case .about: return "About"
 		}
@@ -40,8 +40,8 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 
 	/// Green for the app's own mark, neutral for everything else.
 	///
-	/// The one exception to monochrome icons, and it earns it: green means Face ID
-	/// everywhere else in this app, so the row that *is* Face ID should carry it.
+	/// The one exception to monochrome icons, and it earns it: green means Gaze
+	/// everywhere else in this app, so the row that *is* Gaze should carry it.
 	var tint: Color {
 		self == .face ? Theme.faceID : Theme.grey
 	}
@@ -50,7 +50,7 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	var summary: String {
 		switch self {
 		case .general:
-			return "How Face ID looks on the lock screen, and what it's allowed to do"
+			return "How Gaze looks on the lock screen, and what it's allowed to do"
 		case .face:
 			return "Unlock your Mac by looking at it"
 		case .credits:
@@ -249,7 +249,7 @@ struct SettingsView: View {
 				.animation(.easeOut(duration: 0.25), value: store.isEnrolled)
 
 				VStack(alignment: .leading, spacing: 3) {
-					Text(store.isEnrolled ? "Face ID is set up" : "Face ID isn't set up")
+					Text(store.isEnrolled ? "Gaze is set up" : "Gaze isn't set up")
 						.font(Typography.heroTitle)
 						.foregroundStyle(Theme.label)
 					Text(heroDetail)
@@ -270,7 +270,7 @@ struct SettingsView: View {
 						AppActivation.bringToFront()
 						openWindow(id: "enrollment")
 					} label: {
-						Text(store.isEnrolled ? "Set Up Again" : "Set Up Face ID")
+						Text(store.isEnrolled ? "Set Up Again" : "Set Up Gaze")
 							.frame(maxWidth: .infinity)
 					}
 					.buttonStyle(store.isEnrolled ? .accent : .primaryAction)
@@ -313,7 +313,7 @@ struct SettingsView: View {
 		SettingsSection(
 			title: "Enrolled face",
 			footer: store.embedder.identifier.hasPrefix("landmark")
-				? "No recognition model is installed, so Face ID is matching face geometry only. "
+				? "No recognition model is installed, so Gaze is matching face geometry only. "
 					+ "That tells you from a stranger but is much weaker than a trained model."
 				: nil
 		) {
@@ -340,7 +340,7 @@ struct SettingsView: View {
 	private var lockoutSection: some View {
 		SettingsSection(
 			title: "Locked out",
-			footer: "Face ID is disabled after \(LockoutManager.maxAttempts) failed attempts."
+			footer: "Gaze is disabled after \(LockoutManager.maxAttempts) failed attempts."
 		) {
 			SettingRow(
 				title: "Account password",
@@ -360,7 +360,7 @@ struct SettingsView: View {
 	// MARK: - Unlocking
 
 	private var unlockSection: some View {
-		SettingsSection(title: "Use Face ID for", footer: unlockFooter) {
+		SettingsSection(title: "Use Gaze for", footer: unlockFooter) {
 			// A pop-up menu, not three cards with icons and checkmarks.
 			//
 			// The cards spent a third of the window explaining options the user picks once
@@ -483,7 +483,7 @@ struct SettingsView: View {
 	/// Two groups, not one.
 	///
 	/// Five switches under a single unlabelled heading mixed two different questions — how
-	/// hard Face ID is to fool, and how the app behaves on this Mac. Splitting them is also
+	/// hard Gaze is to fool, and how the app behaves on this Mac. Splitting them is also
 	/// what lets the icon colours mean something: the first group is the hardening group and
 	/// reads as one family, the second is plumbing and stays grey.
 	private var securitySection: some View {
@@ -517,7 +517,7 @@ struct SettingsView: View {
 			SettingToggle(
 				title: "Open at login",
 				// Grey, like Login Items in System Settings — and because `Theme.faceID` is
-				// documented as Face ID identity only. A power button is not Face ID.
+				// documented as Gaze identity only. A power button is not Gaze.
 				symbol: "power",
 				isOn: Binding(
 					get: { LoginItem.isEnabled },
@@ -545,9 +545,9 @@ struct SettingsView: View {
 	private var behaviourFooter: String {
 		var notes: [String] = []
 		if LoginItem.needsApproval {
-			notes.append("Approve Face ID in System Settings › General › Login Items.")
+			notes.append("Approve Gaze in System Settings › General › Login Items.")
 		}
-		notes.append("Face ID only watches for your screen locking while it's running.")
+		notes.append("Gaze only watches for your screen locking while it's running.")
 		return notes.joined(separator: " ")
 	}
 
@@ -555,7 +555,7 @@ struct SettingsView: View {
 
 	/// The app's own look, at the foot of the pane.
 	///
-	/// Last on purpose: everything above it configures what Face ID *does*, and this
+	/// Last on purpose: everything above it configures what Gaze *does*, and this
 	/// configures what the window you are reading is made of. It is the one setting whose
 	/// effect you can see the instant you change it, so it does not need to be found first.
 	private var appearanceSection: some View {
@@ -840,7 +840,7 @@ private struct SidebarItem: View {
 		.buttonStyle(.plain)
 		// Only the selected row takes focus, so the ring and the highlight are never on two
 		// different rows. Making all three focusable put the ring on "General" while the
-		// "Face ID" pane was showing, which reads as the sidebar disagreeing with itself.
+		// "Gaze" pane was showing, which reads as the sidebar disagreeing with itself.
 		.focusable(isSelected)
 		.focused($isFocused)
 		// AppKit's blue ring on top of the white one drawn above — two rings around one row,

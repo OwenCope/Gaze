@@ -49,7 +49,7 @@ struct NotchSettingsSection: View {
 				if settings.panelShape == .attached {
 					RowDivider()
 					choiceRow(
-						title: "Face ID mark",
+						title: "Gaze mark",
 						values: Preferences.GlyphPlacement.allCases,
 					titleFor: \.title,
 						isSelected: { settings.glyphPlacement == $0 },

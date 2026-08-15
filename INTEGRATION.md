@@ -1,16 +1,16 @@
-# Integrating with Face ID
+# Integrating with Gaze
 
-Face ID publishes what it is doing so other apps — notch apps especially — can show it in
+Gaze publishes what it is doing so other apps — notch apps especially — can show it in
 their own interface. Two apps drawing a panel over the same strip of screen is worse for the
 user than one, and the one that already owns that strip should win.
 
 ## The notification
 
-Name: `app.faceid.FaceID.state`, on `DistributedNotificationCenter`.
+Name: `com.gazeunlock.Gaze.state`, on `DistributedNotificationCenter`.
 
 ```swift
 DistributedNotificationCenter.default().addObserver(
-    forName: .init("app.faceid.FaceID.state"), object: nil, queue: .main
+    forName: .init("com.gazeunlock.Gaze.state"), object: nil, queue: .main
 ) { note in
     guard let state = note.object as? String else { return }
     let score = note.userInfo?["score"] as? Double
@@ -27,8 +27,8 @@ sandboxed observers on some paths. Read `object` and you always get the state; r
 
 | State | Meaning |
 | --- | --- |
-| `idle` | Nothing happening. The Mac is unlocked, or Face ID is off. |
-| `locked` | Screen locked, Face ID armed, no face seen yet. |
+| `idle` | Nothing happening. The Mac is unlocked, or Gaze is off. |
+| `locked` | Screen locked, Gaze armed, no face seen yet. |
 | `detecting` | A face is in frame and being matched. |
 | `succeeded` | Recognised. The unlock, if configured, is happening now. |
 | `failed` | Not recognised within the search window, or rejected by the liveness check. |
@@ -58,7 +58,7 @@ Save as `listen.swift` and run `swift listen.swift`, then lock the screen.
 import Foundation
 
 DistributedNotificationCenter.default().addObserver(
-    forName: .init("app.faceid.FaceID.state"), object: nil, queue: .main
+    forName: .init("com.gazeunlock.Gaze.state"), object: nil, queue: .main
 ) { note in
     let score = (note.userInfo?["score"] as? Double).map { String(format: " %.3f", $0) } ?? ""
     print("\(Date().formatted(date: .omitted, time: .standard))  \(note.object ?? "?")\(score)")

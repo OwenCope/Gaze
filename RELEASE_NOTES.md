@@ -5,7 +5,7 @@ First release. It unlocks your Mac by recognising your face with the built-in ca
 ## Setting up
 
 Enrol once. You turn your head slowly while it captures you from a range of angles, the way
-you'd set up Face ID on a phone. After that, lock your screen and it looks for you.
+you'd set up Gaze on a phone. After that, lock your screen and it looks for you.
 
 ## Two modes
 
@@ -17,7 +17,7 @@ working alongside it.
 
 ## On the lock screen
 
-A panel in the notch: a padlock while it's resting, the Face ID mark while it's looking, a
+A panel in the notch: a padlock while it's resting, the Gaze mark while it's looking, a
 green tick when it's you, a shake when it isn't. Three styles and size sliders, because
 notches and taste both vary.
 
@@ -54,7 +54,7 @@ Worth reading before you pick the second mode.
 
 - Only the built-in camera is trusted, and only the one you enrolled on. Virtual cameras are
   refused.
-- Face ID switches off after six failed attempts until you enter your account password.
+- Gaze switches off after six failed attempts until you enter your account password.
 - Follows your system appearance.
 - Optional Touch ID confirmation before changing anything in Settings.
 

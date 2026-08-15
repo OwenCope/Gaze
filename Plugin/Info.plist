@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>FaceID</string>
+	<string>Gaze</string>
 	<key>CFBundleExecutable</key>
-	<string>FaceID</string>
+	<string>Gaze</string>
 	<key>CFBundleIdentifier</key>
-	<string>app.faceid.plugin</string>
+	<string>com.gazeunlock.Gaze.plugin</string>
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
@@ -16,13 +16,13 @@
 	<string>1</string>
 
 	<!--
-	  Code-signing requirement the Face ID agent must satisfy before its verdict is
+	  Code-signing requirement the Gaze agent must satisfy before its verdict is
 	  believed. Written by install.sh once the agent's cdhash is known — an ad-hoc or
 	  Development signature carries no stable team identifier, so the binary hash is the
 	  only thing worth pinning. Empty here on purpose: an unpinned plugin refuses to
 	  trust any answer and falls back to password-only.
 	-->
-	<key>FaceIDAgentRequirement</key>
+	<key>GazeAgentRequirement</key>
 	<string></string>
 </dict>
 </plist>

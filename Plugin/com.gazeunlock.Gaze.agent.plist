@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>app.faceid.agent</string>
+	<string>com.gazeunlock.Gaze.agent</string>
 
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Applications/Face ID.app/Contents/MacOS/FaceID</string>
+		<string>/Applications/Gaze.app/Contents/MacOS/Gaze</string>
 	</array>
 
 	<!--
@@ -18,7 +18,7 @@
 	-->
 	<key>MachServices</key>
 	<dict>
-		<key>app.faceid.unlock</key>
+		<key>com.gazeunlock.Gaze.unlock</key>
 		<true/>
 	</dict>
 

@@ -15,7 +15,7 @@ import os
 @MainActor
 final class LockWatcher {
 
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "LockWatcher")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "LockWatcher")
 
 	private let store: FaceEnrollmentStore
 	private let lockout: LockoutManager
@@ -25,7 +25,7 @@ final class LockWatcher {
 	///
 	/// The unlock animation must only play when *we* did it. The screen unlocking is not by
 	/// itself evidence of that — Touch ID, a typed password and a paired Watch all raise the
-	/// same notification, and playing "Face ID opened this" over someone else's unlock is a
+	/// same notification, and playing "Gaze opened this" over someone else's unlock is a
 	/// claim the app has no basis for.
 	private var didSubmitPassword = false
 	private(set) var isWatching = false

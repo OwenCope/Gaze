@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds FaceID.bundle, the SecurityAgent authorization plugin.
+# Builds Gaze.bundle, the SecurityAgent authorization plugin.
 # Building is safe. Installing is not — see install.sh.
 set -euo pipefail
 
@@ -8,8 +8,8 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=../toolchain.sh
 . "$ROOT/../toolchain.sh"
 require_toolchain
-BUNDLE="$ROOT/build/FaceID.bundle"
-BIN="$BUNDLE/Contents/MacOS/FaceID"
+BUNDLE="$ROOT/build/Gaze.bundle"
+BIN="$BUNDLE/Contents/MacOS/Gaze"
 
 echo "→ Cleaning"
 rm -rf "$BUNDLE"
@@ -35,8 +35,8 @@ xcrun clang \
 	-framework SecurityInterface \
 	-framework CoreFoundation \
 	-lpam \
-	"$ROOT/FaceIDPlugin.m" \
-	"$ROOT/FaceIDCapsuleView.m" \
+	"$ROOT/GazePlugin.m" \
+	"$ROOT/GazeCapsuleView.m" \
 	"$ROOT/PeerTrust.c" \
 	-o "$BIN"
 
@@ -49,7 +49,7 @@ IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
 # com.apple.private.security.clear-library-validation, so it is *permitted* to load code
 # like ours — the question is what it demands of that code first.
 codesign --force --sign "$IDENTITY" --options runtime \
-	--identifier app.faceid.plugin "$BUNDLE"
+	--identifier com.gazeunlock.Gaze.plugin "$BUNDLE"
 
 echo "✓ Built $BUNDLE"
 echo

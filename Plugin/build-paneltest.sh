@@ -20,7 +20,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <dict>
 	<key>CFBundleName</key><string>PanelTest</string>
 	<key>CFBundleExecutable</key><string>PanelTest</string>
-	<key>CFBundleIdentifier</key><string>app.faceid.paneltest</string>
+	<key>CFBundleIdentifier</key><string>com.gazeunlock.Gaze.paneltest</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>1.0</string>
 	<key>LSMinimumSystemVersion</key><string>26.0</string>
@@ -41,7 +41,7 @@ xcrun swiftc \
 IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
 	| awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')"
 [ -n "$IDENTITY" ] || IDENTITY="-"
-codesign --force --sign "$IDENTITY" --identifier app.faceid.paneltest "$APP"
+codesign --force --sign "$IDENTITY" --identifier com.gazeunlock.Gaze.paneltest "$APP"
 
 echo "✓ Built $APP"
 echo

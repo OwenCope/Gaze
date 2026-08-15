@@ -27,7 +27,7 @@ enum CameraDevice {
 			case .noBuiltInCamera:
 				return "No built-in camera found on this Mac."
 			case .notBuiltIn(let name):
-				return "“\(name)” is not the built-in camera. Face ID only trusts the camera built into this Mac."
+				return "“\(name)” is not the built-in camera. Gaze only trusts the camera built into this Mac."
 			case .deviceChanged(let expected, let found):
 				return "The camera changed since you enrolled (expected \(expected), found \(found))."
 			}

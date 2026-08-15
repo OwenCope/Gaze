@@ -1,5 +1,5 @@
 #!/bin/bash
-# Removes the Face ID authorization plugin and restores Apple's lock screen.
+# Removes the Gaze authorization plugin and restores Apple's lock screen.
 #
 # THIS IS THE ROLLBACK. If the lock screen ever stops accepting your password, run this —
 # over SSH from another machine if you cannot get in locally. It is written to keep going
@@ -21,14 +21,24 @@ security authorizationdb write system.login.screensaver < /dev/null 2>/dev/null 
 	2>/dev/null && echo "  ✓ back to use-login-window-ui" \
 	|| echo "  ! could not rewrite the rule — see the manual command below"
 
+# Both names, current and the one used before the app was renamed from Face ID.
+#
+# A rollback that only knows today's names leaves the previous install in place —
+# root-owned, in /Library, loaded by SecurityAgent, and invisible to anyone who
+# thinks they have uninstalled. This script is the thing people run when the lock
+# screen is broken, so it has to clear everything this project has ever installed.
 echo "→ Unloading the agent"
 for uid in $(/usr/bin/who | /usr/bin/awk '{print $1}' | sort -u \
 	| while read -r u; do id -u "$u" 2>/dev/null; done); do
-	launchctl bootout "gui/$uid/app.faceid.agent" 2>/dev/null || true
+	for label in com.gazeunlock.Gaze.agent app.faceid.agent; do
+		launchctl bootout "gui/$uid/$label" 2>/dev/null || true
+	done
 done
+rm -f /Library/LaunchAgents/com.gazeunlock.Gaze.agent.plist
 rm -f /Library/LaunchAgents/app.faceid.agent.plist
 
 echo "→ Removing the plugin"
+rm -rf /Library/Security/SecurityAgentPlugins/Gaze.bundle
 rm -rf /Library/Security/SecurityAgentPlugins/FaceID.bundle
 
 echo

@@ -4,7 +4,7 @@ import SwiftUI
 /// Design tokens.
 ///
 /// The palette follows the system appearance. It used to be dark unconditionally, on the
-/// reasoning that Face ID is dark on every Apple platform — but that is true of Apple's
+/// reasoning that Gaze is dark on every Apple platform — but that is true of Apple's
 /// *sheet*, which appears over whatever you were doing, not of a settings window that sits
 /// among your other windows. A window that stays black while everything around it turns
 /// white is the one that looks broken.
@@ -94,7 +94,7 @@ enum Theme {
 	///
 	/// Tinting every switch, slider and icon green made the whole window read as one
 	/// undifferentiated colour, so the green stopped meaning anything. Reserving it for
-	/// Face ID itself — the glyph, the enrolment ring, the success tick — is what gives it
+	/// Gaze itself — the glyph, the enrolment ring, the success tick — is what gives it
 	/// back its meaning: green here says *recognised*, not *this is a control*.
 	/// Black and white, which is exactly what an accent of "no colour" means in each
 	/// appearance — and what makes a filled button read as filled in both.
@@ -112,7 +112,7 @@ enum Theme {
 	static let selection = dynamic(light: .black.opacity(0.13), dark: .white.opacity(0.16))
 	static let hoverFill = dynamic(light: .black.opacity(0.06), dark: .white.opacity(0.07))
 
-	/// Apple's system green. Face ID identity only, never chrome.
+	/// Apple's system green. Gaze identity only, never chrome.
 	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
 	static let warning = Color(red: 1.0, green: 0.62, blue: 0.04)
 	static let danger = Color(red: 1.0, green: 0.27, blue: 0.23)
@@ -283,7 +283,7 @@ enum Typography {
 	/// The smallest thing in the app.
 	static let caption = Font.caption
 
-	/// The Face ID mark used as a picture rather than as text — the hero row, the About
+	/// The Gaze mark used as a picture rather than as text — the hero row, the About
 	/// panel. Fixed rather than scaled: this is an illustration sized against the layout
 	/// around it, and it is never the only statement of what it says.
 	static let glyph = Font.system(size: 34, weight: .thin)

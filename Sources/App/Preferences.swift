@@ -66,7 +66,7 @@ final class Preferences {
 		}
 	}
 
-	/// Where the Face ID mark appears while Face ID is running.
+	/// Where the Gaze mark appears while Gaze is running.
 	///
 	/// Ruken's suggestion, and Sapphire's behaviour: rather than a panel dropping out with a
 	/// large mark in it, a small mark on the *ear* — the strip of screen beside the camera

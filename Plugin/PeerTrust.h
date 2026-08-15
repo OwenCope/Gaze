@@ -1,5 +1,5 @@
 /*
- Verifies that the process answering the plugin is really the Face ID agent.
+ Verifies that the process answering the plugin is really the Gaze agent.
 
  This is the load-bearing security check in the whole design. The plugin runs privileged
  and asks an unprivileged process a question whose answer unlocks the Mac. Anything that
@@ -30,6 +30,6 @@
          Fails closed on every error: an unreadable audit token, an unparseable
          requirement or a revoked signature all return false.
  */
-bool FaceIDPeerSatisfiesRequirement(xpc_connection_t connection, const char *requirement);
+bool GazePeerSatisfiesRequirement(xpc_connection_t connection, const char *requirement);
 
 #endif /* FACEID_PEER_TRUST_H */

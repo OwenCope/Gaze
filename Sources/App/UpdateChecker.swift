@@ -32,7 +32,7 @@ final class UpdateChecker {
 
 	static let shared = UpdateChecker()
 
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "Updates")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Updates")
 
 	enum State: Equatable {
 		case idle

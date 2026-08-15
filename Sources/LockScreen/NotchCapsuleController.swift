@@ -11,7 +11,7 @@ import os
 @MainActor
 final class NotchCapsuleController {
 
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "NotchCapsule")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "NotchCapsule")
 
 	private var window: NSWindow?
 	private var host: NSHostingView<AnyView>?

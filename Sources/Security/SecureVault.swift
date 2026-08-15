@@ -12,7 +12,7 @@ import os
 enum SecureVault {
 
 	private static let keyAccount = "vault-key"
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "SecureVault")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "SecureVault")
 
 	enum VaultError: Error {
 		case enclaveUnavailable
@@ -47,6 +47,11 @@ enum SecureVault {
 	private static func symmetricKey() throws -> SymmetricKey {
 		let key = try enclaveKey()
 		let shared = try key.sharedSecretFromKeyAgreement(with: key.publicKey)
+		// The salt keeps the old name deliberately. It is a cryptographic constant,
+		// not a label: every key ever derived came from these exact bytes, and
+		// renaming it to match the app would silently derive a different key and
+		// make existing vaults undecryptable. It is versioned for when that is
+		// actually wanted.
 		return shared.hkdfDerivedSymmetricKey(
 			using: SHA256.self,
 			salt: Data("app.faceid.vault.v1".utf8),

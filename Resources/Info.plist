@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Face ID</string>
+	<string>Gaze</string>
 	<key>CFBundleDisplayName</key>
-	<string>Face ID</string>
+	<string>Gaze</string>
 	<key>CFBundleExecutable</key>
-	<string>FaceID</string>
+	<string>Gaze</string>
 	<key>CFBundleIdentifier</key>
-	<string>app.faceid.FaceID</string>
+	<string>com.gazeunlock.Gaze</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -23,14 +23,14 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 
-	<!-- Face ID's own UI is dark on every Apple platform, so the app doesn't follow
+	<!-- Gaze's own UI is dark on every Apple platform, so the app doesn't follow
 	     the system appearance. -->
 	<key>NSRequiresAquaSystemAppearance</key>
 	<false/>
 
 	<!-- Shown in the TCC prompt the first time we open the camera. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Face ID uses the camera to enrol your face and to recognise you when your Mac is locked. Images are matched on-device and never leave this Mac.</string>
+	<string>Gaze uses the camera to enroll your face and to recognize you when your Mac is locked. Images are matched on-device and never leave this Mac.</string>
 
 	<!-- The app runs as a menu bar agent; the setup window is opened on demand. -->
 	<key>LSUIElement</key>

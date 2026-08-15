@@ -1,5 +1,5 @@
 /*
- The Face ID authorization plugin.
+ The Gaze authorization plugin.
 
  macOS loads this into SecurityAgent at the lock screen. Because a face match has to be
  able to unlock on its own, this mechanism is the *only* one in the rule — there is no
@@ -15,8 +15,8 @@
    to ever guess in the other direction.
 */
 
-#import "FaceIDCapsuleView.h"
-#import "FaceIDUnlockProtocol.h"
+#import "GazeCapsuleView.h"
+#import "GazeUnlockProtocol.h"
 #import "PeerTrust.h"
 
 #import <Cocoa/Cocoa.h>
@@ -29,12 +29,12 @@
 #import <sys/stat.h>
 #import <xpc/xpc.h>
 
-static os_log_t FaceIDLog(void)
+static os_log_t GazeLog(void)
 {
 	static os_log_t log;
 	static dispatch_once_t once;
 	dispatch_once(&once, ^{
-		log = os_log_create("app.faceid.plugin", "Mechanism");
+		log = os_log_create("com.gazeunlock.Gaze.plugin", "Mechanism");
 	});
 	return log;
 }
@@ -46,7 +46,7 @@ static os_log_t FaceIDLog(void)
 /// was a guaranteed hang — the mechanism entered, blocked forever, and the authorization
 /// eventually failed with errAuthorizationInternal. That looked identical to the plugin
 /// never loading, which is what sent me chasing code signing for hours.
-static void FaceIDRunOnMain(dispatch_block_t block)
+static void GazeRunOnMain(dispatch_block_t block)
 {
 	if ([NSThread isMainThread]) {
 		block();
@@ -58,7 +58,7 @@ static void FaceIDRunOnMain(dispatch_block_t block)
 /*
  Reaching the agent's mach service across login-session boundaries.
 
- The agent registers `app.faceid.unlock` in the console user's GUI domain (`gui/501`).
+ The agent registers `com.gazeunlock.Gaze.unlock` in the console user's GUI domain (`gui/501`).
  The plugin runs as `_securityagent`, in a different domain, so an ordinary lookup finds
  nothing and simply times out — which is indistinguishable from the agent being down.
 
@@ -69,7 +69,7 @@ static void FaceIDRunOnMain(dispatch_block_t block)
 extern void xpc_connection_set_target_uid(xpc_connection_t connection, uid_t uid);
 
 /// The uid of whoever owns the console — the session whose agent we want.
-static uid_t FaceIDConsoleUID(void)
+static uid_t GazeConsoleUID(void)
 {
 	struct stat info;
 	if (stat("/dev/console", &info) == 0) {
@@ -85,16 +85,16 @@ static uid_t FaceIDConsoleUID(void)
 
  The reply is only trusted when it (a) comes from a process satisfying the pinned code
  requirement and (b) carries back the nonce from this exact request. See PeerTrust.h and
- FaceIDUnlockProtocol.h for why neither check alone is enough.
+ GazeUnlockProtocol.h for why neither check alone is enough.
 */
-static FaceIDVerdict FaceIDAskAgent(const char *username, const char *peerRequirement)
+static GazeVerdict GazeAskAgent(const char *username, const char *peerRequirement)
 {
-	__block FaceIDVerdict verdict = kFaceIDVerdictUnavailable;
+	__block GazeVerdict verdict = kGazeVerdictUnavailable;
 
-	uint8_t nonce[kFaceIDNonceLength];
+	uint8_t nonce[kGazeNonceLength];
 	if (SecRandomCopyBytes(kSecRandomDefault, sizeof(nonce), nonce) != errSecSuccess) {
-		os_log_error(FaceIDLog(), "Could not generate a nonce; refusing to ask.");
-		return kFaceIDVerdictUnavailable;
+		os_log_error(GazeLog(), "Could not generate a nonce; refusing to ask.");
+		return kGazeVerdictUnavailable;
 	}
 	// A block cannot capture an array, so compare through a pointer. It stays valid for
 	// the block's lifetime because this function waits on the semaphore below before
@@ -102,15 +102,15 @@ static FaceIDVerdict FaceIDAskAgent(const char *username, const char *peerRequir
 	const uint8_t *sentNonce = nonce;
 
 	xpc_connection_t connection = xpc_connection_create_mach_service(
-		kFaceIDMachServiceName, NULL, 0);
+		kGazeMachServiceName, NULL, 0);
 	if (connection == NULL) {
-		return kFaceIDVerdictUnavailable;
+		return kGazeVerdictUnavailable;
 	}
 
 	// Target the console user's domain before resuming — after resume it is too late.
-	uid_t consoleUID = FaceIDConsoleUID();
+	uid_t consoleUID = GazeConsoleUID();
 	xpc_connection_set_target_uid(connection, consoleUID);
-	os_log(FaceIDLog(), "Asking the agent in session uid %d.", consoleUID);
+	os_log(GazeLog(), "Asking the agent in session uid %d.", consoleUID);
 
 	xpc_connection_set_event_handler(connection, ^(xpc_object_t event) {
 		(void)event;  // Errors surface as a nil reply below.
@@ -118,10 +118,10 @@ static FaceIDVerdict FaceIDAskAgent(const char *username, const char *peerRequir
 	xpc_connection_resume(connection);
 
 	xpc_object_t request = xpc_dictionary_create(NULL, NULL, 0);
-	xpc_dictionary_set_string(request, kFaceIDKeyCommand, kFaceIDCommandAuthenticate);
-	xpc_dictionary_set_data(request, kFaceIDKeyNonce, nonce, sizeof(nonce));
+	xpc_dictionary_set_string(request, kGazeKeyCommand, kGazeCommandAuthenticate);
+	xpc_dictionary_set_data(request, kGazeKeyNonce, nonce, sizeof(nonce));
 	if (username != NULL) {
-		xpc_dictionary_set_string(request, kFaceIDKeyUsername, username);
+		xpc_dictionary_set_string(request, kGazeKeyUsername, username);
 	}
 
 	dispatch_semaphore_t done = dispatch_semaphore_create(0);
@@ -136,31 +136,31 @@ static FaceIDVerdict FaceIDAskAgent(const char *username, const char *peerRequir
 
 			// Identity first. An unverified peer's answer is discarded without being read,
 			// so a hostile responder cannot influence anything below.
-			if (!FaceIDPeerSatisfiesRequirement(connection, peerRequirement)) {
-				os_log_error(FaceIDLog(), "Reply from an untrusted peer; discarding.");
+			if (!GazePeerSatisfiesRequirement(connection, peerRequirement)) {
+				os_log_error(GazeLog(), "Reply from an untrusted peer; discarding.");
 				dispatch_semaphore_signal(done);
 				return;
 			}
 
 			size_t replyNonceLength = 0;
 			const void *replyNonce =
-				xpc_dictionary_get_data(reply, kFaceIDKeyNonce, &replyNonceLength);
-			if (replyNonce == NULL || replyNonceLength != kFaceIDNonceLength
-				|| timingsafe_bcmp(replyNonce, sentNonce, kFaceIDNonceLength) != 0) {
-				os_log_error(FaceIDLog(), "Reply nonce mismatch; discarding.");
+				xpc_dictionary_get_data(reply, kGazeKeyNonce, &replyNonceLength);
+			if (replyNonce == NULL || replyNonceLength != kGazeNonceLength
+				|| timingsafe_bcmp(replyNonce, sentNonce, kGazeNonceLength) != 0) {
+				os_log_error(GazeLog(), "Reply nonce mismatch; discarding.");
 				dispatch_semaphore_signal(done);
 				return;
 			}
 
-			verdict = (FaceIDVerdict)xpc_dictionary_get_int64(reply, kFaceIDKeyVerdict);
+			verdict = (GazeVerdict)xpc_dictionary_get_int64(reply, kGazeKeyVerdict);
 			dispatch_semaphore_signal(done);
 		});
 
 	dispatch_time_t deadline = dispatch_time(
-		DISPATCH_TIME_NOW, (int64_t)kFaceIDAuthenticateTimeoutSeconds * NSEC_PER_SEC);
+		DISPATCH_TIME_NOW, (int64_t)kGazeAuthenticateTimeoutSeconds * NSEC_PER_SEC);
 	if (dispatch_semaphore_wait(done, deadline) != 0) {
-		os_log_error(FaceIDLog(), "Agent did not answer in time.");
-		verdict = kFaceIDVerdictUnavailable;
+		os_log_error(GazeLog(), "Agent did not answer in time.");
+		verdict = kGazeVerdictUnavailable;
 	}
 
 	xpc_connection_cancel(connection);
@@ -169,11 +169,11 @@ static FaceIDVerdict FaceIDAskAgent(const char *username, const char *peerRequir
 
 #pragma mark - Password
 
-struct FaceIDPamContext {
+struct GazePamContext {
 	const char *password;
 };
 
-static int FaceIDPamConverse(
+static int GazePamConverse(
 	int count, const struct pam_message **messages,
 	struct pam_response **responses, void *context)
 {
@@ -181,7 +181,7 @@ static int FaceIDPamConverse(
 		return PAM_CONV_ERR;
 	}
 
-	struct FaceIDPamContext *ctx = (struct FaceIDPamContext *)context;
+	struct GazePamContext *ctx = (struct GazePamContext *)context;
 	struct pam_response *replies = calloc((size_t)count, sizeof(struct pam_response));
 	if (replies == NULL) {
 		return PAM_BUF_ERR;
@@ -202,14 +202,14 @@ static int FaceIDPamConverse(
 /// Deliberately not a hand-rolled check: PAM is what enforces password policy, account
 /// expiry and directory lookups, so anything less thorough here would authorise logins
 /// the system itself would refuse.
-static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
+static BOOL GazePasswordIsValid(const char *username, const char *password)
 {
 	if (username == NULL || password == NULL) {
 		return NO;
 	}
 
-	struct FaceIDPamContext context = { .password = password };
-	struct pam_conv conversation = { FaceIDPamConverse, &context };
+	struct GazePamContext context = { .password = password };
+	struct pam_conv conversation = { GazePamConverse, &context };
 	pam_handle_t *handle = NULL;
 
 	if (pam_start("screensaver", username, &conversation, &handle) != PAM_SUCCESS) {
@@ -251,23 +251,23 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 /// `NSWindow` returns NO from `canBecomeKeyWindow` for borderless windows by default, so
 /// the password field could be focused but never received a keystroke — the field looked
 /// live and simply ignored typing. Overriding both is what makes keyboard input reach it.
-@interface FaceIDPanelWindow : NSWindow
+@interface GazePanelWindow : NSWindow
 @end
 
-@implementation FaceIDPanelWindow
+@implementation GazePanelWindow
 - (BOOL)canBecomeKeyWindow { return YES; }
 - (BOOL)canBecomeMainWindow { return YES; }
 @end
 
 #pragma mark - View
 
-@interface FaceIDPluginView : NSObject
+@interface GazePluginView : NSObject
 @property (nonatomic, strong) NSView *container;
-@property (nonatomic, strong) FaceIDCapsuleView *capsule;
+@property (nonatomic, strong) GazeCapsuleView *capsule;
 @property (nonatomic, strong) NSSecureTextField *passwordField;
 @property (nonatomic, copy) NSString *username;
 /// NO when recognition cannot run, in which case the capsule is never shown.
-@property (nonatomic, assign) BOOL faceIDAvailable;
+@property (nonatomic, assign) BOOL gazeAvailable;
 @property (nonatomic, strong) NSWindow *panelWindow;
 @property (nonatomic, strong) NSTextField *statusLabel;
 @property (nonatomic, strong) NSImageView *glyphView;
@@ -291,7 +291,7 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
                      andEngineRef:(AuthorizationEngineRef)engineRef;
 @end
 
-@implementation FaceIDPluginView
+@implementation GazePluginView
 
 /*
  Plain NSObject, not SFAuthorizationPluginView.
@@ -329,7 +329,7 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 /// Reveals the password field once face recognition is out of attempts.
 - (void)fallBackToPassword
 {
-	os_log_fault(FaceIDLog(), "fallBackToPassword: field=%{public}s window=%{public}s",
+	os_log_fault(GazeLog(), "fallBackToPassword: field=%{public}s window=%{public}s",
 		self.passwordField != nil ? "exists" : "NIL",
 		self.passwordField.window != nil ? "on screen" : "NO WINDOW");
 	self.statusLabel.stringValue = @"Face not recognised — enter your password";
@@ -338,7 +338,7 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	[self.panelWindow makeKeyAndOrderFront:nil];
 	[NSApp activateIgnoringOtherApps:YES];
 	[self.panelWindow makeFirstResponder:self.passwordField];
-	os_log_fault(FaceIDLog(), "Password field shown: key=%{public}s firstResponder=%{public}s",
+	os_log_fault(GazeLog(), "Password field shown: key=%{public}s firstResponder=%{public}s",
 		self.panelWindow.isKeyWindow ? "YES" : "NO",
 		self.panelWindow.firstResponder == self.passwordField ? "field" : "other");
 }
@@ -354,7 +354,7 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 /// Builds and shows our own window, since SecurityAgent never requests a view.
 - (void)presentOwnPanel
 {
-	os_log_fault(FaceIDLog(), "presentOwnPanel ENTERED (thread=%{public}s)",
+	os_log_fault(GazeLog(), "presentOwnPanel ENTERED (thread=%{public}s)",
 		[NSThread isMainThread] ? "main" : "background");
 
 	if (self.panelWindow != nil) {
@@ -386,7 +386,7 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	const CGFloat drop = 66;
 	const CGFloat height = self.notchHeight + drop;
 
-	NSWindow *window = [[FaceIDPanelWindow alloc]
+	NSWindow *window = [[GazePanelWindow alloc]
 		initWithContentRect:NSMakeRect(NSMidX(screen.frame) - width / 2,
 									   NSMaxY(screen.frame) - height,
 									   width, height)
@@ -470,7 +470,7 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	self.panelWindow = window;
 	[window orderFrontRegardless];
 
-	os_log_fault(FaceIDLog(), "Own panel presented at the notch: visible=%{public}s",
+	os_log_fault(GazeLog(), "Own panel presented at the notch: visible=%{public}s",
 		window.isVisible ? "YES" : "NO");
 }
 
@@ -555,7 +555,7 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	if (self.panelWindow == nil) {
 		return;
 	}
-	os_log_fault(FaceIDLog(), "Dismissing panel.");
+	os_log_fault(GazeLog(), "Dismissing panel.");
 	[self.panelWindow orderOut:nil];
 	[self.panelWindow close];
 	self.panelWindow = nil;
@@ -580,14 +580,14 @@ static BOOL FaceIDPasswordIsValid(const char *username, const char *password)
 	NSString *entered = self.passwordField.stringValue ?: @"";
 	const char *user = self.username.UTF8String;
 
-	if (user != NULL && FaceIDPasswordIsValid(user, entered.UTF8String)) {
-		os_log_fault(FaceIDLog(), "Password accepted; allowing.");
+	if (user != NULL && GazePasswordIsValid(user, entered.UTF8String)) {
+		os_log_fault(GazeLog(), "Password accepted; allowing.");
 		[self.panelWindow orderOut:nil];
 		[self callbacks]->SetResult([self engineRef], kAuthorizationResultAllow);
 		return;
 	}
 
-	os_log_fault(FaceIDLog(), "Password rejected (user=%{public}s).",
+	os_log_fault(GazeLog(), "Password rejected (user=%{public}s).",
 		user != NULL ? user : "NULL");
 	self.passwordField.stringValue = @"";
 	self.statusLabel.stringValue = @"Incorrect password";
@@ -606,12 +606,12 @@ typedef struct {
 	/// Objective-C pointer living inside a malloc'd C struct.
 	void *view;
 	char peerRequirement[512];
-} FaceIDMechanism;
+} GazeMechanism;
 
 typedef struct {
 	const AuthorizationCallbacks *callbacks;
 	char peerRequirement[512];
-} FaceIDPlugin;
+} GazePlugin;
 
 /// Reads the username being authenticated.
 ///
@@ -619,7 +619,7 @@ typedef struct {
 /// invoked from an ordinary application — and a nil username makes the password check
 /// refuse every password, which reads as "incorrect" no matter what is typed. Fall back to
 /// whoever owns the console, which is the person in front of the machine either way.
-static const char *FaceIDCurrentUsername(FaceIDMechanism *mechanism)
+static const char *GazeCurrentUsername(GazeMechanism *mechanism)
 {
 	const AuthorizationValue *value = NULL;
 	OSStatus status = mechanism->callbacks->GetContextValue(
@@ -627,34 +627,34 @@ static const char *FaceIDCurrentUsername(FaceIDMechanism *mechanism)
 
 	if (status == errSecSuccess && value != NULL && value->data != NULL
 		&& ((const char *)value->data)[0] != '\0') {
-		os_log_fault(FaceIDLog(), "Username from context: %{public}s",
+		os_log_fault(GazeLog(), "Username from context: %{public}s",
 			(const char *)value->data);
 		return (const char *)value->data;
 	}
 
 	static char fallback[256];
-	struct passwd *pw = getpwuid(FaceIDConsoleUID());
+	struct passwd *pw = getpwuid(GazeConsoleUID());
 	if (pw != NULL && pw->pw_name != NULL) {
 		strlcpy(fallback, pw->pw_name, sizeof(fallback));
-		os_log_fault(FaceIDLog(), "No username in context; using console user %{public}s",
+		os_log_fault(GazeLog(), "No username in context; using console user %{public}s",
 			fallback);
 		return fallback;
 	}
 
-	os_log_error(FaceIDLog(), "No username available at all.");
+	os_log_error(GazeLog(), "No username available at all.");
 	return NULL;
 }
 
-static OSStatus FaceIDMechanismCreate(
+static OSStatus GazeMechanismCreate(
 	AuthorizationPluginRef inPlugin, AuthorizationEngineRef inEngine,
 	AuthorizationMechanismId mechanismId, AuthorizationMechanismRef *outMechanism)
 {
 	
 
-	os_log_fault(FaceIDLog(), "MechanismCreate for id '%{public}s'.", mechanismId);
+	os_log_fault(GazeLog(), "MechanismCreate for id '%{public}s'.", mechanismId);
 
-	FaceIDPlugin *plugin = (FaceIDPlugin *)inPlugin;
-	FaceIDMechanism *mechanism = calloc(1, sizeof(FaceIDMechanism));
+	GazePlugin *plugin = (GazePlugin *)inPlugin;
+	GazeMechanism *mechanism = calloc(1, sizeof(GazeMechanism));
 	if (mechanism == NULL) {
 		return errAuthorizationInternal;
 	}
@@ -668,27 +668,27 @@ static OSStatus FaceIDMechanismCreate(
 	return errAuthorizationSuccess;
 }
 
-static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
+static OSStatus GazeMechanismInvoke(AuthorizationMechanismRef inMechanism)
 {
-	FaceIDMechanism *mechanism = (FaceIDMechanism *)inMechanism;
-	os_log_fault(FaceIDLog(), "MechanismInvoke entered.");
-	const char *username = FaceIDCurrentUsername(mechanism);
+	GazeMechanism *mechanism = (GazeMechanism *)inMechanism;
+	os_log_fault(GazeLog(), "MechanismInvoke entered.");
+	const char *username = GazeCurrentUsername(mechanism);
 
 	// No pinned requirement means we cannot tell our agent from anything else claiming to
 	// be it, so recognition is not offered at all — password only, no capsule.
-	BOOL canUseFaceID = mechanism->peerRequirement[0] != '\0';
+	BOOL canUseGaze = mechanism->peerRequirement[0] != '\0';
 
-	FaceIDRunOnMain(^{
+	GazeRunOnMain(^{
 		if (mechanism->view == NULL) {
-			FaceIDPluginView *view = [[FaceIDPluginView alloc]
+			GazePluginView *view = [[GazePluginView alloc]
 				initWithCallbacks:mechanism->callbacks andEngineRef:mechanism->engine];
-			view.faceIDAvailable = canUseFaceID;
+			view.gazeAvailable = canUseGaze;
 			view.username = username != NULL
 				? [NSString stringWithUTF8String:username] : nil;
 			mechanism->view = (void *)CFBridgingRetain(view);
 		}
-		FaceIDPluginView *v = (__bridge FaceIDPluginView *)mechanism->view;
-		os_log_fault(FaceIDLog(), "View object is %{public}s",
+		GazePluginView *v = (__bridge GazePluginView *)mechanism->view;
+		os_log_fault(GazeLog(), "View object is %{public}s",
 			v != nil ? "alive" : "NIL — nothing will happen");
 
 		// We draw our own window rather than relying on SFAuthorizationPluginView.
@@ -708,15 +708,15 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 		(void)v;
 	});
 
-	if (!canUseFaceID) {
+	if (!canUseGaze) {
 		// Nothing to ask. Wait on the password field rather than resolving here.
-		os_log(FaceIDLog(), "Face ID unavailable; password only.");
+		os_log(GazeLog(), "Gaze unavailable; password only.");
 		return errAuthorizationSuccess;
 	}
 
 	// Ask the agent asynchronously and return immediately.
 	//
-	// The query blocks for up to kFaceIDAuthenticateTimeoutSeconds waiting on a reply, and
+	// The query blocks for up to kGazeAuthenticateTimeoutSeconds waiting on a reply, and
 	// mechanisms are invoked on the main thread — so doing it inline freezes the UI. The
 	// capsule would sit motionless and the panel would look hung for the whole scan, which
 	// is precisely the moment it needs to be animating.
@@ -725,15 +725,15 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 	// until something resolves it, either the verdict below or `buttonPressed:`.
 	char *usernameCopy = username != NULL ? strdup(username) : NULL;
 	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-		FaceIDVerdict verdict = FaceIDAskAgent(usernameCopy, mechanism->peerRequirement);
+		GazeVerdict verdict = GazeAskAgent(usernameCopy, mechanism->peerRequirement);
 		free(usernameCopy);
 
-		if (verdict == kFaceIDVerdictMatch) {
-			os_log(FaceIDLog(), "Face recognised; allowing unlock.");
+		if (verdict == kGazeVerdictMatch) {
+			os_log(GazeLog(), "Face recognised; allowing unlock.");
 			// The checkmark plays before the result lands, so the confirmation is seen
 			// rather than skipped past.
-			FaceIDRunOnMain(^{
-				FaceIDPluginView *view = (__bridge FaceIDPluginView *)mechanism->view;
+			GazeRunOnMain(^{
+				GazePluginView *view = (__bridge GazePluginView *)mechanism->view;
 
 				// The result must not depend on the animation running.
 				//
@@ -753,11 +753,11 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 		// Everything else — no match, lockout, an unreachable agent, a timeout — lands on
 		// the password field. None of these are grounds to deny outright: denying would
 		// leave the user unable to get in at all.
-		os_log(FaceIDLog(), "Face not accepted (verdict %d); falling back to password.",
+		os_log(GazeLog(), "Face not accepted (verdict %d); falling back to password.",
 			(int)verdict);
 
-		FaceIDRunOnMain(^{
-			FaceIDPluginView *view = (__bridge FaceIDPluginView *)mechanism->view;
+		GazeRunOnMain(^{
+			GazePluginView *view = (__bridge GazePluginView *)mechanism->view;
 
 			// Reveal the field directly rather than from an animation completion.
 			//
@@ -774,24 +774,24 @@ static OSStatus FaceIDMechanismInvoke(AuthorizationMechanismRef inMechanism)
 	return errAuthorizationSuccess;
 }
 
-static OSStatus FaceIDMechanismDeactivate(AuthorizationMechanismRef inMechanism)
+static OSStatus GazeMechanismDeactivate(AuthorizationMechanismRef inMechanism)
 {
-	FaceIDMechanism *mechanism = (FaceIDMechanism *)inMechanism;
+	GazeMechanism *mechanism = (GazeMechanism *)inMechanism;
 
-	FaceIDRunOnMain(^{
-		[(__bridge FaceIDPluginView *)mechanism->view dismissPanel];
+	GazeRunOnMain(^{
+		[(__bridge GazePluginView *)mechanism->view dismissPanel];
 	});
 	return mechanism->callbacks->DidDeactivate(mechanism->engine);
 }
 
-static OSStatus FaceIDMechanismDestroy(AuthorizationMechanismRef inMechanism)
+static OSStatus GazeMechanismDestroy(AuthorizationMechanismRef inMechanism)
 {
-	FaceIDMechanism *mechanism = (FaceIDMechanism *)inMechanism;
+	GazeMechanism *mechanism = (GazeMechanism *)inMechanism;
 	if (mechanism->view != NULL) {
 		// Belt and braces: if the evaluation was torn down without a Deactivate, this is
 		// the last chance to get the window off the screen.
-		FaceIDRunOnMain(^{
-			[(__bridge FaceIDPluginView *)mechanism->view dismissPanel];
+		GazeRunOnMain(^{
+			[(__bridge GazePluginView *)mechanism->view dismissPanel];
 		});
 		// Balances the CFBridgingRetain in Invoke.
 		CFRelease(mechanism->view);
@@ -801,19 +801,19 @@ static OSStatus FaceIDMechanismDestroy(AuthorizationMechanismRef inMechanism)
 	return errAuthorizationSuccess;
 }
 
-static OSStatus FaceIDPluginDestroy(AuthorizationPluginRef inPlugin)
+static OSStatus GazePluginDestroy(AuthorizationPluginRef inPlugin)
 {
 	free(inPlugin);
 	return errAuthorizationSuccess;
 }
 
-static AuthorizationPluginInterface FaceIDPluginInterface = {
+static AuthorizationPluginInterface GazePluginInterface = {
 	kAuthorizationPluginInterfaceVersion,
-	FaceIDPluginDestroy,
-	FaceIDMechanismCreate,
-	FaceIDMechanismInvoke,
-	FaceIDMechanismDeactivate,
-	FaceIDMechanismDestroy,
+	GazePluginDestroy,
+	GazeMechanismCreate,
+	GazeMechanismInvoke,
+	GazeMechanismDeactivate,
+	GazeMechanismDestroy,
 };
 
 /// Entry point macOS looks up when loading the bundle.
@@ -829,9 +829,9 @@ OSStatus AuthorizationPluginCreate(
 	// anyway. Without a log on the *success* path there is no way to tell a plugin that
 	// never loaded from one that loaded and then failed for an unrelated reason, and I
 	// spent a long time assuming the former.
-	os_log_fault(FaceIDLog(), "AuthorizationPluginCreate entered — the plugin IS loaded.");
+	os_log_fault(GazeLog(), "AuthorizationPluginCreate entered — the plugin IS loaded.");
 
-	FaceIDPlugin *plugin = calloc(1, sizeof(FaceIDPlugin));
+	GazePlugin *plugin = calloc(1, sizeof(GazePlugin));
 	if (plugin == NULL) {
 		return errAuthorizationInternal;
 	}
@@ -840,16 +840,16 @@ OSStatus AuthorizationPluginCreate(
 	// The requirement the agent must satisfy is written into the bundle at install time,
 	// when the agent's cdhash is known. Without it we cannot identify the peer, so the
 	// plugin degrades to password-only rather than trusting an unverifiable answer.
-	NSBundle *bundle = [NSBundle bundleWithIdentifier:@"app.faceid.plugin"];
-	NSString *requirement = [bundle objectForInfoDictionaryKey:@"FaceIDAgentRequirement"];
+	NSBundle *bundle = [NSBundle bundleWithIdentifier:@"com.gazeunlock.Gaze.plugin"];
+	NSString *requirement = [bundle objectForInfoDictionaryKey:@"GazeAgentRequirement"];
 	if (requirement.length > 0) {
 		strlcpy(plugin->peerRequirement, requirement.UTF8String,
 			sizeof(plugin->peerRequirement));
 	} else {
-		os_log_error(FaceIDLog(), "No agent requirement pinned; Face ID disabled.");
+		os_log_error(GazeLog(), "No agent requirement pinned; Gaze disabled.");
 	}
 
 	*outPlugin = (AuthorizationPluginRef)plugin;
-	*outPluginInterface = &FaceIDPluginInterface;
+	*outPluginInterface = &GazePluginInterface;
 	return errAuthorizationSuccess;
 }

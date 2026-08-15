@@ -18,7 +18,7 @@ import Security
  Run:    ./build/PanelTest.app/Contents/MacOS/PanelTest
 */
 
-let right = "app.faceid.testunlock"
+let right = "com.gazeunlock.Gaze.testunlock"
 
 func requestRight() -> String {
 	var authRef: AuthorizationRef?

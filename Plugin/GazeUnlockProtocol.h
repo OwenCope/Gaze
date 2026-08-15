@@ -1,6 +1,6 @@
 /*
  Shared contract between the authorization plugin (inside SecurityAgent) and the
- Face ID agent (in the logged-in user's session).
+ Gaze agent (in the logged-in user's session).
 
  The split exists because neither side can do the job alone. SecurityAgent runs as
  `_securityagent` and has no camera TCC approval — and there is no way to prompt for it
@@ -17,31 +17,31 @@
 #include <stdint.h>
 
 /// Mach service vended by the user's session agent, registered via its LaunchAgent.
-#define kFaceIDMachServiceName "app.faceid.unlock"
+#define kGazeMachServiceName "com.gazeunlock.Gaze.unlock"
 
 /// Message keys.
-#define kFaceIDKeyCommand   "command"
-#define kFaceIDKeyNonce     "nonce"
-#define kFaceIDKeyVerdict   "verdict"
-#define kFaceIDKeyReason    "reason"
-#define kFaceIDKeyUsername  "username"
+#define kGazeKeyCommand   "command"
+#define kGazeKeyNonce     "nonce"
+#define kGazeKeyVerdict   "verdict"
+#define kGazeKeyReason    "reason"
+#define kGazeKeyUsername  "username"
 
 /// Commands sent by the plugin.
-#define kFaceIDCommandAuthenticate "authenticate"
-#define kFaceIDCommandCancel       "cancel"
+#define kGazeCommandAuthenticate "authenticate"
+#define kGazeCommandCancel       "cancel"
 
 /// Verdicts returned by the agent.
 typedef enum {
-	kFaceIDVerdictNoMatch = 0,
-	kFaceIDVerdictMatch = 1,
+	kGazeVerdictNoMatch = 0,
+	kGazeVerdictMatch = 1,
 	/// Too many failures — the agent refuses to look until a password is entered.
-	kFaceIDVerdictLockedOut = 2,
+	kGazeVerdictLockedOut = 2,
 	/// Nothing enrolled, camera unavailable, untrusted camera.
-	kFaceIDVerdictUnavailable = 3,
-} FaceIDVerdict;
+	kGazeVerdictUnavailable = 3,
+} GazeVerdict;
 
 /// Length of the challenge nonce, in bytes.
-#define kFaceIDNonceLength 32
+#define kGazeNonceLength 32
 
 /*
  Why a nonce.
@@ -60,6 +60,6 @@ typedef enum {
 /// How long the plugin waits for a verdict before giving up and falling back to a
 /// password. Deliberately short: a lock screen that appears hung is worse than one that
 /// asks for a password.
-#define kFaceIDAuthenticateTimeoutSeconds 12
+#define kGazeAuthenticateTimeoutSeconds 12
 
 #endif /* FACEID_UNLOCK_PROTOCOL_H */

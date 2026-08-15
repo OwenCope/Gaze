@@ -3,9 +3,9 @@
 ## First run on your machine
 
 ```sh
-git clone https://github.com/OwenCope/FaceID.git
-cd FaceID
-./build.sh && open "build/Face ID.app"
+git clone https://github.com/OwenCope/Gaze.git
+cd Gaze
+./build.sh && open "build/Gaze.app"
 ```
 
 **You need a code-signing identity.** `build.sh` looks for an *Apple Development* or
@@ -44,13 +44,13 @@ There is no account, no sync, and nothing leaves the device.
 model or the lighting, not the unlock path. The unlock path logs everything:
 
 ```sh
-log stream --predicate 'subsystem == "app.faceid.FaceID"'
+log stream --predicate 'subsystem == "com.gazeunlock.Gaze"'
 ```
 
 ## Build and run
 
 ```sh
-./build.sh && open "build/Face ID.app"
+./build.sh && open "build/Gaze.app"
 ```
 
 ### What you need
@@ -126,7 +126,7 @@ less. Measure there too before trusting a threshold.
 
 ## The unlock animation we want
 
-The reference is a Lottie file, `Apple Face ID.json` (LottieFiles), 60fps and
+The reference is a Lottie file, `Apple Gaze.json` (LottieFiles), 60fps and
 167 frames. Reading its keyframes gives the real timing:
 
 | Frame | Time  | What happens                                  |
@@ -142,7 +142,7 @@ slide rather than a fade, and the tick scales up rather than drawing on.
 
 The sequence, four beats:
 
-1. Green Face ID glyph, glowing, on black.
+1. Green Gaze glyph, glowing, on black.
 2. The glyph collapses inward and **rotates in 3D** — it reads as a ring seen
    edge-on, tilting toward the viewer as it spins.
 3. It settles flat into a green **ring** — an outline, not a filled disc. The
@@ -158,7 +158,7 @@ two icons swapping places, which is what `.symbolEffect(.replace)` gives you and
 why the current version feels flat by comparison.
 
 **How it is built.** `FaceBracketMorph` is a `Shape` with an animatable
-`progress`. The insight that makes it simple: the Face ID brackets already *are*
+`progress`. The insight that makes it simple: the Gaze brackets already *are*
 corner segments of a rounded square. Grow the corner radius until it reaches half
 the side, and extend each segment until it meets its neighbours, and the very
 same path becomes a circle.

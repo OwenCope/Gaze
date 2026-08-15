@@ -28,7 +28,7 @@ struct FaceEnrollment: Codable, Sendable {
 final class FaceEnrollmentStore {
 
 	private static let account = "face-enrollment"
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "Enrollment")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Enrollment")
 
 	private(set) var enrollment: FaceEnrollment?
 	/// Set when a record exists but will not decrypt — enrolment is unusable and the UI

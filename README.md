@@ -1,15 +1,15 @@
-# Face ID for macOS
+# Gaze for macOS
 
 Unlock your Mac by looking at it. Built as an alternative to
-[Sapphire](https://github.com/cshariq/Sapphire)'s Face ID feature — its approach informed
+[Sapphire](https://github.com/cshariq/Sapphire)'s Gaze feature — its approach informed
 this one, but no code was copied (it is GPL-3.0; see *Licensing* below).
 
 ## Install
 
 ```sh
-git clone https://github.com/OwenCope/FaceID.git
+git clone https://github.com/OwenCope/Gaze.git
 
-cd FaceID && ./build.sh && open "build/Face ID.app"
+cd Gaze && ./build.sh && open "build/Gaze.app"
 ```
 
 
@@ -81,7 +81,7 @@ written so that if it breaks you lose the panel and unlocking still works.
 
 ## Where to start
 
-1. `./build.sh && open "build/Face ID.app"` — it opens setup on first run
+1. `./build.sh && open "build/Gaze.app"` — it opens setup on first run
 2. Enrol, then menu bar → **Test Recognition** to see live scores
 3. Read `Sources/Security/LockWatcher.swift` — the whole unlock flow is one file
 

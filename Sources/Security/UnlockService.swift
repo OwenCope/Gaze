@@ -11,9 +11,9 @@ import os
 @MainActor
 final class UnlockService {
 
-	static let serviceName = "app.faceid.unlock"
+	static let serviceName = "com.gazeunlock.Gaze.unlock"
 
-	/// Must match `kFaceIDVerdict*` in Plugin/FaceIDUnlockProtocol.h.
+	/// Must match `kGazeVerdict*` in Plugin/GazeUnlockProtocol.h.
 	enum Verdict: Int64 {
 		case noMatch = 0
 		case match = 1
@@ -21,7 +21,7 @@ final class UnlockService {
 		case unavailable = 3
 	}
 
-	private static let logger = Logger(subsystem: "app.faceid.FaceID", category: "UnlockService")
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "UnlockService")
 
 	private let store: FaceEnrollmentStore
 	private let lockout: LockoutManager
@@ -39,7 +39,7 @@ final class UnlockService {
 	/// often under 200ms, which is faster than the animation reads as anything at all.
 	private static let successDwell: TimeInterval = 1.2
 
-	/// Shortest time the Face ID glyph stays up before it may become a checkmark.
+	/// Shortest time the Gaze glyph stays up before it may become a checkmark.
 	///
 	/// Without it the glyph appears and is replaced within about 200ms — the scanning
 	/// state exists but is never actually seen, so the unlock reads as a flicker rather
@@ -58,7 +58,7 @@ final class UnlockService {
 	func start() {
 		guard listener == nil else { return }
 
-		let queue = DispatchQueue(label: "app.faceid.unlock.listener")
+		let queue = DispatchQueue(label: "com.gazeunlock.Gaze.unlock.listener")
 		let listener = xpc_connection_create_mach_service(
 			Self.serviceName, queue, UInt64(XPC_CONNECTION_MACH_SERVICE_LISTENER))
 

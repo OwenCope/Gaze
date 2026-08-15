@@ -65,7 +65,7 @@ final class CameraController {
 
 	private let session = AVCaptureSession()
 	private let output = AVCaptureVideoDataOutput()
-	private let queue = DispatchQueue(label: "app.faceid.capture", qos: .userInitiated)
+	private let queue = DispatchQueue(label: "com.gazeunlock.Gaze.capture", qos: .userInitiated)
 	private var proxy: SampleProxy?
 
 	// MARK: - Lifecycle
@@ -126,7 +126,7 @@ final class CameraController {
 		let input = try AVCaptureDeviceInput(device: device)
 		guard session.canAddInput(input) else {
 			throw NSError(
-				domain: "app.faceid", code: 1,
+				domain: "com.gazeunlock.Gaze", code: 1,
 				userInfo: [NSLocalizedDescriptionKey: "Could not read from the built-in camera."])
 		}
 		session.addInput(input)
@@ -151,7 +151,7 @@ final class CameraController {
 		session.outputs.forEach(session.removeOutput)
 		guard session.canAddOutput(output) else {
 			throw NSError(
-				domain: "app.faceid", code: 2,
+				domain: "com.gazeunlock.Gaze", code: 2,
 				userInfo: [NSLocalizedDescriptionKey: "Could not attach the video output."])
 		}
 		session.addOutput(output)

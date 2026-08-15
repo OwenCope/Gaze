@@ -8,7 +8,7 @@ import Security
 /// the confidentiality boundary.
 enum Keychain {
 
-	private static let service = "app.faceid.FaceID"
+	private static let service = "com.gazeunlock.Gaze"
 
 	static func read(_ account: String) -> Data? {
 		let query: [String: Any] = [

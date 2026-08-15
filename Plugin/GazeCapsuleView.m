@@ -1,4 +1,4 @@
-#import "FaceIDCapsuleView.h"
+#import "GazeCapsuleView.h"
 
 #import <QuartzCore/QuartzCore.h>
 
@@ -8,14 +8,14 @@ static const CGFloat kCapsuleCorner = 19.0;
 /// The glyph occupies this fraction of the capsule.
 static const CGFloat kGlyphInset = 17.0;
 
-@interface FaceIDCapsuleView ()
+@interface GazeCapsuleView ()
 @property (nonatomic, strong) CAShapeLayer *capsuleLayer;
 @property (nonatomic, strong) CAShapeLayer *glyphLayer;
 @property (nonatomic, strong) CAShapeLayer *checkLayer;
 @property (nonatomic, strong) NSTextField *statusLabel;
 @end
 
-@implementation FaceIDCapsuleView
+@implementation GazeCapsuleView
 
 - (instancetype)initWithFrame:(NSRect)frame
 {
@@ -60,7 +60,7 @@ static const CGFloat kGlyphInset = 17.0;
 	_statusLabel.stringValue = @"";
 	[self addSubview:_statusLabel];
 
-	_state = FaceIDCapsuleStateScanning;
+	_state = GazeCapsuleStateScanning;
 	return self;
 }
 
@@ -104,7 +104,7 @@ static const CGFloat kGlyphInset = 17.0;
 	return [path CGPath];
 }
 
-/// The Face ID mark: four corner brackets around a simplified face.
+/// The Gaze mark: four corner brackets around a simplified face.
 - (CGPathRef)faceGlyphPathInRect:(CGRect)rect
 {
 	CGMutablePathRef path = CGPathCreateMutable();
@@ -165,20 +165,20 @@ static const CGFloat kGlyphInset = 17.0;
 
 // MARK: - State
 
-- (void)setState:(FaceIDCapsuleState)state
+- (void)setState:(GazeCapsuleState)state
 {
 	_state = state;
 	switch (state) {
-	case FaceIDCapsuleStateScanning:
+	case GazeCapsuleStateScanning:
 		self.statusLabel.stringValue = @"";
 		self.glyphLayer.opacity = 1.0;
 		self.checkLayer.opacity = 0.0;
 		[self startScanPulse];
 		break;
-	case FaceIDCapsuleStateNotRecognised:
+	case GazeCapsuleStateNotRecognised:
 		self.statusLabel.stringValue = @"Face Not Recognized";
 		break;
-	case FaceIDCapsuleStateSuccess:
+	case GazeCapsuleStateSuccess:
 		self.statusLabel.stringValue = @"";
 		[self.glyphLayer removeAllAnimations];
 		break;
@@ -206,7 +206,7 @@ static const CGFloat kGlyphInset = 17.0;
 
 - (void)playRejectionThen:(void (^)(void))completion
 {
-	self.state = FaceIDCapsuleStateNotRecognised;
+	self.state = GazeCapsuleStateNotRecognised;
 	[self.glyphLayer removeAnimationForKey:@"pulse"];
 	self.glyphLayer.opacity = 1.0;
 
@@ -230,7 +230,7 @@ static const CGFloat kGlyphInset = 17.0;
 
 - (void)playSuccessThen:(void (^)(void))completion
 {
-	self.state = FaceIDCapsuleStateSuccess;
+	self.state = GazeCapsuleStateSuccess;
 
 	[CATransaction begin];
 	[CATransaction setAnimationDuration:0.28];
