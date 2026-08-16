@@ -6,17 +6,16 @@ import SwiftUI
 /// `EnrollmentModel`, so they are one screen that follows the model rather than
 /// two with a Continue between them — a button asking someone to confirm what the
 /// app can already see.
+///
+/// Always all three. There was a shorter path that skipped the capture when a
+/// face was already saved, which meant Continue could land straight on "You're
+/// all set" — a success screen for someone who had just been told they were not
+/// set up and had done nothing since. Opening setup is a request to set up, and
+/// the enrolled case is already handled by not opening the window at all.
 enum SetupStep: Int, CaseIterable {
 	case welcome
 	case capture
 	case done
-
-	/// Someone already enrolled who opens setup anyway has no face to take, so
-	/// there is nothing to show between the two ends. "Set Up Again" is a request
-	/// to take it again and asks for the whole flow.
-	static func shown(isEnrolled: Bool) -> [SetupStep] {
-		isEnrolled ? [.welcome, .done] : allCases
-	}
 }
 
 /// Setup, start to finish.
@@ -37,19 +36,12 @@ enum SetupStep: Int, CaseIterable {
 struct SetupFlow: View {
 
 	let store: FaceEnrollmentStore
-	/// Force the whole flow even when a face is saved. "Set Up Again" asks for
-	/// exactly that, and skipping the capture there would silently do nothing.
-	var forceFullFlow = false
 	var onFinish: () -> Void
 
 	@State private var camera = CameraController()
 	@State private var model: EnrollmentModel?
 	@State private var step: SetupStep = .welcome
 	@State private var failure: String?
-
-	private var steps: [SetupStep] {
-		SetupStep.shown(isEnrolled: store.isEnrolled && !forceFullFlow)
-	}
 
 	var body: some View {
 		Group {
@@ -67,6 +59,14 @@ struct SetupFlow: View {
 		.frame(width: 440, height: 600)
 		.background(Color.black)
 		.preferredColorScheme(.dark)
+		// Back to the beginning every time the window is shown.
+		//
+		// A SwiftUI `Window` scene keeps its state when it is closed and reopened,
+		// so without this, opening setup from Settings showed whatever screen it was
+		// left on last time. Closing it on the finish screen and opening it again
+		// meant being told "You're all set" without having done anything — while
+		// Settings, reading the store rather than this view, still said the opposite.
+		.onAppear { restart() }
 		.onDisappear { camera.stop() }
 		// Driven by the frame counter rather than the pose: two identical
 		// consecutive poses are normal and must still advance the state machine.
@@ -85,9 +85,17 @@ struct SetupFlow: View {
 
 	// MARK: - Flow
 
+	/// Put the flow back to its opening state.
+	private func restart() {
+		camera.stop()
+		model = nil
+		failure = nil
+		step = .welcome
+	}
+
 	private func advance() {
-		guard let index = steps.firstIndex(of: step), index + 1 < steps.count else { return }
-		withAnimation(.easeInOut(duration: 0.3)) { step = steps[index + 1] }
+		guard let next = SetupStep(rawValue: step.rawValue + 1) else { return }
+		withAnimation(.easeInOut(duration: 0.3)) { step = next }
 	}
 
 	/// Called once the capture screen has permission — not on entry.
@@ -101,7 +109,14 @@ struct SetupFlow: View {
 	}
 
 	private func save() {
-		guard let model, let cameraID = camera.boundDeviceID else { return }
+		guard let model else { return }
+		// Say so rather than returning quietly. Returning left the capture screen up
+		// with a full ring and nothing happening — the enrollment was finished and
+		// the flow simply stopped, which looks like a hang and loses the work.
+		guard let cameraID = camera.boundDeviceID else {
+			fail("Lost the camera before your face could be saved. Try again.")
+			return
+		}
 		do {
 			try store.save(prints: model.prints, cameraID: cameraID)
 			camera.stop()
