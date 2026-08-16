@@ -10,3 +10,10 @@ Plugin/build/
 
 # macOS noise
 .DS_Store
+
+# FaceIDKit — Aviorrok's proprietary framework, licensed for this app only and
+# explicitly not for any repository. Kept out of git entirely rather than
+# out of the public repo, because history is forever and this one is intended
+# to be opened up.
+Frameworks/
+

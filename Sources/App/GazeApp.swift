@@ -339,7 +339,13 @@ struct EnrollmentWindow: View {
 	@Environment(\.openWindow) private var openWindow
 
 	var body: some View {
-		EnrollmentView(store: store) {
+		// One setup flow, whether or not FaceIDKit is linked.
+		//
+		// It used to branch here, so a checkout without the framework got a
+		// completely different setup screen — the first thing every user sees being
+		// the one part no contributor could look at. `SetupMark` absorbs the
+		// difference now: same flow, plainer animations.
+		SetupFlow(store: store) {
 			dismissWindow(id: "enrollment")
 		}
 		.task {

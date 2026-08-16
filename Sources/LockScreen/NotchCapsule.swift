@@ -1,5 +1,8 @@
 import Observation
 import SwiftUI
+#if HAS_FACEIDKIT
+import FaceIDKit
+#endif
 
 /// Live state for the lock screen panel.
 ///
@@ -147,6 +150,14 @@ struct NotchCapsule: View {
 
 	@State private var breathe = false
 	@State private var expanded = false
+
+	/// Bumped whenever the panel settles on an outcome.
+	///
+	/// FaceIDKit's result animation plays off a changing value rather than on
+	/// appear, and this view is not rebuilt between phases — the hosting view keeps
+	/// its identity on purpose, a few lines up. Without something to change, the
+	/// tick would be drawn already finished.
+	@State private var resultTrigger = 0
 
 	/// Proportional to what is actually showing, not to the window.
 	///
@@ -359,6 +370,12 @@ struct NotchCapsule: View {
 		}
 		// The controller still owns the retract, so mirror it back in.
 		.onChange(of: model.isExpanded) { _, wanted in expanded = wanted }
+		// Fire the result animation on the phases that are a result. Scanning and
+		// resting are not outcomes and must not retrigger it — the panel passes
+		// through scanning on the way to every tick.
+		.onChange(of: model.phase) { _, phase in
+			if phase == .success || phase == .notRecognised { resultTrigger += 1 }
+		}
 	}
 
 	/// The detached island.
@@ -663,6 +680,48 @@ struct NotchCapsule: View {
 		return notchInset + visibleHeight * 0.30 - glyphSide / 2
 	}
 
+	/// The mark in the drop.
+	///
+	/// Aviorrok's animations where he has one, Apple's symbols where he does not.
+	/// FaceIDKit draws the scan, the tick and the failure — the same three states
+	/// this panel spends its life in — and they are the real article rather than a
+	/// symbol standing in for it. There is no padlock in FaceIDKit, so resting and
+	/// unlocked stay on `lock.fill`.
+	///
+	/// What this costs: `.replace.magic` no longer morphs the mark into the tick,
+	/// because a FaceIDKit view and an `Image` are different view identities and
+	/// there is nothing to morph between. The animations carry their own transition
+	/// instead, which is the trade — a designed sequence in place of a symbol morph.
+	@ViewBuilder
+	private var content: some View {
+		#if HAS_FACEIDKIT
+		switch model.phase {
+		case .locked, .unlocked:
+			symbolContent
+		case .scanning:
+			FaceIDScanView(
+				isVisible: true,
+				isScanning: true,
+				faceColor: .white,
+				scanColor: Theme.faceID
+			)
+			.frame(width: glyphSide, height: glyphSide)
+			.transition(.opacity)
+		case .success, .notRecognised:
+			FaceIDSuccessView(
+				diameter: glyphSide,
+				color: model.phase == .success ? Theme.faceID : Theme.danger,
+				result: model.phase == .success ? .success : .failure,
+				trigger: resultTrigger
+			)
+			.frame(width: glyphSide, height: glyphSide)
+			.transition(.opacity)
+		}
+		#else
+		symbolContent
+		#endif
+	}
+
 	/// Apple's own symbols, animated by Apple's own effects.
 	///
 	/// Hand-drawing the Gaze mark and morphing it to a tick was the wrong instinct:
@@ -670,7 +729,7 @@ struct NotchCapsule: View {
 	/// `faceid` and `checkmark.circle.fill` are both system symbols, and
 	/// `.replace.magic` is the transition Apple uses to morph between them — so this is
 	/// the genuine article rather than an imitation of it.
-	private var content: some View {
+	private var symbolContent: some View {
 		Image(systemName: symbolName)
 			.font(
 				.system(

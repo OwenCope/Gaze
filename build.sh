@@ -37,6 +37,29 @@ else
 	echo "  ! no FaceEmbedding.mlpackage — using landmark-geometry fallback"
 fi
 
+# FaceIDKit is optional in exactly the way the model above is, and for a sharper
+# reason: it is Aviorrok's, licensed for this app alone, and cannot live in the
+# repository. This project is meant to be opened up one day, and a build that
+# requires a file nobody else is allowed to have is a build nobody else can run.
+# So the animations are a capability, not a dependency — HAS_FACEIDKIT tells the
+# code which it got.
+#
+# Its `default.metallib` has to be copied into the app by hand. A static library
+# carries no resources: there is no framework bundle at runtime to load it from,
+# and without it the animations fail when they are first drawn rather than when
+# the app is built. Aviorrok's own project does the same copy.
+FACEIDKIT="$ROOT/Frameworks/FaceIDKit.xcframework/macos-arm64_x86_64"
+KIT_FLAGS=()
+if [ -d "$FACEIDKIT/FaceIDKit.framework" ]; then
+	echo "→ Linking FaceIDKit (static)"
+	KIT_FLAGS=(-F "$FACEIDKIT" -framework FaceIDKit -D HAS_FACEIDKIT)
+	cp "$FACEIDKIT/FaceIDKit.framework/Versions/A/Resources/default.metallib" \
+		"$STAGE/Contents/Resources/default.metallib"
+	echo "  ✓ default.metallib"
+else
+	echo "  ! no FaceIDKit — onboarding animations will be left out"
+fi
+
 # A distribution build links against the oldest SDK installed that still compiles this,
 # so the binary cannot reference a symbol an older Mac lacks. The linker also has to be
 # told the SDK version explicitly: left alone it stamps the toolchain's newest regardless
@@ -56,6 +79,7 @@ xcrun swiftc \
 	-target "$(host_target)" \
 	-sdk "$SDK" \
 	${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
+	${KIT_FLAGS[@]+"${KIT_FLAGS[@]}"} \
 	-framework SwiftUI \
 	-framework AppKit \
 	-framework AVFoundation \
