@@ -82,7 +82,7 @@ enum SecureVault {
 		stateLock.lock()
 		defer { stateLock.unlock() }
 
-		var state = try loadStateLocked()
+		var state = try loadOrCreateStateLocked()
 		let sealed = try AES.GCM.seal(plaintext, using: state.symmetricKey)
 		guard let combined = sealed.combined else { throw VaultError.corrupted }
 		state.records[account] = combined
@@ -97,7 +97,7 @@ enum SecureVault {
 		stateLock.lock()
 		defer { stateLock.unlock() }
 
-		let state = try loadStateLocked()
+		guard let state = try loadExistingStateLocked() else { return nil }
 		guard let combined = state.records[account] else { return nil }
 		let box = try AES.GCM.SealedBox(combined: combined)
 		let plaintext = try AES.GCM.open(box, using: state.symmetricKey)
@@ -111,7 +111,7 @@ enum SecureVault {
 		defer { stateLock.unlock() }
 
 		do {
-			return try loadStateLocked().records[account] != nil
+			return try loadExistingStateLocked()?.records[account] != nil
 		} catch {
 			logger.error("Could not inspect vault: \(error.localizedDescription, privacy: .public)")
 			return false
@@ -124,12 +124,73 @@ enum SecureVault {
 		defer { stateLock.unlock() }
 
 		do {
-			var state = try loadStateLocked()
+			guard var state = try loadExistingStateLocked() else { return }
 			guard state.records.removeValue(forKey: account) != nil else { return }
 			try persistLocked(state)
 		} catch {
 			logger.error("Could not remove vault record: \(error.localizedDescription, privacy: .public)")
 		}
+	}
+
+	/// Whether an older install can be imported without showing a Keychain prompt.
+	///
+	/// This is deliberately only a metadata check. Import is a user action because macOS may
+	/// ask for the login keychain password when the old encrypted values are read.
+	static var legacyDataAvailable: Bool {
+		stateLock.lock()
+		defer { stateLock.unlock() }
+
+		guard cachedState == nil, let url = try? vaultURL(),
+			!FileManager.default.fileExists(atPath: url.path)
+		else { return false }
+		return Keychain.hasLegacyItems()
+	}
+
+	/// Imports pre-0.4 records after the user explicitly chooses to restore them.
+	///
+	/// A declined or failed Keychain authorization is thrown to the caller, but is not cached:
+	/// reopening the import action is the user's choice and must not poison normal vault reads.
+	@discardableResult
+	static func migrateLegacy() throws -> Int? {
+		stateLock.lock()
+		defer { stateLock.unlock() }
+
+		if cachedState != nil { return nil }
+		let url = try vaultURL()
+		if FileManager.default.fileExists(atPath: url.path) {
+			_ = try loadExistingStateLocked()
+			return nil
+		}
+
+		let legacy = try Keychain.readLegacyItems()
+		guard !legacy.isEmpty else { return nil }
+		guard let keyData = legacy[keyAccount], !keyData.isEmpty else {
+			throw VaultError.corrupted
+		}
+
+		let key = try makeKey(from: keyData)
+		let symmetricKey = try deriveSymmetricKey(from: key)
+		var records = legacy
+		records.removeValue(forKey: keyAccount)
+
+		// Validate every old blob before deleting its source. A successful migration must
+		// never turn a damaged record into a silently missing one.
+		for combined in records.values {
+			let box = try AES.GCM.SealedBox(combined: combined)
+			_ = try AES.GCM.open(box, using: symmetricKey)
+		}
+
+		let state = VaultState(key: key, symmetricKey: symmetricKey, records: records)
+		try persistLocked(state)
+
+		for account in legacy.keys {
+			guard Keychain.delete(account) else {
+				logger.error("Could not remove legacy Keychain item \(account, privacy: .public).")
+				continue
+			}
+		}
+		logger.notice("Migrated \(records.count) protected record(s) out of the Keychain.")
+		return records.count
 	}
 
 	/// Destroys the vault file and removes any records left by pre-0.4 builds. The Enclave
@@ -153,94 +214,51 @@ enum SecureVault {
 
 	// MARK: - State
 
-	private static func loadStateLocked() throws -> VaultState {
+	private static func loadExistingStateLocked() throws -> VaultState? {
 		if let cachedState { return cachedState }
 		if let cachedFailure { throw cachedFailure }
 
 		let url = try vaultURL()
 		let fileManager = FileManager.default
-		if fileManager.fileExists(atPath: url.path) {
-			do {
-				let data = try Data(contentsOf: url)
-				let envelope = try PropertyListDecoder().decode(DiskEnvelope.self, from: data)
-				guard envelope.version == vaultVersion, !envelope.keyRepresentation.isEmpty else {
-					throw VaultError.corrupted
-				}
+		guard fileManager.fileExists(atPath: url.path) else { return nil }
 
-				let key = try makeKey(from: envelope.keyRepresentation)
-				let symmetricKey = try deriveSymmetricKey(from: key)
-				let box = try AES.GCM.SealedBox(combined: envelope.sealedRecords)
-				let recordData = try AES.GCM.open(
-					box, using: symmetricKey, authenticating: associatedData)
-				let diskRecords = try PropertyListDecoder().decode(DiskRecords.self, from: recordData)
-				let state = VaultState(key: key, symmetricKey: symmetricKey, records: diskRecords.records)
-				cachedState = state
-				return state
-			} catch let error as VaultError {
-				throw error
-			} catch {
-				logger.error("Vault file failed authentication: \(error.localizedDescription, privacy: .public)")
-				throw VaultError.corrupted
-			}
-		}
-
-		return try migrateLegacyStateLocked()
-	}
-
-	/// Reads and migrates pre-0.4 records once. The cached error is as important as the cached
-	/// state: all startup readers must observe the same result without asking macOS again.
-	private static func migrateLegacyStateLocked() throws -> VaultState {
 		do {
-			// Compatibility path. It is intentionally one Keychain query so a user sees at most
-			// one access decision while records migrate from the pre-0.4 layout.
-			let legacy = try Keychain.readLegacyItems()
-			guard !legacy.isEmpty else {
-				let key = try makeNewKey()
-				let state = VaultState(
-					key: key,
-					symmetricKey: try deriveSymmetricKey(from: key),
-					records: [:])
-				try persistLocked(state)
-				return state
-			}
-
-			guard let keyData = legacy[keyAccount], !keyData.isEmpty else {
-				logger.error("Legacy records exist without a vault key.")
+			let data = try Data(contentsOf: url)
+			let envelope = try PropertyListDecoder().decode(DiskEnvelope.self, from: data)
+			guard envelope.version == vaultVersion, !envelope.keyRepresentation.isEmpty else {
 				throw VaultError.corrupted
 			}
 
-			let key = try makeKey(from: keyData)
+			let key = try makeKey(from: envelope.keyRepresentation)
 			let symmetricKey = try deriveSymmetricKey(from: key)
-			var records = legacy
-			records.removeValue(forKey: keyAccount)
-
-			// Validate every old blob before deleting its source. A successful migration must
-			// never turn a damaged record into a silently missing one.
-			for combined in records.values {
-				let box = try AES.GCM.SealedBox(combined: combined)
-				_ = try AES.GCM.open(box, using: symmetricKey)
-			}
-
-			let state = VaultState(key: key, symmetricKey: symmetricKey, records: records)
-			try persistLocked(state)
-
-			for account in legacy.keys {
-				guard Keychain.delete(account) else {
-					logger.error("Could not remove legacy Keychain item \(account, privacy: .public).")
-					continue
-				}
-			}
-			logger.notice("Migrated \(records.count) protected record(s) out of the Keychain.")
+			let box = try AES.GCM.SealedBox(combined: envelope.sealedRecords)
+			let recordData = try AES.GCM.open(
+				box, using: symmetricKey, authenticating: associatedData)
+			let diskRecords = try PropertyListDecoder().decode(DiskRecords.self, from: recordData)
+			let state = VaultState(key: key, symmetricKey: symmetricKey, records: diskRecords.records)
+			cachedState = state
 			return state
 		} catch let error as VaultError {
 			cachedFailure = error
 			throw error
 		} catch {
-			logger.error("Legacy vault failed authentication: \(error.localizedDescription, privacy: .public)")
+			logger.error("Vault file failed authentication: \(error.localizedDescription, privacy: .public)")
 			let failure = VaultError.corrupted
 			cachedFailure = failure
 			throw failure
 		}
+	}
+
+	private static func loadOrCreateStateLocked() throws -> VaultState {
+		if let state = try loadExistingStateLocked() { return state }
+
+		let key = try makeNewKey()
+		let state = VaultState(
+			key: key,
+			symmetricKey: try deriveSymmetricKey(from: key),
+			records: [:])
+		try persistLocked(state)
+		return state
 	}
 
 	private static func makeNewKey() throws -> SecureEnclave.P256.KeyAgreement.PrivateKey {

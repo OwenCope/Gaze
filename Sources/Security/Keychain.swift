@@ -52,6 +52,27 @@ enum Keychain {
 		}
 	}
 
+	/// Checks for an older install without asking for its encrypted values.
+	///
+	/// Attributes are not secret. Skipping authentication UI here lets Gaze offer an import
+	/// from its first-run window instead of blocking launch behind a Keychain sheet.
+	static func hasLegacyItems() -> Bool {
+		let query: [String: Any] = [
+			kSecClass as String: kSecClassGenericPassword,
+			kSecAttrService as String: service,
+			kSecReturnAttributes as String: true,
+			kSecMatchLimit as String: kSecMatchLimitOne,
+			kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
+		]
+		var result: CFTypeRef?
+		switch SecItemCopyMatching(query as CFDictionary, &result) {
+		case errSecSuccess, errSecInteractionNotAllowed, errSecAuthFailed:
+			return true
+		default:
+			return false
+		}
+	}
+
 	/// Fetches the old vault in one call. macOS accepts `kSecMatchLimitAll` for metadata but
 	/// rejects it when legacy secret data is also requested, so use a finite limit larger than
 	/// the records Gaze has ever written. A separate query for the key, faceprint, lockout

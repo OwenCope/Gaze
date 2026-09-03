@@ -34,6 +34,8 @@ final class FaceEnrollmentStore {
 	/// Set when a record exists but will not decrypt — enrolment is unusable and the UI
 	/// should say so rather than silently offering to enrol again.
 	private(set) var isCorrupted = false
+	/// Set when a pre-0.4 install has protected records waiting for an explicit import.
+	private(set) var legacyDataAvailable = false
 
 	let embedder: FaceEmbedder = Embedders.best()
 
@@ -41,9 +43,11 @@ final class FaceEnrollmentStore {
 
 	init() {
 		load()
+		legacyDataAvailable = SecureVault.legacyDataAvailable
 	}
 
 	private func load() {
+		isCorrupted = false
 		do {
 			let stored = try SecureVault.load(FaceEnrollment.self, from: Self.account)
 			// A record made by a different embedder is not comparable, so treat it as
@@ -58,6 +62,16 @@ final class FaceEnrollmentStore {
 			Self.logger.error("Enrolment failed to open: \(error)")
 			isCorrupted = true
 		}
+	}
+
+	/// Restores data written by a pre-0.4 build. The call is intentionally explicit because
+	/// reading those old Keychain values can show Apple's login-keychain authorization sheet.
+	@discardableResult
+	func restoreLegacyData() throws -> Int {
+		let count = try SecureVault.migrateLegacy() ?? 0
+		load()
+		legacyDataAvailable = SecureVault.legacyDataAvailable
+		return count
 	}
 
 	func save(prints: [Faceprint], cameraID: String) throws {

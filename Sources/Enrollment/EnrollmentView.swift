@@ -9,13 +9,18 @@ struct EnrollmentView: View {
 	@State private var camera = CameraController()
 	@State private var model: EnrollmentModel?
 	@State private var saveError: String?
+	@State private var isRestoring = false
 
 	private let ringSize: CGFloat = 280
 	private let ring = EnrollmentRing(covered: [], currentAngle: 0, isEngaged: false)
 
 	var body: some View {
 		VStack(spacing: 0) {
-			EnrollmentTopBar(onCancel: onFinish)
+			EnrollmentTopBar(
+				onCancel: onFinish,
+				canRestore: store.legacyDataAvailable,
+				isRestoring: isRestoring,
+				onRestore: restorePreviousSetup)
 
 			HStack(alignment: .center, spacing: 30) {
 				EnrollmentGuidance(
@@ -89,11 +94,35 @@ struct EnrollmentView: View {
 			saveError = "Couldn't save your face: \(error.localizedDescription)"
 		}
 	}
+
+	private func restorePreviousSetup() {
+		guard !isRestoring else { return }
+		isRestoring = true
+		saveError = nil
+
+		do {
+			let count = try store.restoreLegacyData()
+			isRestoring = false
+			if store.isEnrolled {
+				onFinish()
+			} else if count > 0 {
+				saveError = "Previous Gaze data was restored. Set up a face to continue."
+			} else {
+				saveError = "No previous Gaze data was found."
+			}
+		} catch {
+			isRestoring = false
+			saveError = "Couldn't restore the previous setup: \(error.localizedDescription)"
+		}
+	}
 }
 
 private struct EnrollmentTopBar: View {
 
 	let onCancel: () -> Void
+	let canRestore: Bool
+	let isRestoring: Bool
+	let onRestore: () -> Void
 
 	var body: some View {
 		HStack(spacing: 11) {
@@ -107,6 +136,12 @@ private struct EnrollmentTopBar: View {
 					.foregroundStyle(Theme.secondaryLabel)
 			}
 			Spacer()
+			if canRestore {
+				Button(isRestoring ? "Restoring…" : "Restore previous setup", action: onRestore)
+					.buttonStyle(.quiet)
+					.disabled(isRestoring)
+					.help("Import data from an earlier Gaze build")
+			}
 			Button("Cancel", action: onCancel)
 				.buttonStyle(.quiet)
 				.keyboardShortcut(.cancelAction)
