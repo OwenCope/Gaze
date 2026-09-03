@@ -91,7 +91,7 @@ struct SettingsView: View {
 		.toolbar {
 			ToolbarSpacer(.flexible, placement: .navigation)
 			ToolbarItem(placement: .principal) {
-				SettingsNavigationBar(selection: $pane)
+				NativeSettingsToolbar(selection: $pane)
 			}
 			ToolbarSpacer(.flexible, placement: .primaryAction)
 		}
@@ -137,58 +137,27 @@ struct SettingsView: View {
 
 // MARK: - Native toolbar navigation
 
-private struct SettingsNavigationBar: View {
+/// A real AppKit segmented control supplied by SwiftUI's native Picker style.
+///
+/// The old version painted a capsule around four SwiftUI buttons. It looked like a web
+/// navigation bar and never participated in the title bar's focus, sizing, or drag region.
+/// `Picker` with `.segmented` is bridged to `NSSegmentedControl`; the unified compact window
+/// toolbar supplies the Liquid Glass surface and AppKit owns the interaction.
+private struct NativeSettingsToolbar: View {
 
 	@Binding var selection: SettingsPane
 
 	var body: some View {
-		HStack(spacing: 2) {
-			ForEach(Array(SettingsPane.allCases.enumerated()), id: \.element) { index, pane in
-				SettingsNavigationButton(
-					pane: pane,
-					isSelected: selection == pane,
-					select: { selection = pane })
-				.keyboardShortcut(
-					KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+		Picker("Gaze settings", selection: $selection) {
+			ForEach(SettingsPane.allCases) { pane in
+				Text(pane.title).tag(pane)
 			}
 		}
-		.padding(3)
-		.glassEffect(.regular.interactive(), in: Capsule())
-		.accessibilityElement(children: .contain)
+		.labelsHidden()
+		.pickerStyle(.segmented)
+		.controlSize(.small)
+		.frame(width: 310)
 		.accessibilityLabel("Gaze settings navigation")
-	}
-}
-
-private struct SettingsNavigationButton: View {
-
-	let pane: SettingsPane
-	let isSelected: Bool
-	let select: () -> Void
-
-	@State private var isHovering = false
-
-	var body: some View {
-		Button(action: select) {
-			Text(pane.title)
-				.font(.system(.caption, weight: isSelected ? .semibold : .medium))
-				.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
-				.frame(minWidth: 62)
-				.padding(.horizontal, 7)
-				.padding(.vertical, 5)
-				.background {
-					Capsule()
-						.fill(
-							isSelected
-								? Theme.selection
-								: (isHovering ? Theme.hoverFill : .clear))
-				}
-		}
-		.buttonStyle(.plain)
-		.contentShape(Capsule())
-		.onHover { isHovering = $0 }
-		.accessibilityLabel(pane.title)
-		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-		.animation(.smooth(duration: 0.14), value: isSelected)
 	}
 }
 

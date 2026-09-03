@@ -238,10 +238,12 @@ struct GlassSurface: ViewModifier {
 
 	func body(content: Content) -> some View {
 		content
-			.background { shape.fill(fill) }
+			// Let SwiftUI draw the platform glass instead of painting a dark rounded
+			// rectangle. This is the same material used by the native toolbar and keeps
+			// the settings surface connected to the desktop behind the window.
+			.glassEffect(.regular, in: shape)
 			.overlay {
-				// A single even hairline, not a lit rim. A gradient edge is how you draw a
-				// raised surface, and this one is deliberately not raised any more.
+				// A single hairline preserves the edge over both dark and light desktops.
 				shape.strokeBorder(Theme.separator, lineWidth: 1)
 			}
 			.clipShape(shape)
