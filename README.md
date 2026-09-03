@@ -12,6 +12,13 @@ git clone https://github.com/OwenCope/Gaze.git
 cd Gaze && ./build.sh && open "build/Gaze.app"
 ```
 
+To create a distributable disk image:
+
+```sh
+./package-dmg.sh
+open "build/Gaze-0.2.dmg"
+```
+
 
 Requires the macOS 26 SDK. No Xcode project — `build.sh` drives `swiftc` and assembles the
 bundle by hand.

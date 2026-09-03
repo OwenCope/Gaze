@@ -1,3 +1,19 @@
+# 0.2 — Control Center
+
+The Gaze control center has been redesigned around a clearer protection status, faster
+diagnostics, and a shared visual language across settings, enrollment, and recognition.
+
+## What changed
+
+- A branded settings control center with a persistent protection-status summary.
+- Quick cards for enrolled angles, recognition engine, and remaining attempts.
+- A clearer unlock configuration with password-storage context at the point of entry.
+- A guided enrollment flow with progress, camera state, and privacy cues in one view.
+- A live recognition test with a confidence meter and readable low/high score diagnostics.
+- A versioned DMG build path through `package-dmg.sh`.
+
+The underlying recognition, vault, lockout, and camera-pinning behavior is unchanged.
+
 # 0.1
 
 First release. It unlocks your Mac by recognising your face with the built-in camera.

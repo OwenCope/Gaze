@@ -38,8 +38,8 @@ enum Theme {
 	/// Opaque ground, for the windows that are not vibrant — enrolment and the recognition
 	/// test, both of which are full of camera preview and want no wallpaper behind them.
 	static let background = dynamic(
-		light: Color(red: 0.93, green: 0.93, blue: 0.94),
-		dark: Color(red: 0.078, green: 0.078, blue: 0.082))
+		light: Color(red: 0.94, green: 0.95, blue: 0.96),
+		dark: Color(red: 0.045, green: 0.055, blue: 0.073))
 
 	/// Group fill, over the glass rather than instead of it.
 	///
@@ -50,9 +50,14 @@ enum Theme {
 	///
 	/// Light mode takes white rather than a lightened black — Jis G Jacob's point, and the
 	/// right one: a group in light mode is a white card, not a pale grey one.
-	static let surface = dynamic(light: .white.opacity(0.55), dark: .white.opacity(0.07))
-	static let surfaceRaised = dynamic(light: .white.opacity(0.85), dark: .white.opacity(0.12))
-	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
+	static let surface = dynamic(
+		light: .white.opacity(0.62),
+		dark: Color(red: 0.10, green: 0.12, blue: 0.15).opacity(0.84))
+	static let surfaceRaised = dynamic(
+		light: .white.opacity(0.88),
+		dark: Color(red: 0.16, green: 0.18, blue: 0.22).opacity(0.88))
+	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.10))
+	static let softSeparator = dynamic(light: .black.opacity(0.06), dark: .white.opacity(0.06))
 
 	// MARK: - Icon palette
 
@@ -116,6 +121,25 @@ enum Theme {
 	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
 	static let warning = Color(red: 1.0, green: 0.62, blue: 0.04)
 	static let danger = Color(red: 1.0, green: 0.27, blue: 0.23)
+
+	/// The restrained blue used for interactive affordances. Green remains reserved for
+	/// recognition state, so a button never competes with a successful match.
+	static let action = dynamic(
+		light: Color(red: 0.05, green: 0.37, blue: 0.82),
+		dark: Color(red: 0.24, green: 0.57, blue: 1.00))
+
+	static let onAction = Color.white
+
+	static var brandGradient: LinearGradient {
+		LinearGradient(
+			colors: [
+				Color(red: 0.18, green: 0.78, blue: 0.52),
+				Theme.faceID,
+				Color(red: 0.25, green: 0.61, blue: 0.98),
+			],
+			startPoint: .topLeading,
+			endPoint: .bottomTrailing)
+	}
 
 	// MARK: - Metrics
 
@@ -838,5 +862,153 @@ struct InfoButton<Content: View>: View {
 			.padding(16)
 			.frame(width: 300)
 		}
+	}
+}
+
+// MARK: - Dashboard components
+
+/// Gaze's compact identity mark. It is deliberately a view rather than a bare SF Symbol so
+/// the app has one recognisable treatment in the sidebar, setup flow, and diagnostics.
+struct GazeMark: View {
+
+	var size: CGFloat = 42
+	var tint: Color = Theme.faceID
+
+	var body: some View {
+		Image(systemName: "faceid")
+			.font(.system(size: size * 0.48, weight: .medium))
+			.foregroundStyle(tint)
+			.frame(width: size, height: size)
+			.background {
+				RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+					.fill(Theme.surfaceRaised)
+					.overlay {
+						RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+							.strokeBorder(tint.opacity(0.24), lineWidth: 1)
+					}
+			}
+		.accessibilityHidden(true)
+	}
+}
+
+/// A small, high-contrast state label used where the user needs an answer at a glance.
+struct StatusBadge: View {
+
+	let title: String
+	let symbol: String
+	let tint: Color
+
+	var body: some View {
+		Label(title, systemImage: symbol)
+			.font(.system(.caption, weight: .semibold))
+			.foregroundStyle(tint)
+			.padding(.horizontal, 10)
+			.padding(.vertical, 5)
+			.background {
+				Capsule().fill(tint.opacity(0.14))
+			}
+			.overlay {
+				Capsule().strokeBorder(tint.opacity(0.26), lineWidth: 1)
+			}
+		.accessibilityElement(children: .combine)
+	}
+}
+
+/// A flexible card for the control-center surfaces. Cards carry only a quiet rim; hierarchy
+/// comes from spacing and the one accent that belongs to the content.
+struct DashboardCard<Content: View>: View {
+
+	var title: String?
+	var detail: String?
+	@ViewBuilder var content: Content
+
+	init(
+		title: String? = nil,
+		detail: String? = nil,
+		@ViewBuilder content: () -> Content
+	) {
+		self.title = title
+		self.detail = detail
+		self.content = content()
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 14) {
+			if title != nil || detail != nil {
+				VStack(alignment: .leading, spacing: 3) {
+					if let title {
+						Text(title)
+							.font(Typography.groupTitle)
+							.foregroundStyle(Theme.label)
+					}
+					if let detail {
+						Text(detail)
+							.font(Typography.detail)
+							.foregroundStyle(Theme.secondaryLabel)
+							.fixedSize(horizontal: false, vertical: true)
+					}
+				}
+			}
+			content
+		}
+		.padding(18)
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.background {
+			RoundedRectangle(cornerRadius: 18, style: .continuous)
+				.fill(Theme.surface)
+				.overlay {
+					RoundedRectangle(cornerRadius: 18, style: .continuous)
+						.strokeBorder(Theme.softSeparator, lineWidth: 1)
+				}
+		}
+	}
+}
+
+/// One diagnostic value in the overview. Equal cards make the most important state scannable
+/// before the user reads the detailed settings below.
+struct DashboardMetric: View {
+
+	let label: String
+	let value: String
+	let detail: String
+	let symbol: String
+	var tint: Color = Theme.secondaryLabel
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 8) {
+			Image(systemName: symbol)
+				.font(.system(.body, weight: .medium))
+				.foregroundStyle(tint)
+
+			Text(label)
+				.font(.system(.caption2, weight: .semibold))
+				.foregroundStyle(Theme.tertiaryLabel)
+				.tracking(0.7)
+				.lineLimit(1)
+
+			Text(value)
+				.font(.system(.title3, design: .rounded, weight: .semibold))
+				.foregroundStyle(Theme.label)
+				.lineLimit(1)
+
+			Text(detail)
+				.font(Typography.caption)
+				.foregroundStyle(Theme.secondaryLabel)
+				.lineLimit(2)
+				.fixedSize(horizontal: false, vertical: true)
+		}
+			.frame(maxWidth: .infinity, minHeight: 94, alignment: .leading)
+			.padding(14)
+			.background {
+				RoundedRectangle(cornerRadius: 14, style: .continuous)
+					.fill(Theme.surfaceRaised.opacity(0.62))
+					.overlay {
+						RoundedRectangle(cornerRadius: 14, style: .continuous)
+							.strokeBorder(Theme.softSeparator, lineWidth: 1)
+					}
+			}
+			.accessibilityElement(children: .combine)
+			.accessibilityLabel(label)
+			.accessibilityValue("\(value), \(detail)")
 	}
 }

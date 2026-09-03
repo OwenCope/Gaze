@@ -13,9 +13,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1</string>
+	<string>0.2</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>NSHighResolutionCapable</key>
@@ -23,8 +23,8 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 
-	<!-- Gaze's own UI is dark on every Apple platform, so the app doesn't follow
-	     the system appearance. -->
+	<!-- Camera flows stay dark for a neutral preview; the control center can follow
+	     the user's system appearance. -->
 	<key>NSRequiresAquaSystemAppearance</key>
 	<false/>
 

@@ -1,10 +1,6 @@
 import SwiftUI
 
-/// The face setup flow: a circular live preview inside the coverage ring.
-///
-/// Dark throughout, like Gaze setup on every Apple platform. The dark ground is not
-/// decoration — it is what makes the unfilled ticks recede and the green ones read at a
-/// glance, and it keeps the user's own lit face the brightest thing on screen.
+/// The face setup flow: a calm, guided capture experience with the live preview at its centre.
 struct EnrollmentView: View {
 
 	let store: FaceEnrollmentStore
@@ -14,68 +10,53 @@ struct EnrollmentView: View {
 	@State private var model: EnrollmentModel?
 	@State private var saveError: String?
 
-	private let ringSize: CGFloat = 300
+	private let ringSize: CGFloat = 280
 	private let ring = EnrollmentRing(covered: [], currentAngle: 0, isEngaged: false)
 
 	var body: some View {
 		VStack(spacing: 0) {
-			header
-			Spacer(minLength: 20)
-			ringStack
-			Spacer(minLength: 18)
-			progressBar
-			Spacer(minLength: 18)
-			footer
+			EnrollmentTopBar(onCancel: onFinish)
+
+			HStack(alignment: .center, spacing: 30) {
+				EnrollmentGuidance(
+					title: title,
+					instruction: model?.instruction ?? "Starting the camera…",
+					currentPass: currentPass,
+					progress: model?.progress ?? 0,
+					cameraState: camera.state)
+
+				EnrollmentCapturePreview(
+					camera: camera,
+					model: model,
+					ringSize: ringSize,
+					previewInset: ring.previewInset)
+			}
+			.padding(.horizontal, 30)
+			.padding(.top, 26)
+
+			EnrollmentFooter(
+				phase: model?.phase,
+				error: saveError,
+				onRetry: { model?.reset() },
+				onDone: onFinish,
+				onCancel: onFinish)
+			.padding(.horizontal, 30)
+			.padding(.top, 22)
+			.padding(.bottom, 24)
 		}
-		.padding(.vertical, 36)
-		.padding(.horizontal, 40)
-		.frame(width: 480, height: 620)
-		.background(Color.black)
-		// Committed to dark, deliberately, rather than following the system.
-		//
-		// This window is mostly camera. A black surround is what keeps the eye on the preview
-		// and stops the wall behind the app competing with the picture — the same reason Photo
-		// Booth and QuickTime's recorder are dark whatever the system is set to. It also has a
-		// hard `Color.black` ground, so following the appearance would put black text on it.
+		.frame(width: 700, height: 590)
+		.background(WindowGlass(extraTranslucent: true))
 		.preferredColorScheme(.dark)
 		.task { await begin() }
 		.onDisappear { camera.stop() }
-		// Driven by the frame counter, not the pose: identical consecutive poses are
-		// normal and must still advance the state machine.
+		// Drive the state machine from each delivered frame, not from pose changes. A still head
+		// is exactly what the user should be allowed to do between two directions.
 		.onChange(of: camera.frameID) { _, _ in
 			model?.consume(camera.faceMissing ? nil : camera.sample)
 		}
 		.onChange(of: model?.phase) { _, phase in
 			if phase == .complete { finish() }
 		}
-	}
-
-	// MARK: - Sections
-
-	private var header: some View {
-		VStack(spacing: 10) {
-			// Which of the two passes is running. A ring that empties and refills with no
-			// explanation reads as failure, so the step is stated before it happens.
-			if let pass = currentPass {
-				Text("Step \(pass) of 2")
-					.font(Typography.metricLabel)
-					.foregroundStyle(Theme.faceID)
-					.tracking(0.6)
-					.transition(.opacity)
-			}
-
-			Text(title)
-				.font(.system(.largeTitle, weight: .bold))
-				.foregroundStyle(Theme.label)
-
-			Text(model?.instruction ?? "Starting the camera…")
-				.font(Typography.row)
-				.foregroundStyle(Theme.secondaryLabel)
-				.multilineTextAlignment(.center)
-				.frame(height: 40)
-				.animation(.easeInOut(duration: 0.2), value: model?.instruction)
-		}
-		.animation(.easeInOut(duration: 0.25), value: currentPass)
 	}
 
 	private var currentPass: Int? {
@@ -85,153 +66,13 @@ struct EnrollmentView: View {
 
 	private var title: String {
 		switch model?.phase {
-		case .complete: return "Gaze Is Set Up"
-		case .capturing(let pass) where pass == 2: return "Second Scan"
-		default: return "Set Up Gaze"
+		case .complete: return "Gaze is ready"
+		case .capturing(let pass) where pass == 2: return "One more scan"
+		default: return "Set up Gaze"
 		}
 	}
-
-	private var ringStack: some View {
-		ZStack {
-			// Blooms as coverage grows — a quiet reward for moving, and it keeps the
-			// centre of the screen from being a dead black disc.
-			Circle()
-				.fill(
-					RadialGradient(
-						colors: [
-							Theme.faceID.opacity(0.22 * (model?.progress ?? 0)),
-							Theme.faceID.opacity(0),
-						],
-						center: .center, startRadius: 60, endRadius: 165))
-				.frame(width: ringSize + 40, height: ringSize + 40)
-				.animation(.easeOut(duration: 0.4), value: model?.progress)
-
-			preview
-			if let model {
-				EnrollmentRing(
-					covered: model.covered,
-					currentAngle: model.currentAngle,
-					isEngaged: model.isEngaged)
-			}
-		}
-		.frame(width: ringSize, height: ringSize)
-	}
-
-	private var previewSize: CGFloat { ringSize - ring.previewInset * 2 }
-
-	@ViewBuilder
-	private var preview: some View {
-		switch camera.state {
-		case .running:
-			CameraPreview(controller: camera)
-				.frame(width: previewSize, height: previewSize)
-				.clipShape(.circle)
-				.overlay {
-					Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1)
-				}
-		case .denied:
-			message(
-				"Camera Access Is Off",
-				detail: "Allow camera access for Gaze in System Settings › Privacy & Security.")
-		case .failed(let reason):
-			message("Can't Use the Camera", detail: reason)
-		case .idle:
-			ZStack {
-				Circle().fill(.white.opacity(0.05))
-				ProgressView().controlSize(.large)
-			}
-			.frame(width: previewSize, height: previewSize)
-		}
-	}
-
-	private func message(_ title: String, detail: String) -> some View {
-		VStack(spacing: 8) {
-			Image(systemName: "exclamationmark.triangle.fill")
-				.font(.system(size: 26))
-				.foregroundStyle(Theme.warning)
-			Text(title)
-				.font(Typography.heroTitle)
-				.foregroundStyle(Theme.label)
-			Text(detail)
-				.font(Typography.detail)
-				.foregroundStyle(Theme.secondaryLabel)
-				.multilineTextAlignment(.center)
-		}
-		.padding(.horizontal, 28)
-		.frame(width: previewSize, height: previewSize)
-		.background(Circle().fill(.white.opacity(0.05)))
-	}
-
-	/// A slim bar under the ring.
-	///
-	/// The ring alone is ambiguous about how much is left — the ticks fill in whatever
-	/// order the head moves, so "nearly done" and "just started" can look similar. A
-	/// linear bar answers that at a glance.
-	private var progressBar: some View {
-		GeometryReader { geometry in
-			ZStack(alignment: .leading) {
-				Capsule().fill(.white.opacity(0.08))
-				Capsule()
-					.fill(Theme.faceID)
-					.frame(width: geometry.size.width * (model?.progress ?? 0))
-			}
-		}
-		.frame(width: 190, height: 4)
-		.animation(.easeOut(duration: 0.3), value: model?.progress)
-		.opacity(currentPass == nil ? 0 : 1)
-	}
-
-	/// One button language, not three.
-	///
-	/// This stacked a `.borderedProminent` system button fourteen points above a bare green
-	/// text button, with a third style waiting in the settings window — so a button looked
-	/// like a different kind of object depending on which screen you were on. Both are the
-	/// app's own style now: whichever action moves you forward is the filled one, and the
-	/// way out is quiet beneath it.
-	private var footer: some View {
-		VStack(spacing: 10) {
-			if let saveError {
-				Text(saveError)
-					.font(Typography.detail)
-					.foregroundStyle(Theme.danger)
-					.multilineTextAlignment(.center)
-					.fixedSize(horizontal: false, vertical: true)
-			}
-
-			if case .failed = model?.phase {
-				Button {
-					model?.reset()
-				} label: {
-					Text("Try Again").frame(maxWidth: .infinity)
-				}
-				.buttonStyle(.primaryAction)
-				.keyboardShortcut(.defaultAction)
-				.frame(width: 150)
-			}
-
-			if model?.phase == .complete {
-				Button {
-					onFinish()
-				} label: {
-					Text("Done").frame(maxWidth: .infinity)
-				}
-				.buttonStyle(.primaryAction)
-				.keyboardShortcut(.defaultAction)
-				.frame(width: 150)
-			} else {
-				Button("Cancel") { onFinish() }
-					.buttonStyle(.quiet)
-					.keyboardShortcut(.cancelAction)
-			}
-		}
-	}
-
-	// MARK: - Flow
 
 	private func begin() async {
-		// Nothing to do when the user is already enrolled — `EnrollmentWindow` is about to
-		// dismiss itself. Starting the camera here meant an enrolled user paid for a live
-		// 30fps preview, and a full SwiftUI redraw per frame, on every launch.
 		guard !store.isEnrolled else { return }
 
 		model = EnrollmentModel(embedder: store.embedder)
@@ -246,6 +87,260 @@ struct EnrollmentView: View {
 			onFinish()
 		} catch {
 			saveError = "Couldn't save your face: \(error.localizedDescription)"
+		}
+	}
+}
+
+private struct EnrollmentTopBar: View {
+
+	let onCancel: () -> Void
+
+	var body: some View {
+		HStack(spacing: 11) {
+			GazeMark(size: 38)
+			VStack(alignment: .leading, spacing: 1) {
+				Text("Gaze setup")
+					.font(.system(.headline, weight: .semibold))
+					.foregroundStyle(Theme.label)
+				Text("On-device face enrollment")
+					.font(Typography.caption)
+					.foregroundStyle(Theme.secondaryLabel)
+			}
+			Spacer()
+			Button("Cancel", action: onCancel)
+				.buttonStyle(.quiet)
+				.keyboardShortcut(.cancelAction)
+		}
+		.padding(.horizontal, 30)
+		.padding(.top, 24)
+	}
+}
+
+private struct EnrollmentGuidance: View {
+
+	let title: String
+	let instruction: String
+	let currentPass: Int?
+	let progress: Double
+	let cameraState: CameraController.State
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 0) {
+			if let currentPass {
+				StatusBadge(
+					title: "STEP \(currentPass) OF 2",
+					symbol: "arrow.triangle.2.circlepath",
+					tint: Theme.faceID)
+				.padding(.bottom, 18)
+			}
+
+			Text(title)
+				.font(.system(.largeTitle, weight: .bold))
+				.foregroundStyle(Theme.label)
+				.fixedSize(horizontal: false, vertical: true)
+
+			Text(instruction)
+				.font(.system(.title3, weight: .medium))
+				.foregroundStyle(Theme.secondaryLabel)
+				.fixedSize(horizontal: false, vertical: true)
+				.padding(.top, 8)
+
+			if currentPass != nil {
+				VStack(alignment: .leading, spacing: 7) {
+					HStack {
+						Text("Capture progress")
+							.font(Typography.caption)
+							.foregroundStyle(Theme.tertiaryLabel)
+						Spacer()
+						Text("\(Int(progress * 100))%")
+							.font(Typography.mono)
+							.foregroundStyle(Theme.faceID)
+					}
+					ProgressView(value: progress)
+						.progressViewStyle(.linear)
+						.tint(Theme.faceID)
+				}
+				.padding(.top, 26)
+			}
+
+			VStack(alignment: .leading, spacing: 13) {
+				EnrollmentTip(symbol: "move.3d", title: "Move slowly", detail: "Turn your head through a comfortable range.")
+				EnrollmentTip(symbol: "light.max", title: "Find soft light", detail: "Keep your face evenly lit and easy to see.")
+				EnrollmentTip(symbol: "lock.shield", title: "Kept on this Mac", detail: "Only faceprints are saved, never camera images.")
+			}
+			.padding(.top, 28)
+
+			if case .denied = cameraState {
+				Text("Allow camera access in System Settings › Privacy & Security › Camera.")
+					.font(Typography.caption)
+					.foregroundStyle(Theme.warning)
+					.fixedSize(horizontal: false, vertical: true)
+					.padding(.top, 20)
+			}
+		}
+		.frame(maxWidth: 270, alignment: .leading)
+	}
+}
+
+private struct EnrollmentTip: View {
+
+	let symbol: String
+	let title: String
+	let detail: String
+
+	var body: some View {
+		HStack(alignment: .top, spacing: 10) {
+			Image(systemName: symbol)
+				.font(.system(.body, weight: .medium))
+				.foregroundStyle(Theme.faceID)
+				.frame(width: 20)
+			VStack(alignment: .leading, spacing: 2) {
+				Text(title)
+					.font(.system(.subheadline, weight: .semibold))
+					.foregroundStyle(Theme.label)
+				Text(detail)
+					.font(Typography.caption)
+					.foregroundStyle(Theme.secondaryLabel)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+		}
+	}
+}
+
+private struct EnrollmentCapturePreview: View {
+
+	let camera: CameraController
+	let model: EnrollmentModel?
+	let ringSize: CGFloat
+	let previewInset: CGFloat
+
+	var body: some View {
+		VStack(spacing: 13) {
+			ZStack {
+				Circle()
+					.fill(Theme.faceID.opacity(0.05))
+					.frame(width: ringSize + 26, height: ringSize + 26)
+
+				preview
+
+				if let model {
+					EnrollmentRing(
+						covered: model.covered,
+						currentAngle: model.currentAngle,
+						isEngaged: model.isEngaged)
+				}
+			}
+			.frame(width: ringSize, height: ringSize)
+
+			HStack(spacing: 7) {
+				Circle()
+					.fill(statusTint)
+					.frame(width: 7, height: 7)
+				Text(statusTitle)
+					.font(Typography.caption)
+					.foregroundStyle(Theme.secondaryLabel)
+			}
+		}
+		.frame(width: 320)
+	}
+
+	@ViewBuilder
+	private var preview: some View {
+		switch camera.state {
+		case .running:
+			CameraPreview(controller: camera)
+				.frame(width: ringSize - previewInset * 2, height: ringSize - previewInset * 2)
+				.clipShape(.circle)
+				.overlay {
+					Circle().strokeBorder(.white.opacity(0.16), lineWidth: 1)
+				}
+		case .denied:
+				captureMessage(title: "Camera access is off", symbol: "video.slash.fill", tint: Theme.warning)
+		case .failed:
+				captureMessage(title: "Camera unavailable", symbol: "exclamationmark.triangle.fill", tint: Theme.warning)
+		case .idle:
+				ZStack {
+					Circle().fill(.white.opacity(0.06))
+					ProgressView().controlSize(.large)
+				}
+				.frame(width: ringSize - previewInset * 2, height: ringSize - previewInset * 2)
+		}
+	}
+
+	private func captureMessage(title: String, symbol: String, tint: Color) -> some View {
+		VStack(spacing: 10) {
+			Image(systemName: symbol)
+				.font(.system(size: 25, weight: .medium))
+				.foregroundStyle(tint)
+			Text(title)
+				.font(.system(.headline, weight: .semibold))
+				.foregroundStyle(Theme.label)
+				.multilineTextAlignment(.center)
+		}
+		.padding(22)
+		.frame(width: ringSize - previewInset * 2, height: ringSize - previewInset * 2)
+		.background(Circle().fill(.white.opacity(0.06)))
+	}
+
+	private var statusTitle: String {
+		switch camera.state {
+		case .running:
+			if model?.isEngaged == true { return "Move through the ring" }
+			return "Position your face to begin"
+		case .denied: return "Camera permission required"
+		case .failed: return "Camera could not start"
+		case .idle: return "Starting camera…"
+		}
+	}
+
+	private var statusTint: Color {
+		switch camera.state {
+		case .running: return model?.isEngaged == true ? Theme.faceID : Theme.secondaryLabel
+		case .denied, .failed: return Theme.warning
+		case .idle: return Theme.secondaryLabel
+		}
+	}
+}
+
+private struct EnrollmentFooter: View {
+
+	let phase: EnrollmentModel.Phase?
+	let error: String?
+	let onRetry: () -> Void
+	let onDone: () -> Void
+	let onCancel: () -> Void
+
+	var body: some View {
+		VStack(spacing: 10) {
+			if let error {
+				Text(error)
+					.font(Typography.caption)
+					.foregroundStyle(Theme.danger)
+					.multilineTextAlignment(.center)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+
+			HStack {
+				Text("Faceprints are encrypted by the Secure Enclave.")
+					.font(Typography.caption)
+					.foregroundStyle(Theme.tertiaryLabel)
+				Spacer()
+
+				switch phase {
+				case .failed:
+					Button("Try Again", action: onRetry)
+						.buttonStyle(.accent)
+						.keyboardShortcut(.defaultAction)
+				case .complete:
+					Button("Done", action: onDone)
+						.buttonStyle(.primaryAction)
+						.keyboardShortcut(.defaultAction)
+				default:
+					Button("Cancel", action: onCancel)
+						.buttonStyle(.quiet)
+						.keyboardShortcut(.cancelAction)
+				}
+			}
 		}
 	}
 }
