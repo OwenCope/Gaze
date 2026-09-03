@@ -84,22 +84,27 @@ require_toolchain() {
 	exit 1
 }
 
-# The oldest macOS SDK on this machine that can still build the project, and its version.
+# The oldest macOS SDK supplied by the selected full Xcode, and its version.
 #
 # For distribution, not for day-to-day builds. Compiling against the newest SDK installed
 # is right when the only Mac that runs the result is this one; hand the build to someone a
 # major version behind and it can reference symbols their system does not have, and their
 # Mac kills it at launch with no dialog and no crash report.
 #
-# Command Line Tools is a fine source here even though `find_developer_dir` rejects it —
-# that rejection is about `coremlc`, which the model compile still gets from a full Xcode.
-# This only needs headers and stubs to link against.
+# The compiler and SDK must come from the same Xcode. Swift's standard library and Clang
+# module interfaces are compiler-versioned; pairing Xcode 27's swiftc with a standalone
+# Command Line Tools SDK can fail before source checking begins. `require_toolchain` has
+# already selected a full Xcode, so restrict the search to that developer directory.
 #
 # Prints "<path> <version>", or nothing if the only SDK installed is the newest.
 oldest_usable_sdk() {
 	local dir sdk name version best_path="" best_version=""
+	local candidates=()
 
-	for dir in /Library/Developer/CommandLineTools /Applications/Xcode*.app/Contents/Developer; do
+	[ -n "${DEVELOPER_DIR:-}" ] && candidates+=("$DEVELOPER_DIR")
+	[ "${#candidates[@]}" -eq 0 ] && candidates+=(/Applications/Xcode*.app/Contents/Developer)
+
+	for dir in ${candidates[@]+"${candidates[@]}"}; do
 		for sdk in "$dir"/SDKs/MacOSX*.sdk "$dir"/Platforms/MacOSX.platform/Developer/SDKs/MacOSX*.sdk; do
 			# Skip the unversioned aliases; they point at the newest, which is the
 			# thing being avoided.

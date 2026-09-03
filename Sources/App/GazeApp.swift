@@ -30,19 +30,30 @@ struct GazeApp: App {
 		// the user is allowed to go bigger. A settings window that cannot be resized has no
 		// answer for someone who finds the text small.
 		.windowResizability(.contentMinSize)
+		.defaultSize(width: 840, height: 640)
+		.defaultPosition(.center)
 		// Use AppKit's compact unified title bar so the traffic lights, drag region, and
 		// toolbar glass remain native. SettingsView supplies the centered navigation item.
 		.windowToolbarStyle(.unifiedCompact(showsTitle: false))
+		// Let SwiftUI/AppKit own the title-bar drag behavior. This keeps the full window
+		// background draggable without a hand-rolled hit target in the content view.
+		.windowBackgroundDragBehavior(.enabled)
 
 		Window("Test Recognition", id: "test") {
-			RecognitionTestView(store: store)
+		RecognitionTestView(store: store)
 		}
 		.windowResizability(.contentSize)
+		.defaultSize(width: 720, height: 520)
+		.defaultPosition(.center)
+		.windowBackgroundDragBehavior(.enabled)
 
 		Window("Set Up Gaze", id: "enrollment") {
-			EnrollmentWindow(store: store)
+		EnrollmentWindow(store: store)
 		}
 		.windowResizability(.contentSize)
+		.defaultSize(width: 700, height: 590)
+		.defaultPosition(.center)
+		.windowBackgroundDragBehavior(.enabled)
 		// Opens on launch so a fresh install lands straight in setup. `EnrollmentWindow`
 		// closes itself again when there is already a face enrolled.
 		.defaultLaunchBehavior(.presented)
@@ -78,11 +89,20 @@ enum AppActivation {
 	static func bringToFront() {
 		guard !isBackgroundLaunch else { return }
 		NSApp.setActivationPolicy(.regular)
-		NSApp.activate()
-		// `activate()` alone can lose the race against a window that is still being
-		// created, so order it up explicitly once it exists.
-		for window in NSApp.windows where window.canBecomeKey {
-			window.orderFrontRegardless()
+		NSApp.activate(ignoringOtherApps: true)
+
+		// `openWindow` can create its NSWindow after this method returns. Do the second
+		// activation on the next run-loop turn so a settings window opened from the menu
+		// bar cannot remain behind the app the user was using.
+		DispatchQueue.main.async {
+			guard !isBackgroundLaunch else { return }
+			NSApp.activate(ignoringOtherApps: true)
+			for window in NSApp.windows where window.canBecomeKey {
+				if window.title == "Gaze", (!window.isOnActiveSpace || window.screen == nil) {
+					window.center()
+				}
+				window.makeKeyAndOrderFront(nil)
+			}
 		}
 	}
 

@@ -55,6 +55,7 @@ xcrun swiftc \
 	-O -wmo \
 	-target "$(host_target)" \
 	-sdk "$SDK" \
+	-module-cache-path "$ROOT/build/.module-cache" \
 	${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
 	-framework SwiftUI \
 	-framework AppKit \
@@ -69,10 +70,10 @@ xcrun swiftc \
 
 # Prefer a real signing identity over ad-hoc.
 #
-# Not cosmetic: the Keychain ACL protecting the vault key is bound to the app's code
-# identity, and an ad-hoc signature is regenerated on every build. That makes the app a
-# *different* application each time, so macOS challenges it for the keychain password on
-# every single rebuild. A stable identity keeps the ACL matching.
+# A stable identity is still preferable for development because it keeps the app's data and
+# permissions associated with one code identity. The protected records themselves are now in
+# an authenticated vault file; the Keychain is only consulted once when migrating pre-0.4
+# installations.
 #
 # All of which is true only on the machine that owns the certificate. An "Apple
 # Development" signature is not a distribution signature: on any other Mac amfid
@@ -80,8 +81,8 @@ xcrun swiftc \
 # the kernel kills it at exec. No dialog, no crash report, no bounce — the app
 # simply never starts, which is indistinguishable from a broken build.
 #
-# So: DIST=1 for anything anyone else will run. The keychain-prompt problem it
-# reintroduces belongs to iterative rebuilds, and a release is signed once.
+# So: DIST=1 for anything anyone else will run. A release should be signed once and tested
+# on the target Mac before it is distributed.
 if [ "${DIST:-}" = "1" ]; then
 	echo "→ Signing ad-hoc for distribution"
 	IDENTITY="-"
@@ -92,7 +93,7 @@ else
 	if [ -n "$IDENTITY" ]; then
 		echo "→ Signing as $IDENTITY (this Mac only — use DIST=1 to hand out)"
 	else
-		echo "→ Signing (ad-hoc — expect a keychain prompt after each rebuild)"
+		echo "→ Signing (ad-hoc — development-only identity)"
 		IDENTITY="-"
 	fi
 fi

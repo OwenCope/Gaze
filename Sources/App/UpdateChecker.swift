@@ -18,10 +18,10 @@ import os
 ///
 /// **What survives an update, and what does not.** Settings survive — they live in
 /// `UserDefaults` keyed to the bundle identifier, untouched by rebuilding. The enrolled
-/// face survives only if the rebuild is signed with the same certificate: faceprints are
-/// sealed under a Secure Enclave key whose Keychain ACL is bound to the app's code
-/// identity, so a build signed by a different certificate is a different application as
-/// far as macOS is concerned and simply finds nothing.
+/// face and password survive a rebuild because the protected records live in the
+/// authenticated vault file. The Secure Enclave key is still machine-bound, but it is no
+/// longer fetched from the Keychain on every read, so a normal rebuild does not create a
+/// new authorization prompt.
 ///
 /// It deliberately stops after pulling. Rebuilding replaces the running bundle underneath
 /// itself, and a bad commit would take the app with it — so the rebuild stays a step the

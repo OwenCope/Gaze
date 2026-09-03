@@ -364,9 +364,6 @@ struct VibrantBackground: NSViewRepresentable {
 			window.titlebarAppearsTransparent = true
 			window.styleMask.insert(.fullSizeContentView)
 			if hidesTitle { window.titleVisibility = .hidden }
-			// Drag anywhere. With no title bar to grab, the window was only movable by a
-			// strip the user cannot see.
-			window.isMovableByWindowBackground = true
 		}
 	}
 }

@@ -16,12 +16,17 @@ To create a distributable disk image:
 
 ```sh
 ./package-dmg.sh
-open "build/Gaze-0.3.dmg"
+open "build/Gaze-0.4.dmg"
 ```
 
 
 Requires the macOS 26 SDK. No Xcode project — `build.sh` drives `swiftc` and assembles the
 bundle by hand.
+
+The control center is a native macOS window: `MenuBarExtra` supplies the menu bar item,
+the settings window uses AppKit's unified compact toolbar, and its segmented navigation is
+an actual SwiftUI `Picker`, not a painted imitation. The window background is draggable
+through SwiftUI's native window interaction behavior and the system owns the toolbar glass.
 
 ---
 
@@ -64,6 +69,14 @@ makes it safe: a recognition failure costs you a password, never your way in.
 
 The cost is that your password is stored on this Mac in recoverable form. Anything running
 as you can extract it.
+
+Faceprints, lockout state, and the optional password now live in one authenticated
+`~/Library/Application Support/Gaze/vault.bin`, encrypted with a key generated inside the
+Secure Enclave. The Keychain is used only once to migrate data from builds before 0.4; normal
+launches read the cached vault instead of repeatedly asking macOS for access. On the first
+launch after an older build, choose **Always Allow** once so Gaze can complete that migration;
+if the request is declined, the result is cached for the rest of that launch rather than
+spawning a prompt for every startup reader.
 
 ### Three decisions worth knowing
 

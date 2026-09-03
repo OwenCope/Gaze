@@ -13,15 +13,17 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.3</string>
+	<string>0.4</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
+	<string>4</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
 
 	<!-- Camera flows stay dark for a neutral preview; the control center can follow
 	     the user's system appearance. -->

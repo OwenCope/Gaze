@@ -52,16 +52,17 @@ enum Keychain {
 		}
 	}
 
-	/// Fetches every item owned by the old vault in one call. A separate `SecItemCopyMatching`
-	/// for the key, faceprint, lockout state and password could produce four consecutive
-	/// authorization sheets. One query gives macOS one decision to remember.
+	/// Fetches the old vault in one call. macOS accepts `kSecMatchLimitAll` for metadata but
+	/// rejects it when legacy secret data is also requested, so use a finite limit larger than
+	/// the records Gaze has ever written. A separate query for the key, faceprint, lockout
+	/// state and password could produce four consecutive authorization sheets.
 	static func readLegacyItems() throws -> [String: Data] {
 		let query: [String: Any] = [
 			kSecClass as String: kSecClassGenericPassword,
 			kSecAttrService as String: service,
 			kSecReturnAttributes as String: true,
 			kSecReturnData as String: true,
-			kSecMatchLimit as String: kSecMatchLimitAll,
+			kSecMatchLimit as String: 16,
 		]
 		var result: CFTypeRef?
 		let status = SecItemCopyMatching(query as CFDictionary, &result)

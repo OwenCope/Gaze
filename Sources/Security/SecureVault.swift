@@ -17,6 +17,12 @@ import os
 enum SecureVault {
 
 	private static let keyAccount = "vault-key"
+	private static let legacyAccounts = [
+		"vault-key",
+		"face-enrollment",
+		"lockout-state",
+		"account-password",
+	]
 	private static let vaultVersion = 1
 	private static let vaultFileName = "vault.bin"
 	private static let associatedData = Data("com.gazeunlock.Gaze.secure-vault.v1".utf8)
@@ -24,6 +30,10 @@ enum SecureVault {
 	private static let stateLock = NSLock()
 
 	private static var cachedState: VaultState?
+	/// A failed legacy query is remembered for the life of the process. Startup has several
+	/// readers (enrolment, lockout, and the optional password row); re-running the query from
+	/// each one turns one unanswered Keychain sheet into a loop of identical sheets.
+	private static var cachedFailure: (any Error)?
 
 	private struct VaultState {
 		var key: SecureEnclave.P256.KeyAgreement.PrivateKey
@@ -129,13 +139,14 @@ enum SecureVault {
 		defer { stateLock.unlock() }
 
 		cachedState = nil
+		cachedFailure = nil
 		if let url = try? vaultURL() {
 			try? FileManager.default.removeItem(at: url)
 		}
-		if let legacy = try? Keychain.readLegacyItems() {
-			for account in legacy.keys {
-				_ = Keychain.delete(account)
-			}
+		// Deleting the known compatibility records does not require reading their secret data,
+		// so destroying the vault never opens another authorization sheet.
+		for account in legacyAccounts {
+			_ = Keychain.delete(account)
 		}
 		logger.notice("Vault destroyed; stored data is now unrecoverable.")
 	}
@@ -144,6 +155,7 @@ enum SecureVault {
 
 	private static func loadStateLocked() throws -> VaultState {
 		if let cachedState { return cachedState }
+		if let cachedFailure { throw cachedFailure }
 
 		let url = try vaultURL()
 		let fileManager = FileManager.default
@@ -172,25 +184,31 @@ enum SecureVault {
 			}
 		}
 
-		// Compatibility path. It is intentionally one Keychain query so a user sees at most
-		// one access decision while records migrate from the pre-0.4 layout.
-		let legacy = try Keychain.readLegacyItems()
-		guard !legacy.isEmpty else {
-			let key = try makeNewKey()
-			let state = VaultState(
-				key: key,
-				symmetricKey: try deriveSymmetricKey(from: key),
-				records: [:])
-			try persistLocked(state)
-			return state
-		}
+		return try migrateLegacyStateLocked()
+	}
 
-		guard let keyData = legacy[keyAccount], !keyData.isEmpty else {
-			logger.error("Legacy records exist without a vault key.")
-			throw VaultError.corrupted
-		}
-
+	/// Reads and migrates pre-0.4 records once. The cached error is as important as the cached
+	/// state: all startup readers must observe the same result without asking macOS again.
+	private static func migrateLegacyStateLocked() throws -> VaultState {
 		do {
+			// Compatibility path. It is intentionally one Keychain query so a user sees at most
+			// one access decision while records migrate from the pre-0.4 layout.
+			let legacy = try Keychain.readLegacyItems()
+			guard !legacy.isEmpty else {
+				let key = try makeNewKey()
+				let state = VaultState(
+					key: key,
+					symmetricKey: try deriveSymmetricKey(from: key),
+					records: [:])
+				try persistLocked(state)
+				return state
+			}
+
+			guard let keyData = legacy[keyAccount], !keyData.isEmpty else {
+				logger.error("Legacy records exist without a vault key.")
+				throw VaultError.corrupted
+			}
+
 			let key = try makeKey(from: keyData)
 			let symmetricKey = try deriveSymmetricKey(from: key)
 			var records = legacy
@@ -215,10 +233,13 @@ enum SecureVault {
 			logger.notice("Migrated \(records.count) protected record(s) out of the Keychain.")
 			return state
 		} catch let error as VaultError {
+			cachedFailure = error
 			throw error
 		} catch {
 			logger.error("Legacy vault failed authentication: \(error.localizedDescription, privacy: .public)")
-			throw VaultError.corrupted
+			let failure = VaultError.corrupted
+			cachedFailure = failure
+			throw failure
 		}
 	}
 

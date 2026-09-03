@@ -18,15 +18,25 @@ All three go through the same sealing path.
 1. **Verified before it is kept.** `ODRecord.verifyPassword` checks it against the local
    directory. A wrong password is rejected and never written. The check unlocks nothing and
    consumes no system attempt counter, so a typo cannot lock the user out of their Mac.
-2. **A Secure Enclave key is created.** A P-256 key-agreement private key, generated in and
-   confined to the Enclave. The Keychain holds a reference blob usable only by this Mac's
-   Enclave, never the key itself.
+2. **A Secure Enclave key is created.** A P-256 key-agreement private key is generated in and
+   confined to the Enclave. Gaze stores only its opaque representation in the protected vault
+   file; the private key never leaves the Enclave.
 3. **A symmetric key is derived.** The Enclave key agrees with its own public key; the shared
    secret goes through HKDF-SHA256 (salt `app.faceid.vault.v1`) to 32 bytes. Deterministic so
    it reproduces across launches, computable only inside the Enclave holding the private half.
 4. **AES-GCM seals it.** Authenticated, so a tampered blob fails to open rather than decoding
-   to attacker-chosen data. The sealed box is written to the Keychain as a generic password
-   under service `com.gazeunlock.Gaze`, with `kSecAttrAccessibleAfterFirstUnlock`.
+   to attacker-chosen data. The sealed records and the opaque Enclave-key representation are
+   written atomically to `~/Library/Application Support/Gaze/vault.bin`, with directory mode
+   `0700` and file mode `0600`.
+
+## Migrating older builds
+
+Builds before 0.4 kept the key representation and each sealed record as separate Keychain
+items. The first 0.4 launch reads that legacy service in one query, verifies every record,
+writes the authenticated vault file, and then removes the old items. After migration, normal
+launches do not query Keychain, which prevents the repeated authorization sheet caused by
+fetching the same old item for each record. If access is declined, Gaze remembers that failed
+decision for the current process so its separate startup readers do not fan out more prompts.
 
 ## Using it
 
@@ -50,9 +60,10 @@ plaintext. What the Enclave buys is machine binding, not resistance to a local a
 so it is encrypted rather than hashed. "Encrypted at rest, bound to this Mac" is accurate; "we
 cannot read your password" is not, and the app does not claim it.
 
-**No biometric ACL on the item.** No `SecAccessControl` with `.userPresence` or
-`.biometryCurrentSet`, and `kSecAttrAccessibleAfterFirstUnlock` rather than something stricter.
-Both are forced by the job: the lock screen is precisely when no user is present to authenticate.
+**No biometric ACL on the vault.** The Enclave key uses device-only, after-first-unlock access
+without `.userPresence` or `.biometryCurrentSet`. The lock screen is precisely when no user is
+present to authenticate. The vault's AES-GCM authentication still rejects edits, but it does
+not make a local process running as this user disappear.
 
 **Not TrueDepth.** Apple's Face ID measures face geometry with a structured-light projector. No
 Mac has one. This reads a flat image from the built-in camera and therefore cannot distinguish a
@@ -77,7 +88,7 @@ people in testing, but it is not equivalent to a biometric assurance level.
 | --- | --- |
 | `Sources/Security/PasswordVault.swift` | Verification and storage. Nothing else touches the password. |
 | `Sources/Security/SecureVault.swift` | Enclave key, derivation, sealing. |
-| `Sources/Security/Keychain.swift` | What is written, and with which accessibility class. |
+| `Sources/Security/Keychain.swift` | One-time compatibility migration for pre-0.4 items. |
 | `Sources/Security/LockWatcher.swift` | Lock trigger, sustained-match requirement, pre-keystroke re-check. |
 | `Sources/Security/UnlockBackend.swift` | The keystroke replay. |
 

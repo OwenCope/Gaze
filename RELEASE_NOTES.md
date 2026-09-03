@@ -1,3 +1,20 @@
+# 0.4 — Native Mac controls and a quieter vault
+
+Gaze now feels like a Mac utility: the menu bar item and settings window are backed by
+Apple's native scene and toolbar controls, and the repeated Keychain authorization prompt
+has been removed after legacy data migrates.
+
+## What changed
+
+- Replaced the hand-drawn settings navigation capsule with a native segmented `Picker` in
+  the unified compact window toolbar.
+- Enabled Apple's native window-background drag behavior and left toolbar glass to AppKit.
+- Migrated pre-0.4 protected records from separate Keychain entries into one authenticated
+  Secure Enclave-backed vault file. Normal reads are cached and no longer query Keychain.
+- Existing pre-0.4 installs need one **Always Allow** decision to complete that migration;
+  a declined decision is cached for the launch instead of prompting once per reader.
+- Added a proper Utilities category and bumped the release build to 0.4.
+
 # 0.3 — A calmer control center
 
 The Gaze control center keeps the original wide layout and brings its navigation into a
