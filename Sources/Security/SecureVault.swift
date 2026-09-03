@@ -1,57 +1,255 @@
 import CryptoKit
 import Foundation
+import Security
 import os
 
-/// Encrypts everything the app persists against a key held in the Secure Enclave.
+/// Encrypts everything Gaze persists with a key held by the Secure Enclave.
 ///
-/// The private key never leaves the Enclave, so the ciphertext is bound to this specific
-/// Mac: copying the Keychain items to another machine yields nothing. That does not stop
-/// a local attacker who is already running as this user — nothing at this layer can — but
-/// it does mean face templates and the lockout counter cannot be lifted off the disk,
-/// read on another machine, or edited in place without detection.
+/// The vault is deliberately one file rather than one Keychain item per record. The old
+/// design asked the Keychain for the same Enclave key every time it loaded a faceprint,
+/// lockout state or password. macOS quite correctly treated each access as a fresh request
+/// from a newly rebuilt binary, which could turn one authorization into a loop of sheets.
+///
+/// The Enclave key representation and one authenticated record archive now live in
+/// `Application Support/Gaze/vault.bin`. The representation is only an opaque handle; the
+/// private key never leaves the Enclave. The decoded vault is cached for the life of the
+/// process, so startup performs one key load and normal reads never touch the Keychain.
 enum SecureVault {
 
 	private static let keyAccount = "vault-key"
+	private static let vaultVersion = 1
+	private static let vaultFileName = "vault.bin"
+	private static let associatedData = Data("com.gazeunlock.Gaze.secure-vault.v1".utf8)
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "SecureVault")
+	private static let stateLock = NSLock()
 
-	enum VaultError: Error {
-		case enclaveUnavailable
-		case corrupted
+	private static var cachedState: VaultState?
+
+	private struct VaultState {
+		var key: SecureEnclave.P256.KeyAgreement.PrivateKey
+		var symmetricKey: SymmetricKey
+		var records: [String: Data]
 	}
 
-	/// True on Apple Silicon and T2 Macs. Without it we refuse to store templates at all
-	/// rather than quietly falling back to something weaker.
+	private struct DiskEnvelope: Codable {
+		var version: Int
+		var keyRepresentation: Data
+		var sealedRecords: Data
+	}
+
+	private struct DiskRecords: Codable {
+		var records: [String: Data]
+	}
+
+	enum VaultError: LocalizedError {
+		case enclaveUnavailable
+		case corrupted
+		case storageUnavailable
+
+		var errorDescription: String? {
+			switch self {
+			case .enclaveUnavailable:
+				return "Gaze needs a Mac with Secure Enclave support to store protected data."
+			case .corrupted:
+				return "Gaze's protected data could not be verified."
+			case .storageUnavailable:
+				return "Gaze could not access its protected data folder."
+			}
+		}
+	}
+
+	/// True on Apple Silicon and T2 Macs. Without it we refuse to store templates rather
+	/// than quietly falling back to something weaker.
 	static var isAvailable: Bool { SecureEnclave.isAvailable }
 
-	// MARK: - Key material
+	// MARK: - Public storage
 
-	private static func enclaveKey() throws -> SecureEnclave.P256.KeyAgreement.PrivateKey {
-		guard SecureEnclave.isAvailable else { throw VaultError.enclaveUnavailable }
+	/// Encrypts and stores a value. AES-GCM authenticates as well as encrypts, so a modified
+	/// record fails to open rather than decoding to attacker-chosen data.
+	static func store<T: Encodable>(_ value: T, as account: String) throws {
+		let plaintext = try JSONEncoder().encode(value)
 
-		if let blob = Keychain.read(keyAccount),
-			let key = try? SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: blob)
-		{
-			return key
+		stateLock.lock()
+		defer { stateLock.unlock() }
+
+		var state = try loadStateLocked()
+		let sealed = try AES.GCM.seal(plaintext, using: state.symmetricKey)
+		guard let combined = sealed.combined else { throw VaultError.corrupted }
+		state.records[account] = combined
+		try persistLocked(state)
+	}
+
+	/// Loads and decrypts a value, or nil if that account has never been written.
+	///
+	/// Throws when the vault or a present record will not authenticate. Callers can then fail
+	/// closed instead of treating damaged data as "not enrolled".
+	static func load<T: Decodable>(_ type: T.Type, from account: String) throws -> T? {
+		stateLock.lock()
+		defer { stateLock.unlock() }
+
+		let state = try loadStateLocked()
+		guard let combined = state.records[account] else { return nil }
+		let box = try AES.GCM.SealedBox(combined: combined)
+		let plaintext = try AES.GCM.open(box, using: state.symmetricKey)
+		return try JSONDecoder().decode(type, from: plaintext)
+	}
+
+	/// Returns whether a record exists without causing another Keychain access. A damaged
+	/// vault is not reported as absent; the next typed load still exposes the failure.
+	static func contains(_ account: String) -> Bool {
+		stateLock.lock()
+		defer { stateLock.unlock() }
+
+		do {
+			return try loadStateLocked().records[account] != nil
+		} catch {
+			logger.error("Could not inspect vault: \(error.localizedDescription, privacy: .public)")
+			return false
+		}
+	}
+
+	/// Removes one record while retaining the Enclave key for the remaining records.
+	static func remove(_ account: String) {
+		stateLock.lock()
+		defer { stateLock.unlock() }
+
+		do {
+			var state = try loadStateLocked()
+			guard state.records.removeValue(forKey: account) != nil else { return }
+			try persistLocked(state)
+		} catch {
+			logger.error("Could not remove vault record: \(error.localizedDescription, privacy: .public)")
+		}
+	}
+
+	/// Destroys the vault file and removes any records left by pre-0.4 builds. The Enclave
+	/// object itself remains non-exportable and becomes unreachable without its representation.
+	static func destroy() {
+		stateLock.lock()
+		defer { stateLock.unlock() }
+
+		cachedState = nil
+		if let url = try? vaultURL() {
+			try? FileManager.default.removeItem(at: url)
+		}
+		if let legacy = try? Keychain.readLegacyItems() {
+			for account in legacy.keys {
+				_ = Keychain.delete(account)
+			}
+		}
+		logger.notice("Vault destroyed; stored data is now unrecoverable.")
+	}
+
+	// MARK: - State
+
+	private static func loadStateLocked() throws -> VaultState {
+		if let cachedState { return cachedState }
+
+		let url = try vaultURL()
+		let fileManager = FileManager.default
+		if fileManager.fileExists(atPath: url.path) {
+			do {
+				let data = try Data(contentsOf: url)
+				let envelope = try PropertyListDecoder().decode(DiskEnvelope.self, from: data)
+				guard envelope.version == vaultVersion, !envelope.keyRepresentation.isEmpty else {
+					throw VaultError.corrupted
+				}
+
+				let key = try makeKey(from: envelope.keyRepresentation)
+				let symmetricKey = try deriveSymmetricKey(from: key)
+				let box = try AES.GCM.SealedBox(combined: envelope.sealedRecords)
+				let recordData = try AES.GCM.open(
+					box, using: symmetricKey, authenticating: associatedData)
+				let diskRecords = try PropertyListDecoder().decode(DiskRecords.self, from: recordData)
+				let state = VaultState(key: key, symmetricKey: symmetricKey, records: diskRecords.records)
+				cachedState = state
+				return state
+			} catch let error as VaultError {
+				throw error
+			} catch {
+				logger.error("Vault file failed authentication: \(error.localizedDescription, privacy: .public)")
+				throw VaultError.corrupted
+			}
 		}
 
-		let key = try SecureEnclave.P256.KeyAgreement.PrivateKey()
-		Keychain.write(key.dataRepresentation, to: keyAccount)
-		logger.info("Created a new Secure Enclave vault key.")
-		return key
+		// Compatibility path. It is intentionally one Keychain query so a user sees at most
+		// one access decision while records migrate from the pre-0.4 layout.
+		let legacy = try Keychain.readLegacyItems()
+		guard !legacy.isEmpty else {
+			let key = try makeNewKey()
+			let state = VaultState(
+				key: key,
+				symmetricKey: try deriveSymmetricKey(from: key),
+				records: [:])
+			try persistLocked(state)
+			return state
+		}
+
+		guard let keyData = legacy[keyAccount], !keyData.isEmpty else {
+			logger.error("Legacy records exist without a vault key.")
+			throw VaultError.corrupted
+		}
+
+		do {
+			let key = try makeKey(from: keyData)
+			let symmetricKey = try deriveSymmetricKey(from: key)
+			var records = legacy
+			records.removeValue(forKey: keyAccount)
+
+			// Validate every old blob before deleting its source. A successful migration must
+			// never turn a damaged record into a silently missing one.
+			for combined in records.values {
+				let box = try AES.GCM.SealedBox(combined: combined)
+				_ = try AES.GCM.open(box, using: symmetricKey)
+			}
+
+			let state = VaultState(key: key, symmetricKey: symmetricKey, records: records)
+			try persistLocked(state)
+
+			for account in legacy.keys {
+				guard Keychain.delete(account) else {
+					logger.error("Could not remove legacy Keychain item \(account, privacy: .public).")
+					continue
+				}
+			}
+			logger.notice("Migrated \(records.count) protected record(s) out of the Keychain.")
+			return state
+		} catch let error as VaultError {
+			throw error
+		} catch {
+			logger.error("Legacy vault failed authentication: \(error.localizedDescription, privacy: .public)")
+			throw VaultError.corrupted
+		}
+	}
+
+	private static func makeNewKey() throws -> SecureEnclave.P256.KeyAgreement.PrivateKey {
+		guard SecureEnclave.isAvailable else { throw VaultError.enclaveUnavailable }
+		guard
+			let accessControl = SecAccessControlCreateWithFlags(
+				nil, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly, [], nil)
+		else {
+			throw VaultError.enclaveUnavailable
+		}
+
+		return try SecureEnclave.P256.KeyAgreement.PrivateKey(
+			compactRepresentable: true, accessControl: accessControl)
+	}
+
+	private static func makeKey(from data: Data) throws
+		-> SecureEnclave.P256.KeyAgreement.PrivateKey
+	{
+		guard SecureEnclave.isAvailable else { throw VaultError.enclaveUnavailable }
+		return try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: data)
 	}
 
 	/// A symmetric key derived by having the Enclave key agree with its own public key.
 	///
-	/// Deterministic, so it reconstitutes across launches, but only ever computable
-	/// inside the Enclave that holds the private half.
-	private static func symmetricKey() throws -> SymmetricKey {
-		let key = try enclaveKey()
+	/// Deterministic, so it reconstitutes across launches, but the private half never leaves
+	/// the Enclave. The salt is versioned and must not be renamed without a new migration.
+	private static func deriveSymmetricKey(
+		from key: SecureEnclave.P256.KeyAgreement.PrivateKey) throws -> SymmetricKey
+	{
 		let shared = try key.sharedSecretFromKeyAgreement(with: key.publicKey)
-		// The salt keeps the old name deliberately. It is a cryptographic constant,
-		// not a label: every key ever derived came from these exact bytes, and
-		// renaming it to match the app would silently derive a different key and
-		// make existing vaults undecryptable. It is versioned for when that is
-		// actually wanted.
 		return shared.hkdfDerivedSymmetricKey(
 			using: SHA256.self,
 			salt: Data("app.faceid.vault.v1".utf8),
@@ -59,35 +257,56 @@ enum SecureVault {
 			outputByteCount: 32)
 	}
 
-	// MARK: - Storage
-
-	/// Encrypts and stores a value. AES-GCM authenticates as well as encrypts, so a
-	/// tampered blob fails to open rather than decoding to attacker-chosen data.
-	static func store<T: Encodable>(_ value: T, as account: String) throws {
-		let plaintext = try JSONEncoder().encode(value)
-		let sealed = try AES.GCM.seal(plaintext, using: symmetricKey())
+	private static func persistLocked(_ state: VaultState) throws {
+		let recordsEncoder = PropertyListEncoder()
+		recordsEncoder.outputFormat = .binary
+		let records = try recordsEncoder.encode(DiskRecords(records: state.records))
+		let sealed = try AES.GCM.seal(records, using: state.symmetricKey, authenticating: associatedData)
 		guard let combined = sealed.combined else { throw VaultError.corrupted }
-		Keychain.write(combined, to: account)
+		let envelope = DiskEnvelope(
+			version: vaultVersion,
+			keyRepresentation: state.key.dataRepresentation,
+			sealedRecords: combined)
+		let envelopeEncoder = PropertyListEncoder()
+		envelopeEncoder.outputFormat = .binary
+		let data = try envelopeEncoder.encode(envelope)
+
+		let destination = try vaultURL()
+		let temporary = destination
+			.deletingLastPathComponent()
+			.appendingPathComponent(".vault-\(UUID().uuidString).tmp")
+		defer { try? FileManager.default.removeItem(at: temporary) }
+
+		try data.write(to: temporary, options: .atomic)
+		try FileManager.default.setAttributes(
+			[.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+
+		if FileManager.default.fileExists(atPath: destination.path) {
+			_ = try FileManager.default.replaceItemAt(
+				destination, withItemAt: temporary, backupItemName: nil,
+				options: .usingNewMetadataOnly)
+		} else {
+			try FileManager.default.moveItem(at: temporary, to: destination)
+		}
+		try FileManager.default.setAttributes(
+			[.posixPermissions: 0o600], ofItemAtPath: destination.path)
+		cachedState = state
 	}
 
-	/// Loads and decrypts a value, or nil if absent.
-	///
-	/// Throws — rather than returning nil — when a blob exists but will not open, so
-	/// callers can fail closed on tampering instead of treating it as "not enrolled".
-	static func load<T: Decodable>(_ type: T.Type, from account: String) throws -> T? {
-		guard let combined = Keychain.read(account) else { return nil }
-		let box = try AES.GCM.SealedBox(combined: combined)
-		let plaintext = try AES.GCM.open(box, using: symmetricKey())
-		return try JSONDecoder().decode(type, from: plaintext)
-	}
+	private static func vaultURL() throws -> URL {
+		guard
+			let applicationSupport = FileManager.default.urls(
+				for: .applicationSupportDirectory, in: .userDomainMask).first
+		else {
+			throw VaultError.storageUnavailable
+		}
 
-	static func remove(_ account: String) {
-		Keychain.delete(account)
-	}
-
-	/// Destroys the vault key, which renders every stored blob permanently unreadable.
-	static func destroy() {
-		Keychain.delete(keyAccount)
-		logger.notice("Vault key destroyed; all stored data is now unrecoverable.")
+		let directory = applicationSupport.appendingPathComponent("Gaze", isDirectory: true)
+		try FileManager.default.createDirectory(
+			at: directory, withIntermediateDirectories: true,
+			attributes: [.posixPermissions: 0o700])
+		try FileManager.default.setAttributes(
+			[.posixPermissions: 0o700], ofItemAtPath: directory.path)
+		return directory.appendingPathComponent(vaultFileName, isDirectory: false)
 	}
 }

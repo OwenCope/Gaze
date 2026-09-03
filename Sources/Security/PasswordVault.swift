@@ -16,7 +16,7 @@ enum PasswordVault {
 	}
 
 	static var hasPassword: Bool {
-		Keychain.read(account) != nil
+		SecureVault.contains(account)
 	}
 
 	/// Checks the password against the local directory before storing it, so a typo
