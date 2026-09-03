@@ -16,7 +16,7 @@ To create a distributable disk image:
 
 ```sh
 ./package-dmg.sh
-open "build/Gaze-0.2.dmg"
+open "build/Gaze-0.3.dmg"
 ```
 
 

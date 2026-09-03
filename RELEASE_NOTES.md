@@ -1,18 +1,21 @@
-# 0.2 — Control Center
+# 0.3 — A calmer control center
 
-The Gaze control center has been redesigned around a clearer protection status, faster
-diagnostics, and a shared visual language across settings, enrollment, and recognition.
+The Gaze control center keeps the original wide layout and brings its navigation into a
+native macOS unified toolbar, with a quieter visual hierarchy and system glass.
 
 ## What changed
 
-- A branded settings control center with a persistent protection-status summary.
-- Quick cards for enrolled angles, recognition engine, and remaining attempts.
-- A clearer unlock configuration with password-storage context at the point of entry.
-- A guided enrollment flow with progress, camera state, and privacy cues in one view.
-- A live recognition test with a confidence meter and readable low/high score diagnostics.
-- A versioned DMG build path through `package-dmg.sh`.
+- Centered General, Gaze, Credits, and About navigation in the native draggable title bar.
+- Reworked settings into focused, wide rows with fewer competing cards and labels.
+- Kept security, enrollment, recognition, password, update, and notch controls intact.
+- Added a versioned DMG build path through `package-dmg.sh`.
 
 The underlying recognition, vault, lockout, and camera-pinning behavior is unchanged.
+
+# 0.2 — Control Center
+
+The Gaze control center was briefly redesigned around a clearer protection status, faster
+diagnostics, and a shared visual language across settings, enrollment, and recognition.
 
 # 0.1
 

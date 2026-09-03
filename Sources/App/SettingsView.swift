@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The main areas of Gaze's control center.
+/// The four places in Gaze's settings window.
 enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	case general
 	case face
@@ -29,7 +29,7 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	}
 
 	var tint: Color {
-		self == .face ? Theme.faceID : Theme.grey
+		self == .face ? Theme.faceID : Theme.secondaryLabel
 	}
 
 	var summary: String {
@@ -41,7 +41,7 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		case .credits:
 			return "The work and people behind Gaze"
 		case .about:
-			return "A clear look at what Gaze can do"
+			return "What Gaze does, and what it does not claim"
 		}
 	}
 }
@@ -58,20 +58,11 @@ struct SettingsView: View {
 	@State private var passwordError: String?
 	@State private var lockoutPassword = ""
 
+	@Environment(\.openWindow) private var openWindow
+
 	var body: some View {
-		HStack(spacing: 0) {
-			SettingsSidebar(
-				selection: $pane,
-				store: store,
-				lockout: lockout,
-				updates: updates)
-
-			Rectangle()
-				.fill(Theme.softSeparator)
-				.frame(width: 1)
-				.padding(.vertical, 18)
-
-			SettingsDetail(
+		ScrollView {
+			SettingsPage(
 				pane: pane,
 				store: store,
 				lockout: lockout,
@@ -80,16 +71,44 @@ struct SettingsView: View {
 				passwordEntry: $passwordEntry,
 				passwordError: $passwordError,
 				lockoutPassword: $lockoutPassword,
+				onSetup: openEnrollment,
+				onTest: openRecognitionTest,
 				onStorePassword: storePassword,
 				onClearLockout: clearLockout)
+			.frame(maxWidth: 760, alignment: .leading)
+			.padding(.horizontal, 42)
+			.padding(.top, 30)
+			.padding(.bottom, 38)
 		}
+		.scrollIndicators(.automatic)
 		.frame(
-			minWidth: 820, idealWidth: 920, maxWidth: .infinity,
-			minHeight: 560, idealHeight: 650, maxHeight: .infinity)
-		.background(WindowGlass(extraTranslucent: settings.appTheme == .glass))
+			minWidth: 760, idealWidth: 840, maxWidth: .infinity,
+			minHeight: 560, idealHeight: 640, maxHeight: .infinity)
+		.background(WindowGlass(keepsTitle: true, extraTranslucent: settings.appTheme == .glass))
 		.preferredColorScheme(settings.appTheme.colorScheme)
+		// The unified compact toolbar is the native draggable title bar. Keeping the
+		// navigation in its principal slot leaves the traffic lights and drag region to AppKit.
+		.toolbar {
+			ToolbarSpacer(.flexible, placement: .navigation)
+			ToolbarItem(placement: .principal) {
+				SettingsNavigationBar(selection: $pane)
+			}
+			ToolbarSpacer(.flexible, placement: .primaryAction)
+		}
+		.toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+		.toolbarColorScheme(settings.appTheme.colorScheme, for: .windowToolbar)
 		.onAppear { AppActivation.bringToFront() }
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
+	}
+
+	private func openEnrollment() {
+		AppActivation.bringToFront()
+		openWindow(id: "enrollment")
+	}
+
+	private func openRecognitionTest() {
+		AppActivation.bringToFront()
+		openWindow(id: "test")
 	}
 
 	private func storePassword() {
@@ -116,201 +135,66 @@ struct SettingsView: View {
 	}
 }
 
-// MARK: - Sidebar
+// MARK: - Native toolbar navigation
 
-private struct SettingsSidebar: View {
+private struct SettingsNavigationBar: View {
 
 	@Binding var selection: SettingsPane
-	let store: FaceEnrollmentStore
-	let lockout: LockoutManager
-	let updates: UpdateChecker
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 0) {
-			HStack(spacing: 11) {
-				GazeMark(size: 40)
-				VStack(alignment: .leading, spacing: 1) {
-					Text("Gaze")
-						.font(.system(.title3, weight: .bold))
-						.foregroundStyle(Theme.label)
-					Text("Secure glance unlock")
-						.font(Typography.caption)
-						.foregroundStyle(Theme.secondaryLabel)
-				}
+		HStack(spacing: 2) {
+			ForEach(Array(SettingsPane.allCases.enumerated()), id: \.element) { index, pane in
+				SettingsNavigationButton(
+					pane: pane,
+					isSelected: selection == pane,
+					select: { selection = pane })
+				.keyboardShortcut(
+					KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
 			}
-			.padding(.horizontal, 8)
-
-			SidebarStatusCard(
-				isEnrolled: store.isEnrolled,
-				isLockedOut: lockout.isLockedOut)
-			.padding(.top, 22)
-			.padding(.bottom, 24)
-
-			Text("CONTROL CENTER")
-				.font(.system(.caption2, weight: .bold))
-				.foregroundStyle(Theme.tertiaryLabel)
-				.tracking(1.0)
-				.padding(.horizontal, 10)
-				.padding(.bottom, 8)
-
-			ForEach([SettingsPane.general, .face], id: \.self) { item in
-				SettingsSidebarItem(
-					pane: item,
-					isSelected: selection == item,
-					badge: badge(for: item),
-					select: { selection = item })
-			}
-
-			Rectangle()
-				.fill(Theme.softSeparator)
-				.frame(height: 1)
-				.padding(.horizontal, 10)
-				.padding(.vertical, 13)
-
-			Text("MORE")
-				.font(.system(.caption2, weight: .bold))
-				.foregroundStyle(Theme.tertiaryLabel)
-				.tracking(1.0)
-				.padding(.horizontal, 10)
-				.padding(.bottom, 8)
-
-			ForEach([SettingsPane.credits, .about], id: \.self) { item in
-				SettingsSidebarItem(
-					pane: item,
-					isSelected: selection == item,
-					badge: badge(for: item),
-					select: { selection = item })
-			}
-
-			Spacer(minLength: 0)
-
-			HStack(spacing: 8) {
-				Circle()
-					.fill(store.isEnrolled && !lockout.isLockedOut ? Theme.faceID : Theme.warning)
-					.frame(width: 7, height: 7)
-				Text("Gaze \(updates.currentVersion)")
-					.font(Typography.caption)
-					.foregroundStyle(Theme.tertiaryLabel)
-			}
-			.padding(.horizontal, 10)
-			.padding(.bottom, 4)
 		}
-		.padding(.horizontal, 12)
-		.padding(.top, 30)
-		.padding(.bottom, 16)
-		.frame(width: 220)
+		.padding(3)
+		.glassEffect(.regular.interactive(), in: Capsule())
 		.accessibilityElement(children: .contain)
 		.accessibilityLabel("Gaze settings navigation")
 	}
-
-	private func badge(for pane: SettingsPane) -> Color? {
-		switch pane {
-		case .face:
-			if lockout.isLockedOut { return Theme.danger }
-			return store.isEnrolled ? nil : Theme.warning
-		case .general:
-			if case .available = updates.state { return Theme.action }
-			return nil
-		case .credits, .about:
-			return nil
-		}
-	}
 }
 
-private struct SidebarStatusCard: View {
-
-	let isEnrolled: Bool
-	let isLockedOut: Bool
-
-	private var title: String {
-		if isLockedOut { return "Action required" }
-		return isEnrolled ? "Protection is ready" : "Finish setup"
-	}
-
-	private var detail: String {
-		if isLockedOut { return "Enter your password to resume" }
-		return isEnrolled ? "Watching for your screen to lock" : "Enroll your face to begin"
-	}
-
-	private var tint: Color {
-		if isLockedOut { return Theme.danger }
-		return isEnrolled ? Theme.faceID : Theme.warning
-	}
-
-	var body: some View {
-		HStack(alignment: .top, spacing: 9) {
-			Circle()
-				.fill(tint)
-				.frame(width: 8, height: 8)
-				.padding(.top, 5)
-
-			VStack(alignment: .leading, spacing: 3) {
-				Text(title)
-					.font(.system(.subheadline, weight: .semibold))
-					.foregroundStyle(Theme.label)
-				Text(detail)
-					.font(Typography.caption)
-					.foregroundStyle(Theme.secondaryLabel)
-					.fixedSize(horizontal: false, vertical: true)
-			}
-		}
-		.padding(12)
-		.frame(maxWidth: .infinity, alignment: .leading)
-		.background {
-			RoundedRectangle(cornerRadius: 13, style: .continuous)
-				.fill(tint.opacity(0.10))
-				.overlay {
-					RoundedRectangle(cornerRadius: 13, style: .continuous)
-						.strokeBorder(tint.opacity(0.18), lineWidth: 1)
-				}
-		}
-	}
-}
-
-private struct SettingsSidebarItem: View {
+private struct SettingsNavigationButton: View {
 
 	let pane: SettingsPane
 	let isSelected: Bool
-	let badge: Color?
 	let select: () -> Void
 
 	@State private var isHovering = false
 
 	var body: some View {
 		Button(action: select) {
-			HStack(spacing: 10) {
-				IconTile(symbol: pane.symbol, tint: pane.tint)
-				Text(pane.title)
-					.font(Typography.row)
-					.foregroundStyle(Theme.label)
-				Spacer(minLength: 4)
-				if let badge {
-					Circle()
-						.fill(badge)
-						.frame(width: 7, height: 7)
+			Text(pane.title)
+				.font(.system(.caption, weight: isSelected ? .semibold : .medium))
+				.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
+				.frame(minWidth: 62)
+				.padding(.horizontal, 7)
+				.padding(.vertical, 5)
+				.background {
+					Capsule()
+						.fill(
+							isSelected
+								? Theme.selection
+								: (isHovering ? Theme.hoverFill : .clear))
 				}
-			}
-			.padding(.horizontal, 8)
-			.padding(.vertical, 7)
-			.background {
-				RoundedRectangle(cornerRadius: 10, style: .continuous)
-					.fill(isSelected ? Theme.selection : (isHovering ? Theme.hoverFill : .clear))
-			}
-			.contentShape(.rect)
 		}
 		.buttonStyle(.plain)
-		.focusable(isSelected)
-		.focusEffectDisabled()
+		.contentShape(Capsule())
 		.onHover { isHovering = $0 }
 		.accessibilityLabel(pane.title)
 		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-		.accessibilityValue(badge == nil ? "" : "Needs attention")
+		.animation(.smooth(duration: 0.14), value: isSelected)
 	}
 }
 
-// MARK: - Detail routing
+// MARK: - Page routing
 
-private struct SettingsDetail: View {
+private struct SettingsPage: View {
 
 	let pane: SettingsPane
 	let store: FaceEnrollmentStore
@@ -322,59 +206,52 @@ private struct SettingsDetail: View {
 	@Binding var passwordError: String?
 	@Binding var lockoutPassword: String
 
+	let onSetup: () -> Void
+	let onTest: () -> Void
 	let onStorePassword: () -> Void
 	let onClearLockout: () -> Void
 
 	var body: some View {
-		ScrollView {
-			VStack(alignment: .leading, spacing: 22) {
-				SettingsDetailHeader(
-					pane: pane,
-					isEnrolled: store.isEnrolled,
-					isLockedOut: lockout.isLockedOut)
+		VStack(alignment: .leading, spacing: 28) {
+			SettingsPageHeader(
+				pane: pane,
+				isEnrolled: store.isEnrolled,
+				isLockedOut: lockout.isLockedOut)
 
-				switch pane {
-				case .face:
-					FaceSettingsPane(
-						store: store,
-						lockout: lockout,
-						settings: settings,
-						passwordEntry: $passwordEntry,
-						passwordError: $passwordError,
-						lockoutPassword: $lockoutPassword,
-						onStorePassword: onStorePassword,
-						onClearLockout: onClearLockout)
-				case .general:
-					GeneralSettingsPane(settings: settings, updates: updates)
-				case .credits:
-					CreditsSettingsPane()
-				case .about:
-					AboutSettingsPane(store: store, updates: updates)
-				}
+			switch pane {
+			case .general:
+				GeneralSettingsPage(settings: settings, updates: updates)
+			case .face:
+				GazeSettingsPage(
+					store: store,
+					lockout: lockout,
+					settings: settings,
+					passwordEntry: $passwordEntry,
+					passwordError: passwordError,
+					lockoutPassword: $lockoutPassword,
+					onSetup: onSetup,
+					onTest: onTest,
+					onStorePassword: onStorePassword,
+					onClearLockout: onClearLockout)
+			case .credits:
+				CreditsSettingsPage()
+			case .about:
+				AboutSettingsPage(store: store, updates: updates)
 			}
-			.frame(maxWidth: .infinity, alignment: .leading)
-			.padding(.horizontal, 28)
-			.padding(.top, 34)
-			.padding(.bottom, 30)
 		}
-		.scrollIndicators(.automatic)
-		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		.frame(maxWidth: .infinity, alignment: .leading)
 	}
 }
 
-private struct SettingsDetailHeader: View {
+private struct SettingsPageHeader: View {
 
 	let pane: SettingsPane
 	let isEnrolled: Bool
 	let isLockedOut: Bool
 
 	var body: some View {
-		HStack(alignment: .top, spacing: 14) {
+		HStack(alignment: .center, spacing: 18) {
 			VStack(alignment: .leading, spacing: 5) {
-				Text("GAZE CONTROL CENTER")
-					.font(.system(.caption2, weight: .bold))
-					.foregroundStyle(pane == .face ? Theme.faceID : Theme.tertiaryLabel)
-					.tracking(1.1)
 				Text(pane.title)
 					.font(.system(.largeTitle, weight: .bold))
 					.foregroundStyle(Theme.label)
@@ -387,77 +264,72 @@ private struct SettingsDetailHeader: View {
 			Spacer(minLength: 12)
 
 			if pane == .face {
-				StatusBadge(
-					title: isLockedOut ? "LOCKED OUT" : (isEnrolled ? "PROTECTED" : "NOT SET UP"),
-					symbol: isLockedOut ? "lock.fill" : (isEnrolled ? "checkmark" : "exclamationmark"),
-					tint: isLockedOut ? Theme.danger : (isEnrolled ? Theme.faceID : Theme.warning))
-				.padding(.top, 7)
+				ProtectionState(isEnrolled: isEnrolled, isLockedOut: isLockedOut)
 			}
 		}
 	}
 }
 
-// MARK: - Gaze pane
+private struct ProtectionState: View {
 
-private struct FaceSettingsPane: View {
+	let isEnrolled: Bool
+	let isLockedOut: Bool
+
+	private var title: String {
+		if isLockedOut { return "Paused" }
+		return isEnrolled ? "Ready" : "Not set up"
+	}
+
+	private var tint: Color {
+		if isLockedOut { return Theme.danger }
+		return isEnrolled ? Theme.faceID : Theme.warning
+	}
+
+	private var symbol: String {
+		if isLockedOut { return "lock.fill" }
+		return isEnrolled ? "checkmark" : "exclamationmark"
+	}
+
+	var body: some View {
+		Label(title, systemImage: symbol)
+			.font(.system(.callout, weight: .semibold))
+			.foregroundStyle(tint)
+			.accessibilityElement(children: .combine)
+	}
+}
+
+// MARK: - Gaze
+
+private struct GazeSettingsPage: View {
 
 	let store: FaceEnrollmentStore
 	let lockout: LockoutManager
 	@Bindable var settings: Preferences
 	@Binding var passwordEntry: String
-	@Binding var passwordError: String?
+	let passwordError: String?
 	@Binding var lockoutPassword: String
+	let onSetup: () -> Void
+	let onTest: () -> Void
 	let onStorePassword: () -> Void
 	let onClearLockout: () -> Void
 
-	@Environment(\.openWindow) private var openWindow
-
 	var body: some View {
-		VStack(alignment: .leading, spacing: 18) {
+		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			if lockout.isLockedOut {
-				LockoutRecoveryCard(
+				LockoutRecoverySection(
 					password: $lockoutPassword,
 					onUnlock: onClearLockout)
 			}
 
-			GazeOverviewCard(
+			GazeStatusSection(
 				isEnrolled: store.isEnrolled,
 				isCorrupted: store.isCorrupted,
 				isLockedOut: lockout.isLockedOut,
 				detail: enrollmentDetail,
-				onSetup: {
-					AppActivation.bringToFront()
-					openWindow(id: "enrollment")
-				},
-				onTest: {
-					AppActivation.bringToFront()
-					openWindow(id: "test")
-				})
+				onSetup: onSetup,
+				onTest: onTest)
 
-			HStack(spacing: 12) {
-				DashboardMetric(
-					label: "ENROLLED ANGLES",
-					value: store.enrollment.map { "\($0.prints.count)" } ?? "—",
-					detail: store.isEnrolled ? "Across two setup passes" : "Complete setup to add yours",
-					symbol: "viewfinder",
-					tint: Theme.faceID)
-
-				DashboardMetric(
-					label: "RECOGNITION",
-					value: store.embedder.identifier.hasPrefix("coreml") ? "Core ML" : "Geometry",
-					detail: store.embedder.identifier.hasPrefix("coreml") ? "On-device model" : "Limited confidence",
-					symbol: "brain.head.profile",
-					tint: store.embedder.identifier.hasPrefix("coreml") ? Theme.action : Theme.warning)
-
-				DashboardMetric(
-					label: "ATTEMPTS",
-					value: lockout.isLockedOut ? "0" : "\(lockout.attemptsRemaining)",
-					detail: lockout.isLockedOut ? "Password required" : "Until lockout",
-					symbol: lockout.isLockedOut ? "lock.trianglebadge.exclamationmark" : "shield.fill",
-					tint: lockout.isLockedOut ? Theme.danger : Theme.faceID)
-			}
-
-			UnlockConfigurationCard(
+			UnlockSettingsSection(
 				settings: settings,
 				passwordEntry: $passwordEntry,
 				passwordError: passwordError,
@@ -465,7 +337,7 @@ private struct FaceSettingsPane: View {
 				isEnrolled: store.isEnrolled)
 
 			if store.isEnrolled {
-				FaceManagementCard(store: store)
+				FaceManagementSection(store: store)
 			}
 		}
 	}
@@ -477,11 +349,11 @@ private struct FaceSettingsPane: View {
 		if let enrollment = store.enrollment {
 			return "\(enrollment.prints.count) angles captured on \(enrollment.enrolledAt.formatted(date: .abbreviated, time: .shortened))"
 		}
-		return "Enroll your face to unlock this Mac by looking at it."
+		return "Enrol your face to unlock this Mac by looking at it."
 	}
 }
 
-private struct GazeOverviewCard: View {
+private struct GazeStatusSection: View {
 
 	let isEnrolled: Bool
 	let isCorrupted: Bool
@@ -502,43 +374,17 @@ private struct GazeOverviewCard: View {
 		return isEnrolled ? "Gaze is ready" : "Set up Gaze"
 	}
 
-	private var badgeTitle: String {
-		if isLockedOut { return "ACTION REQUIRED" }
-		if isCorrupted || !isEnrolled { return "SETUP NEEDED" }
-		return "READY TO RECOGNISE"
-	}
-
-	private var badgeSymbol: String {
-		if isLockedOut { return "lock.fill" }
-		if isCorrupted || !isEnrolled { return "sparkles" }
-		return "checkmark"
-	}
-
 	var body: some View {
-		ZStack(alignment: .topTrailing) {
-			RoundedRectangle(cornerRadius: 20, style: .continuous)
-				.fill(
-					LinearGradient(
-						colors: [Theme.surfaceRaised, Theme.surface],
-						startPoint: .topLeading,
-						endPoint: .bottomTrailing))
+		SettingsSection {
+			HStack(spacing: 14) {
+				Image(systemName: isEnrolled ? "faceid" : "person.crop.circle.badge.questionmark")
+					.font(Typography.glyph)
+					.foregroundStyle(tint)
+					.frame(width: 42)
 
-			Circle()
-				.fill(tint.opacity(0.14))
-				.frame(width: 190, height: 190)
-				.blur(radius: 12)
-				.offset(x: 76, y: -82)
-
-			VStack(alignment: .leading, spacing: 16) {
-				HStack {
-					StatusBadge(title: badgeTitle, symbol: badgeSymbol, tint: tint)
-					Spacer(minLength: 12)
-					GazeMark(size: 56, tint: tint)
-				}
-
-				VStack(alignment: .leading, spacing: 6) {
+				VStack(alignment: .leading, spacing: 4) {
 					Text(title)
-						.font(.system(.title, weight: .bold))
+						.font(Typography.heroTitle)
 						.foregroundStyle(Theme.label)
 					Text(detail)
 						.font(Typography.detail)
@@ -546,8 +392,10 @@ private struct GazeOverviewCard: View {
 						.fixedSize(horizontal: false, vertical: true)
 				}
 
-				HStack(spacing: 9) {
-					Button(isEnrolled ? "Set Up Again" : "Start Setup", action: onSetup)
+				Spacer(minLength: 12)
+
+				VStack(alignment: .trailing, spacing: 6) {
+					Button(isEnrolled ? "Set Up Again" : "Set Up Gaze", action: onSetup)
 						.buttonStyle(.primaryAction)
 
 					if isEnrolled {
@@ -555,38 +403,35 @@ private struct GazeOverviewCard: View {
 							.buttonStyle(.quiet)
 					}
 				}
+				.frame(width: 132)
 			}
-			.padding(20)
+			.padding(.horizontal, Theme.rowInset)
+			.padding(.vertical, 14)
 		}
-		.clipped()
-		.overlay {
-			RoundedRectangle(cornerRadius: 20, style: .continuous)
-				.strokeBorder(tint.opacity(0.22), lineWidth: 1)
-		}
+		.animation(.smooth(duration: 0.2), value: isEnrolled)
 	}
 }
 
-private struct LockoutRecoveryCard: View {
+private struct LockoutRecoverySection: View {
 
 	@Binding var password: String
 	let onUnlock: () -> Void
 
 	var body: some View {
-		DashboardCard {
-			HStack(spacing: 12) {
-				Image(systemName: "lock.trianglebadge.exclamationmark.fill")
-					.font(.system(size: 23, weight: .medium))
-					.foregroundStyle(Theme.danger)
-				VStack(alignment: .leading, spacing: 3) {
-					Text("Gaze is temporarily locked")
-						.font(.system(.headline, weight: .semibold))
-						.foregroundStyle(Theme.label)
-					Text("Enter your account password to clear the failed-attempt limit.")
-						.font(Typography.detail)
-						.foregroundStyle(Theme.secondaryLabel)
-						.fixedSize(horizontal: false, vertical: true)
-				}
-				Spacer(minLength: 8)
+		SettingsSection(
+			title: "Locked out",
+			footer: "Gaze is disabled after \(LockoutManager.maxAttempts) failed attempts.") {
+			StatusLine(
+				kind: .warning,
+				message: "Enter your account password to re-enable Gaze.")
+
+			RowDivider(inset: 0)
+
+			SettingRow(
+				title: "Account password",
+				detail: "Used only to clear the failed-attempt limit.",
+				symbol: "exclamationmark.lock.fill",
+				symbolTint: Theme.danger) {
 				HStack(spacing: 7) {
 					SettingsField(placeholder: "Password", text: $password)
 						.frame(width: 150)
@@ -596,14 +441,10 @@ private struct LockoutRecoveryCard: View {
 				}
 			}
 		}
-		.overlay {
-			RoundedRectangle(cornerRadius: 18, style: .continuous)
-				.strokeBorder(Theme.danger.opacity(0.30), lineWidth: 1)
-		}
 	}
 }
 
-private struct UnlockConfigurationCard: View {
+private struct UnlockSettingsSection: View {
 
 	@Bindable var settings: Preferences
 	@Binding var passwordEntry: String
@@ -612,82 +453,41 @@ private struct UnlockConfigurationCard: View {
 	let isEnrolled: Bool
 
 	var body: some View {
-		DashboardCard(
-			title: "After recognition",
-			detail: "Choose what Gaze should do when it recognises you.") {
-			VStack(alignment: .leading, spacing: 14) {
-				HStack(spacing: 12) {
-					Image(systemName: settings.unlockBackend.symbol)
-						.font(.system(.title3, weight: .medium))
-						.foregroundStyle(settings.unlockBackend == .keystroke ? Theme.action : Theme.faceID)
-						.frame(width: 28)
-
-					VStack(alignment: .leading, spacing: 2) {
-						Text("Action")
-							.font(Typography.row)
-							.foregroundStyle(Theme.label)
-						Text(selectedBackendDetail)
-							.font(Typography.detail)
-							.foregroundStyle(Theme.secondaryLabel)
-							.fixedSize(horizontal: false, vertical: true)
+		SettingsSection(title: "After recognition", footer: unlockFooter) {
+			SettingRow(
+				title: "Action",
+				detail: selectedBackendDetail,
+				symbol: settings.unlockBackend.symbol,
+				symbolTint: settings.unlockBackend == .keystroke ? Theme.action : Theme.faceID) {
+				Picker("Action after recognition", selection: $settings.unlockBackend) {
+					if settings.unlockBackend == .authPlugin {
+						Text("Authorization plugin").tag(UnlockBackendKind.authPlugin)
 					}
-
-					Spacer(minLength: 8)
-
-					Picker("Action after recognition", selection: $settings.unlockBackend) {
-						if settings.unlockBackend == .authPlugin {
-							Text("Authorization plugin").tag(UnlockBackendKind.authPlugin)
-						}
-						ForEach(UnlockBackendKind.selectableCases, id: \.self) { kind in
-							Text(kind.title).tag(kind)
-						}
-					}
-					.pickerStyle(.menu)
-					.controlSize(.small)
-					.tint(Theme.label)
-					.onChange(of: settings.unlockBackend) { _, _ in
-						AppServices.shared.startUnlockTrigger()
+					ForEach(UnlockBackendKind.selectableCases, id: \.self) { kind in
+						Text(kind.title).tag(kind)
 					}
 				}
+				.labelsHidden()
+				.pickerStyle(.menu)
+				.controlSize(.small)
+				.tint(Theme.label)
+				.fixedSize()
+			}
+			.onChange(of: settings.unlockBackend) { _, _ in
+				AppServices.shared.startUnlockTrigger()
+			}
 
-				if settings.unlockBackend == .keystroke {
-					Rectangle()
-						.fill(Theme.softSeparator)
-						.frame(height: 1)
+			if settings.unlockBackend == .keystroke {
+				RowDivider()
+				PasswordSettingsRow(
+					password: $passwordEntry,
+					error: passwordError,
+					onStore: onStorePassword)
+			}
 
-					HStack(spacing: 12) {
-						IconTile(symbol: "key.fill", tint: Theme.action)
-						VStack(alignment: .leading, spacing: 2) {
-							Text("Account password")
-								.font(Typography.row)
-								.foregroundStyle(Theme.label)
-							Text(PasswordVault.hasPassword ? "A password is stored on this Mac" : "Required before unlock can work")
-								.font(Typography.detail)
-								.foregroundStyle(Theme.secondaryLabel)
-						}
-						Spacer(minLength: 8)
-						HStack(spacing: 7) {
-							SettingsField(placeholder: "Password", text: $passwordEntry)
-								.frame(width: 150)
-							Button("Store", action: onStorePassword)
-								.buttonStyle(.accent)
-								.disabled(passwordEntry.isEmpty)
-							InfoButton(title: "How your password is stored") {
-								Text("It is encrypted with a key generated inside this Mac's Secure Enclave, which never leaves it.")
-								Text("It is not hashed. Gaze must be able to reproduce the password to type it, so anything running as your user account could decrypt it.")
-								Text("Choose Just recognise me if you do not want a password stored at all.")
-							}
-						}
-					}
-
-					if let passwordError {
-						StatusLine(kind: .error, message: passwordError)
-					}
-				}
-
-				if let problem = readinessProblem {
-					StatusLine(kind: problem.kind, message: problem.message)
-				}
+			if let problem = readinessProblem {
+				RowDivider(inset: 0)
+				StatusLine(kind: problem.kind, message: problem.message)
 			}
 		}
 		.opacity(isEnrolled ? 1 : 0.92)
@@ -696,6 +496,13 @@ private struct UnlockConfigurationCard: View {
 	private var selectedBackendDetail: String {
 		if settings.unlockBackend == .authPlugin {
 			return "The legacy plugin is retained only for recovery."
+		}
+		return settings.unlockBackend.detail
+	}
+
+	private var unlockFooter: String? {
+		if settings.unlockBackend == .authPlugin {
+			return "The authorization plugin was removed because it can lock you out. Restore Apple's lock screen before selecting another option: run Plugin/uninstall.sh as an administrator."
 		}
 		return settings.unlockBackend.detail
 	}
@@ -716,21 +523,57 @@ private struct UnlockConfigurationCard: View {
 	}
 }
 
-private struct FaceManagementCard: View {
+private struct PasswordSettingsRow: View {
+
+	@Binding var password: String
+	let error: String?
+	let onStore: () -> Void
+
+	var body: some View {
+		VStack(spacing: 0) {
+			SettingRow(
+				title: "Account password",
+				detail: PasswordVault.hasPassword
+					? "A password is stored on this Mac."
+					: "Checked against your account before it is stored.",
+				symbol: "key.fill",
+				symbolTint: Theme.action) {
+				HStack(spacing: 7) {
+					SettingsField(placeholder: "Password", text: $password)
+						.frame(width: 150)
+					Button("Store", action: onStore)
+						.buttonStyle(.accent)
+						.disabled(password.isEmpty)
+					InfoButton(title: "How your password is stored") {
+						Text("It is encrypted with a key generated inside this Mac's Secure Enclave, which never leaves it.")
+						Text("It is not hashed. Gaze must be able to reproduce the password to type it, so anything running as your user account could decrypt it.")
+						Text("Choose Just recognise me if you do not want a password stored at all.")
+					}
+				}
+			}
+
+			if let error {
+				StatusLine(kind: .error, message: error)
+			}
+		}
+	}
+}
+
+private struct FaceManagementSection: View {
 
 	let store: FaceEnrollmentStore
 
 	var body: some View {
-		DashboardCard(
+		SettingsSection(
 			title: "Enrolled face",
-			detail: store.embedder.identifier.hasPrefix("landmark")
-				? "No recognition model is installed, so Gaze is using face geometry only."
+			footer: store.embedder.identifier.hasPrefix("landmark")
+				? "No recognition model is installed, so Gaze is matching face geometry only. That is much weaker than a trained model."
 				: "Your faceprints stay on this Mac and are protected by the Secure Enclave.") {
-			HStack {
-				Label("Remove enrolled face", systemImage: "trash")
-					.font(Typography.row)
-					.foregroundStyle(Theme.label)
-				Spacer()
+			SettingRow(
+				title: "Remove enrolled face",
+				detail: "This cannot be undone.",
+				symbol: "trash.fill",
+				symbolTint: Theme.danger) {
 				Button("Remove", role: .destructive) {
 					Task {
 						guard await BiometricGate.authorize(.removeEnrollment) else { return }
@@ -743,30 +586,30 @@ private struct FaceManagementCard: View {
 	}
 }
 
-// MARK: - General pane
+// MARK: - General
 
-private struct GeneralSettingsPane: View {
+private struct GeneralSettingsPage: View {
 
 	@Bindable var settings: Preferences
 	let updates: UpdateChecker
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 22) {
+		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			NotchSettingsSection(settings: settings)
-			SecuritySettingsCard(settings: settings)
-			MacBehaviorCard(settings: settings)
-			AppearanceCard(settings: settings)
-			UpdatesCard(updates: updates)
+			SecuritySettingsSection(settings: settings)
+			MacBehaviorSection(settings: settings)
+			AppearanceSettingsSection(settings: settings)
+			UpdatesSettingsSection(updates: updates)
 		}
 	}
 }
 
-private struct SecuritySettingsCard: View {
+private struct SecuritySettingsSection: View {
 
 	@Bindable var settings: Preferences
 
 	var body: some View {
-		SettingsSection(title: "Hardening", footer: footer) {
+		SettingsSection(title: "Security", footer: footer) {
 			SettingToggle(
 				title: "Only trust the built-in camera",
 				detail: "Refuses virtual and external cameras.",
@@ -799,7 +642,7 @@ private struct SecuritySettingsCard: View {
 	}
 }
 
-private struct MacBehaviorCard: View {
+private struct MacBehaviorSection: View {
 
 	@Bindable var settings: Preferences
 
@@ -830,7 +673,7 @@ private struct MacBehaviorCard: View {
 	}
 }
 
-private struct AppearanceCard: View {
+private struct AppearanceSettingsSection: View {
 
 	@Bindable var settings: Preferences
 
@@ -859,7 +702,7 @@ private struct AppearanceCard: View {
 	}
 }
 
-private struct UpdatesCard: View {
+private struct UpdatesSettingsSection: View {
 
 	let updates: UpdateChecker
 
@@ -918,32 +761,30 @@ private struct UpdatesCard: View {
 	}
 }
 
-// MARK: - Information panes
+// MARK: - Information
 
-private struct CreditsSettingsPane: View {
+private struct CreditsSettingsPage: View {
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 18) {
-			DashboardCard(
-				title: "Built with great work",
-				detail: "Gaze stands on the shoulders of projects that make Mac utilities feel thoughtful.") {
-				CreditRow(
+		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+			SettingsSection(
+				title: "Built on other people's work",
+				footer: "These projects made Gaze possible.") {
+				CreditSettingsRow(
 					name: "Sapphire",
 					detail: "Recognition model and face matching research",
 					symbol: "brain.head.profile",
 					url: "https://sapphire-app.tech/")
 
-				Rectangle().fill(Theme.softSeparator).frame(height: 1)
-
-				CreditRow(
+				RowDivider()
+				CreditSettingsRow(
 					name: "DynamicLake",
 					detail: "Notch panel inspiration",
 					symbol: "macbook",
 					url: "https://dynamiclake.com")
 
-				Rectangle().fill(Theme.softSeparator).frame(height: 1)
-
-				CreditRow(
+				RowDivider()
+				CreditSettingsRow(
 					name: "Atoll",
 					detail: "Careful code review and feedback",
 					symbol: "hammer.fill",
@@ -954,12 +795,12 @@ private struct CreditsSettingsPane: View {
 				.font(Typography.detail)
 				.foregroundStyle(Theme.secondaryLabel)
 				.fixedSize(horizontal: false, vertical: true)
-			.padding(.horizontal, 4)
+				.padding(.horizontal, 4)
 		}
 	}
 }
 
-private struct CreditRow: View {
+private struct CreditSettingsRow: View {
 
 	let name: String
 	let detail: String
@@ -967,17 +808,7 @@ private struct CreditRow: View {
 	let url: String
 
 	var body: some View {
-		HStack(spacing: 12) {
-			IconTile(symbol: symbol, tint: Theme.action)
-			VStack(alignment: .leading, spacing: 3) {
-				Text(name)
-					.font(.system(.headline, weight: .semibold))
-					.foregroundStyle(Theme.label)
-				Text(detail)
-					.font(Typography.detail)
-					.foregroundStyle(Theme.secondaryLabel)
-			}
-			Spacer(minLength: 8)
+		SettingRow(title: name, detail: detail, symbol: symbol, symbolTint: Theme.action) {
 			Button("Visit") {
 				guard let destination = URL(string: url) else { return }
 				NSWorkspace.shared.open(destination)
@@ -987,68 +818,55 @@ private struct CreditRow: View {
 	}
 }
 
-private struct AboutSettingsPane: View {
+private struct AboutSettingsPage: View {
 
 	let store: FaceEnrollmentStore
 	let updates: UpdateChecker
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 18) {
-			DashboardCard {
-				HStack(spacing: 14) {
-					GazeMark(size: 58)
-					VStack(alignment: .leading, spacing: 3) {
-						Text("Gaze")
-							.font(.system(.title2, weight: .bold))
-							.foregroundStyle(Theme.label)
-						Text("Version \(updates.currentVersion)")
-							.font(Typography.detail)
-							.foregroundStyle(Theme.secondaryLabel)
-					}
-					Spacer()
+		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+			SettingsSection(title: "This app") {
+				SettingRow(title: "Version", symbol: "info.circle") {
+					Text(updates.currentVersion)
+						.font(Typography.control)
+						.foregroundStyle(Theme.secondaryLabel)
+				}
+
+				RowDivider()
+
+				SettingRow(title: "Recognition model", symbol: "brain.head.profile") {
+					Text(store.embedder.identifier)
+						.font(Typography.control)
+						.foregroundStyle(Theme.secondaryLabel)
 				}
 			}
 
-			DashboardCard(
-				title: "What Gaze does",
-				detail: "It recognises you from the ordinary camera built into your Mac and can type your password when you choose that mode.") {
-				AboutFact(symbol: "lock.shield.fill", title: "Local by design", detail: "Faceprints and any stored password stay on this Mac.")
-				AboutFact(symbol: "camera.fill", title: "Camera-based", detail: "This is convenience, not Apple's TrueDepth Face ID.")
-				AboutFact(symbol: "checkmark.shield.fill", title: "Always recoverable", detail: "Your normal password and Touch ID remain available.")
-			}
-
-			DashboardCard(
-				title: "Recognition engine",
-				detail: store.embedder.identifier) {
-				Text("The model runs on-device. Changing the model invalidates existing enrolments so faceprints from different feature spaces are never compared.")
-					.font(Typography.detail)
-					.foregroundStyle(Theme.secondaryLabel)
-					.fixedSize(horizontal: false, vertical: true)
-			}
-		}
-	}
-}
-
-private struct AboutFact: View {
-
-	let symbol: String
-	let title: String
-	let detail: String
-
-	var body: some View {
-		HStack(alignment: .top, spacing: 11) {
-			Image(systemName: symbol)
-				.font(.system(.body, weight: .medium))
-				.foregroundStyle(Theme.faceID)
-				.frame(width: 23)
-			VStack(alignment: .leading, spacing: 2) {
-				Text(title)
-					.font(.system(.subheadline, weight: .semibold))
+			VStack(alignment: .leading, spacing: 7) {
+				Text("Not Apple's Face ID")
+					.font(Typography.groupTitle)
 					.foregroundStyle(Theme.label)
-				Text(detail)
+				Text(
+					"Apple's Face ID uses a TrueDepth camera that projects infrared dots to measure the shape of your face. Macs have no such sensor. Gaze recognises you from the ordinary built-in camera, which sees a flat image — so it cannot tell a face from a good photograph of one the way an iPhone can.")
 					.font(Typography.detail)
 					.foregroundStyle(Theme.secondaryLabel)
 					.fixedSize(horizontal: false, vertical: true)
+			}
+			.padding(.horizontal, 4)
+
+			SettingsSection(title: "Privacy") {
+				SettingRow(
+					title: "Faceprints stay on this Mac",
+					detail: "The recognition model runs on-device. Images are not kept.",
+					symbol: "lock.shield.fill",
+					symbolTint: Theme.faceID) { EmptyView() }
+
+				RowDivider()
+
+				SettingRow(
+					title: "Your normal password still works",
+					detail: "Gaze is a convenience layer, not a replacement for macOS security.",
+					symbol: "checkmark.shield.fill",
+					symbolTint: Theme.faceID) { EmptyView() }
 			}
 		}
 	}

@@ -219,7 +219,7 @@ final class Preferences {
 			.flatMap(GlyphPlacement.init(rawValue:)) ?? .centred
 		appTheme =
 			defaults.string(forKey: Key.appTheme)
-			.flatMap(AppTheme.init(rawValue:)) ?? .system
+			.flatMap(AppTheme.init(rawValue:)) ?? .glass
 		notchTransparency = defaults.object(forKey: Key.notchTransparency) as? Double ?? 0.3
 		notchHeightAdjust = defaults.double(forKey: Key.notchHeightAdjust)
 		notchWidthAdjust = defaults.double(forKey: Key.notchWidthAdjust)

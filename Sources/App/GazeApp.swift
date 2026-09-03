@@ -30,10 +30,9 @@ struct GazeApp: App {
 		// the user is allowed to go bigger. A settings window that cannot be resized has no
 		// answer for someone who finds the text small.
 		.windowResizability(.contentMinSize)
-		// The sidebar's vibrancy runs the full height of the window, so a title bar drawn
-		// across the top of it would cut it in half. The traffic lights stay; only the bar
-		// behind them goes.
-		.windowStyle(.hiddenTitleBar)
+		// Use AppKit's compact unified title bar so the traffic lights, drag region, and
+		// toolbar glass remain native. SettingsView supplies the centered navigation item.
+		.windowToolbarStyle(.unifiedCompact(showsTitle: false))
 
 		Window("Test Recognition", id: "test") {
 			RecognitionTestView(store: store)
