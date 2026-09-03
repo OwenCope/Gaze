@@ -61,42 +61,48 @@ struct SettingsView: View {
 	@Environment(\.openWindow) private var openWindow
 
 	var body: some View {
-		ScrollView {
-			SettingsPage(
-				pane: pane,
+		NavigationSplitView {
+			SettingsSidebar(
+				selection: $pane,
 				store: store,
 				lockout: lockout,
-				settings: settings,
-				updates: updates,
-				passwordEntry: $passwordEntry,
-				passwordError: $passwordError,
-				lockoutPassword: $lockoutPassword,
-				onSetup: openEnrollment,
-				onTest: openRecognitionTest,
-				onStorePassword: storePassword,
-				onClearLockout: clearLockout)
-			.frame(maxWidth: 760, alignment: .leading)
-			.padding(.horizontal, 42)
-			.padding(.top, 30)
-			.padding(.bottom, 38)
-		}
-		.scrollIndicators(.automatic)
-		.frame(
-			minWidth: 760, idealWidth: 840, maxWidth: .infinity,
-			minHeight: 560, idealHeight: 640, maxHeight: .infinity)
-		.background(WindowGlass(keepsTitle: true, extraTranslucent: settings.appTheme == .glass))
-		.preferredColorScheme(settings.appTheme.colorScheme)
-		// The unified compact toolbar is the native draggable title bar. Keeping the
-		// navigation in its principal slot leaves the traffic lights and drag region to AppKit.
-		.toolbar {
-			ToolbarSpacer(.flexible, placement: .navigation)
-			ToolbarItem(placement: .principal) {
-				NativeSettingsToolbar(selection: $pane)
+				updates: updates)
+			.navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 260)
+		} detail: {
+			ScrollView {
+				SettingsPage(
+					pane: pane,
+					store: store,
+					lockout: lockout,
+					settings: settings,
+					updates: updates,
+					passwordEntry: $passwordEntry,
+					passwordError: $passwordError,
+					lockoutPassword: $lockoutPassword,
+					onSetup: openEnrollment,
+					onTest: openRecognitionTest,
+					onStorePassword: storePassword,
+					onClearLockout: clearLockout)
+				.frame(maxWidth: 760, alignment: .leading)
+				.frame(maxWidth: .infinity, alignment: .topLeading)
+				.padding(.horizontal, 38)
+				.padding(.top, 24)
+				.padding(.bottom, 38)
 			}
-			ToolbarSpacer(.flexible, placement: .primaryAction)
+			.scrollIndicators(.automatic)
+			.frame(maxWidth: .infinity, maxHeight: .infinity)
+			.navigationTitle(pane.title)
 		}
-		.toolbarBackgroundVisibility(.visible, for: .windowToolbar)
-		.toolbarColorScheme(settings.appTheme.colorScheme, for: .windowToolbar)
+		.navigationSplitViewStyle(.balanced)
+		.frame(
+			minWidth: 900, idealWidth: 980, maxWidth: .infinity,
+			minHeight: 600, idealHeight: 680, maxHeight: .infinity)
+		// Let the window scene provide the background. This keeps the toolbar's native glass
+		// connected to the content instead of putting a second custom material under it.
+		.containerBackground(.windowBackground, for: .window)
+		.preferredColorScheme(settings.appTheme.colorScheme)
+		// The window scene owns the toolbar and title bar. No custom view is placed over it,
+		// so AppKit keeps the native Liquid Glass treatment and drag region intact.
 		.onAppear { AppActivation.bringToFront() }
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
 	}
@@ -135,29 +141,84 @@ struct SettingsView: View {
 	}
 }
 
-// MARK: - Native toolbar navigation
+// MARK: - Sidebar navigation
 
-/// A real AppKit segmented control supplied by SwiftUI's native Picker style.
+/// A native macOS sidebar gives the settings window a stable information architecture.
 ///
-/// The old version painted a capsule around four SwiftUI buttons. It looked like a web
-/// navigation bar and never participated in the title bar's focus, sizing, or drag region.
-/// `Picker` with `.segmented` is bridged to `NSSegmentedControl`; the unified compact window
-/// toolbar supplies the Liquid Glass surface and AppKit owns the interaction.
-private struct NativeSettingsToolbar: View {
+/// The old centered capsule looked like a website tab bar and competed with the title bar.
+/// `List(selection:)` is the control Apple uses for a split-view settings hierarchy: it gets
+/// keyboard navigation, focus, selection rendering, and the correct sidebar material from
+/// macOS without painting any of that UI by hand.
+private struct SettingsSidebar: View {
 
 	@Binding var selection: SettingsPane
+	let store: FaceEnrollmentStore
+	let lockout: LockoutManager
+	let updates: UpdateChecker
 
 	var body: some View {
-		Picker("Gaze settings", selection: $selection) {
-			ForEach(SettingsPane.allCases) { pane in
-				Text(pane.title).tag(pane)
+		List(selection: $selection) {
+			Section("Workspace") {
+				SidebarDestination(pane: .face)
+				SidebarDestination(pane: .general)
+			}
+
+			Section("Information") {
+				SidebarDestination(pane: .credits)
+				SidebarDestination(pane: .about)
 			}
 		}
-		.labelsHidden()
-		.pickerStyle(.segmented)
-		.controlSize(.small)
-		.frame(width: 310)
-		.accessibilityLabel("Gaze settings navigation")
+		.listStyle(.sidebar)
+		.navigationTitle("Gaze")
+		.safeAreaInset(edge: .bottom, spacing: 0) {
+			SidebarStatus(
+				isEnrolled: store.isEnrolled,
+				isLockedOut: lockout.isLockedOut,
+				version: updates.currentVersion)
+		}
+	}
+}
+
+private struct SidebarDestination: View {
+
+	let pane: SettingsPane
+
+	var body: some View {
+		Label(pane.title, systemImage: pane.symbol)
+			.tag(pane)
+			.accessibilityLabel(pane.title)
+	}
+}
+
+private struct SidebarStatus: View {
+
+	let isEnrolled: Bool
+	let isLockedOut: Bool
+	let version: String
+
+	private var status: String {
+		if isLockedOut { return "Action required" }
+		return isEnrolled ? "Protection is ready" : "Finish setup"
+	}
+
+	private var tint: Color {
+		if isLockedOut { return Theme.danger }
+		return isEnrolled ? Theme.faceID : Theme.warning
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 4) {
+			Label(status, systemImage: isLockedOut ? "lock.fill" : "checkmark.circle.fill")
+				.font(.system(.subheadline, weight: .semibold))
+				.foregroundStyle(tint)
+			Text("Gaze \(version)")
+				.font(Typography.caption)
+				.foregroundStyle(Theme.secondaryLabel)
+		}
+		.frame(maxWidth: .infinity, alignment: .leading)
+		.padding(.horizontal, 16)
+		.padding(.vertical, 12)
+		.background(.bar)
 	}
 }
 

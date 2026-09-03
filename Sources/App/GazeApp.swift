@@ -32,9 +32,10 @@ struct GazeApp: App {
 		.windowResizability(.contentMinSize)
 		.defaultSize(width: 840, height: 640)
 		.defaultPosition(.center)
-		// Use AppKit's compact unified title bar so the traffic lights, drag region, and
-		// toolbar glass remain native. SettingsView supplies the centered navigation item.
-		.windowToolbarStyle(.unifiedCompact(showsTitle: false))
+		// Use the same unified title bar model as Xcode: AppKit owns the traffic lights,
+		// title, toolbar material, and the full-width drag region. SettingsView owns only
+		// the sidebar and detail content below it.
+		.windowToolbarStyle(.unified)
 		// Let SwiftUI/AppKit own the title-bar drag behavior. This keeps the full window
 		// background draggable without a hand-rolled hit target in the content view.
 		.windowBackgroundDragBehavior(.enabled)

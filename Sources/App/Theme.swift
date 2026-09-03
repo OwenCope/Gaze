@@ -426,14 +426,12 @@ struct RowDivider: View {
 	}
 }
 
-/// A rounded glass square holding an SF Symbol.
+/// The quiet symbol column used by settings rows.
 ///
-/// Rows of pure text are hard to scan — the eye has to read every line to find the one it
-/// wants. A consistent icon column gives each row a shape you can navigate by.
-///
-/// The tile is light on the wallpaper rather than a block of colour on it: same frosted
-/// surface as the group it sits in, one step brighter, with a hairline to catch the edge.
-/// It reads as glass rather than as a sticker.
+/// A filled rounded tile around every icon made the detail pane read like a dashboard. Native
+/// Mac settings use symbols as annotations, reserving filled surfaces for controls that need
+/// to be touched. The fixed column still gives rows a clean scan line without adding another
+/// competing glass object.
 struct IconTile: View {
 	let symbol: String
 	/// Only ever passed for something that is reporting *state* — the enrolled face's
@@ -444,9 +442,8 @@ struct IconTile: View {
 	var body: some View {
 		Image(systemName: symbol)
 			.font(.system(size: 13, weight: .medium))
-			.foregroundStyle(tint ?? Theme.label)
-			.frame(width: 26, height: 26)
-			.glassSurface(cornerRadius: 8, fill: Theme.surfaceRaised)
+			.foregroundStyle(tint ?? Theme.secondaryLabel)
+			.frame(width: 24, height: 24)
 			.opacity(isEnabled ? 1 : 0.45)
 	}
 }
