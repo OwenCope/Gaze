@@ -219,9 +219,21 @@ struct SetupFlow: View {
 	///   flow is about to show — a step on screen but absent from the progress row, and a
 	///   `nextStep` that skips straight past it the moment anything advances.
 	private func makePlan(including forced: SetupStep? = nil) -> [SetupStep] {
-		var steps: [SetupStep] = [.how, .capture]
+		// Enrolment first, explanation last.
+		//
+		// `.how` used to come before `.capture`, which put several screens of video
+		// between opening the app and doing anything with it. Nobody reads how a thing
+		// works before they have seen it work — they are there to set it up, and an
+		// explainer in front of that is a toll. Afterwards it lands differently: Gaze has
+		// just recognised your face, and now is exactly when "here is what this does and
+		// does not protect you from" is worth reading.
+		//
+		// It also means the shortest possible path — a Mac with the password already
+		// stored and Accessibility already granted — is one screen: capture.
+		var steps: [SetupStep] = [.capture]
 		if !PasswordVault.hasPassword || forced == .password { steps.append(.password) }
 		if !AXIsProcessTrusted() || forced == .permission { steps.append(.permission) }
+		steps.append(.how)
 		return steps
 	}
 
@@ -247,14 +259,12 @@ struct SetupFlow: View {
 		let previous: SetupStep?
 		switch step {
 		case .how:
-			previous = .welcome
+			// The last step, shown after enrolment succeeded. Going back from here would
+			// walk into a permission screen that has already been answered.
+			previous = nil
 		case .capture:
-			// Nothing is enrolled yet, so this one is free — but the camera and the model
-			// have to go with it, or coming back finds a stopped camera and a model that
-			// `startCamera` will refuse to replace.
-			camera.stop()
-			model = nil
-			previous = .how
+			// The first step now, so there is nowhere behind it.
+			previous = nil
 		case .permission:
 			previous = plan.contains(.password) ? .password : nil
 		default:
