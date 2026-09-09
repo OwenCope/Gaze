@@ -146,7 +146,9 @@ final class UnlockService {
 			// Only check liveness once the face already matches — it is the expensive
 			// step, and running it on every passing stranger buys nothing.
 			if let liveness {
-				guard let score = liveness.score(sample), score >= liveness.threshold else {
+				let live = liveness.score(sample)
+				Self.logger.notice("Liveness \(live.map { String(format: "%.3f", $0) } ?? "nil", privacy: .public) / threshold \(String(format: "%.2f", liveness.threshold), privacy: .public).")
+				guard let live, live >= liveness.threshold else {
 					Self.logger.notice("Match rejected by liveness.")
 					continue
 				}

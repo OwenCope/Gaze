@@ -28,6 +28,10 @@ final class LockWatcher {
 	/// same notification, and playing "Gaze opened this" over someone else's unlock is a
 	/// claim the app has no basis for.
 	private var didSubmitPassword = false
+	/// When the last wake trigger was honoured, so the pair of them counts as one.
+	private var lastWakeTrigger: Date?
+	/// Block-observer tokens, so `stop()` can actually unregister them.
+	private var observers: [NSObjectProtocol] = []
 	private(set) var isWatching = false
 	private(set) var isLocked = false
 
@@ -56,6 +60,14 @@ final class LockWatcher {
 	/// without a login window in front of it.
 	private static let unlockAnimationDuration: TimeInterval = 3.0
 
+	/// Waking posts a system wake and a displays wake, moments apart. Both mean "look
+	/// now", and honouring both would tear the camera down and rebuild it mid-attempt.
+	private static let wakeDebounce: TimeInterval = 3.0
+	/// A beat for the camera to actually be awake before the first frame is asked for.
+	/// Opening it immediately after a wake returns a device that reports running and then
+	/// delivers black frames, which reads to the recogniser as "nobody there".
+	private static let wakeSettle = Duration.milliseconds(700)
+
 	/// How long to wait for the Mac to actually unlock before giving up on it.
 	private static let unlockGracePeriod: TimeInterval = 3.0
 
@@ -68,6 +80,14 @@ final class LockWatcher {
 	/// The pause between a rejection and the next attempt.
 	private static let retryCooldown: TimeInterval = 2.0
 
+	/// How long somebody gets to answer a movement challenge.
+	///
+	/// Long enough to read a glyph, understand what it is asking and do it — which is a
+	/// slower sequence than it sounds the first few times, before the action becomes
+	/// familiar. Short enough that a Mac left facing an empty room gives up rather than
+	/// sitting with a prompt on screen.
+	private static let challengeTimeout: TimeInterval = 8.0
+
 	init(store: FaceEnrollmentStore, lockout: LockoutManager) {
 		self.store = store
 		self.lockout = lockout
@@ -77,41 +97,110 @@ final class LockWatcher {
 		guard !isWatching else { return }
 		isWatching = true
 
+		// Tokens are kept because these are block observers.
+		//
+		// `removeObserver(self)` was never removing them: the block API registers an
+		// opaque token as the observer, not `self`, so `stop()` left both observers live
+		// and a later `start()` added a second pair. Two observers means `screenLocked()`
+		// runs twice, and the second run cancels the attempt the first one started.
 		let centre = DistributedNotificationCenter.default()
-		centre.addObserver(
-			forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main
-		) { [weak self] _ in
-			MainActor.assumeIsolated { self?.screenLocked() }
-		}
-		centre.addObserver(
-			forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
-		) { [weak self] _ in
-			MainActor.assumeIsolated { self?.screenUnlocked() }
+		observers.append(
+			centre.addObserver(
+				forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main
+			) { [weak self] _ in
+				MainActor.assumeIsolated { self?.screenLocked() }
+			})
+		observers.append(
+			centre.addObserver(
+				forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
+			) { [weak self] _ in
+				MainActor.assumeIsolated { self?.screenUnlocked() }
+			})
+
+		// Wake is a workspace notification, not a distributed one, so it needs its own
+		// centre. Both are observed: `didWake` is the machine, `screensDidWake` is the
+		// displays, and which arrives first depends on how the Mac was woken — a lid, a
+		// key press, or a Bluetooth mouse are not the same sequence.
+		let workspace = NSWorkspace.shared.notificationCenter
+		for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+			observers.append(
+				workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+					MainActor.assumeIsolated { self?.wokeUp() }
+				})
 		}
 
-		Self.logger.notice("Watching for screen lock.")
+		Self.logger.notice("Watching for screen lock and wake.")
 	}
 
 	func stop() {
 		attempt?.cancel()
 		attempt = nil
 		isWatching = false
-		DistributedNotificationCenter.default().removeObserver(self)
+		lastWakeTrigger = nil
+		for token in observers {
+			DistributedNotificationCenter.default().removeObserver(token)
+			NSWorkspace.shared.notificationCenter.removeObserver(token)
+		}
+		observers.removeAll()
 	}
 
 	// MARK: - Events
 
 	private func screenLocked() {
 		isLocked = true
+		beginAttempt(trigger: "Screen locked")
+	}
+
+	/// The Mac woke up. If it woke to a locked screen, look for a face.
+	///
+	/// This is the common case the app used to miss entirely. `com.apple.screenIsLocked`
+	/// fires when the screen *becomes* locked — which, for a Mac that was closed and
+	/// carried somewhere, happened before it went to sleep. Waking it posts no such
+	/// notification, because nothing changed: it was locked then and it is locked now. So
+	/// the most ordinary way anyone meets their lock screen — open the lid — was the one
+	/// way Gaze never ran.
+	private func wokeUp() {
+		// The notification says the machine woke, not that the screen is locked. Ask the
+		// window server rather than assuming, for the same reason the replay path does:
+		// the failure to avoid is typing a password at a screen that is already open.
+		guard Self.screenIsLocked() else { return }
+
+		// Waking posts more than one notification — the system wakes, then the displays
+		// do — and both mean the same thing here. Without this, the second one cancels
+		// the attempt the first one started and the camera is torn down and rebuilt.
+		if let last = lastWakeTrigger, Date().timeIntervalSince(last) < Self.wakeDebounce {
+			return
+		}
+		lastWakeTrigger = Date()
+
+		isLocked = true
+		beginAttempt(trigger: "Woke to a locked screen", settle: Self.wakeSettle)
+	}
+
+	/// Everything both triggers do. Shared so the two cannot drift apart.
+	///
+	/// - Parameter settle: how long to wait before opening the camera. Zero when the
+	///   screen locks in front of us, because the hardware is already awake; a beat after
+	///   a wake, because it is not — asking too early returns a camera that reports
+	///   running and delivers black frames for the first second.
+	private func beginAttempt(trigger: String, settle: Duration = .zero) {
 		guard Preferences.shared.unlockBackend == .keystroke else { return }
 		guard store.isEnrolled else { return }
+		// Paused means paused: no camera, no panel, no indicator light. Checked here
+		// rather than inside the attempt so a pause costs nothing at all — the point of
+		// the switch is that Gaze is not looking, and a green camera light that turns
+		// itself off again would say otherwise.
+		guard !Preferences.shared.isPaused else {
+			Self.logger.notice("\(trigger, privacy: .public) while paused; not looking.")
+			return
+		}
 		guard lockout.mayAttempt() else {
-			Self.logger.notice("Screen locked while locked out; not looking.")
+			Self.logger.notice("\(trigger, privacy: .public) while locked out; not looking.")
 			StateBroadcast.post(.lockedOut)
 			return
 		}
 
-		Self.logger.notice("Screen locked — looking for a face.")
+		Self.logger.notice("\(trigger, privacy: .public) — looking for a face.")
 
 		// A padlock, immediately. It is a statement about the Mac's state, not a claim
 		// that the camera is looking at anyone — that distinction is why the compact
@@ -124,7 +213,13 @@ final class LockWatcher {
 		StateBroadcast.post(.locked)
 
 		attempt?.cancel()
-		attempt = Task { await self.attemptUnlock() }
+		attempt = Task {
+			if settle > .zero {
+				try? await Task.sleep(for: settle)
+				guard !Task.isCancelled else { return }
+			}
+			await self.attemptUnlock()
+		}
 	}
 
 	private func screenUnlocked() {
@@ -179,7 +274,23 @@ final class LockWatcher {
 			return
 		}
 
-		let liveness = Preferences.shared.livenessEnabled ? Liveness.detector() : nil
+		// Anti-spoof runs the object detector (see `AntiSpoofGate` — the passive texture model
+		// is deliberately excluded, it calls real faces spoofs). Built once per attempt, and
+		// only when the setting is on and the detector is actually present — otherwise the gate
+		// is skipped entirely.
+		let antiSpoof: AntiSpoofGate? = {
+			guard Preferences.shared.livenessEnabled else { return nil }
+			let gate = AntiSpoofGate(spoof: SpoofDetector())
+			return gate.isActive ? gate : nil
+		}()
+		// The movement challenge, when the user has asked for one. Built per attempt so a
+		// fresh action is chosen each time the screen locks — a recording of you blinking
+		// answers a demand to blink, and only a demand you cannot predict is worth making.
+		let challenge: LivenessChallenge? = Preferences.shared.requireChallenge
+			? LivenessChallenge() : nil
+		/// When the challenge was first put to the user, for timing it out.
+		var challengeSince: Date?
+
 		var shownAt: Date?
 		/// When the current unbroken run of matching frames began.
 		var matchingSince: Date?
@@ -235,6 +346,11 @@ final class LockWatcher {
 			let presentSince = faceSince ?? Date()
 			faceSince = presentSince
 
+			// Too far, too small or too blurred to judge. Skip it rather than grade it: a
+			// bad frame is not a rejection, and counting it as one burned attempts on frames
+			// we should never have scored. A held match survives a brief blur this way.
+			guard FrameQuality.isUsable(sample) else { continue }
+
 			let result = store.matches(sample)
 			guard result.matched else {
 				matchingSince = nil
@@ -261,9 +377,60 @@ final class LockWatcher {
 				continue
 			}
 
-			if let liveness {
-				guard let score = liveness.score(sample), score >= liveness.threshold else {
-					Self.logger.notice("Match rejected by liveness.")
+			if let antiSpoof {
+				if case .spoof(let reason, let score) = antiSpoof.evaluate(sample) {
+					// A spoof (matches the face but fails anti-spoof) is a rejection like any
+					// other: shake the panel, count it toward lockout, and cool down before
+					// the next look — otherwise it silently retried and nothing on screen
+					// ever said no.
+					Self.logger.notice("Match rejected by anti-spoof: \(reason, privacy: .public) (\(String(format: "%.3f", score), privacy: .public)).")
+					lockout.recordFailure()
+					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed, score: Double(score))
+					capsule.update(phase: .spoofRejected)
+					matchingSince = nil
+					faceSince = nil
+					cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
+					continue
+				}
+			}
+
+			// The movement challenge, if one was asked for.
+			//
+			// After the match and after anti-spoof, because there is no point asking a
+			// stranger to blink — the demand is only meaningful once the face is already
+			// accepted, and putting it earlier would show a prompt to anybody who walked
+			// past. It is the last thing between recognition and the password.
+			if let challenge {
+				challenge.consume(sample)
+
+				guard challenge.isComplete else {
+					let asked = challengeSince ?? Date()
+					challengeSince = asked
+
+					// Ask, in the panel's own vocabulary. It draws glyphs, not words, so the
+					// action arrives as its symbol — an eye to blink, an arrow to turn.
+					let hint = challenge.action.hint
+					capsule.update(
+						phase: .challenge(
+							prompt: challenge.action.prompt,
+							symbol: challenge.action.symbol,
+							hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
+
+					// Give up rather than hold the panel open forever. Somebody who has
+					// walked away, or whose camera cannot see the movement, gets the same
+					// outcome as any other failed attempt instead of a prompt that never
+					// resolves — and the next look starts from a fresh, different action.
+					if Date().timeIntervalSince(asked) >= Self.challengeTimeout {
+						Self.logger.notice("Challenge not answered in time; treating as a rejection.")
+						lockout.recordFailure()
+						StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
+						capsule.update(phase: .notRecognised)
+						challenge.next()
+						challengeSince = nil
+						matchingSince = nil
+						faceSince = nil
+						cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
+					}
 					continue
 				}
 			}

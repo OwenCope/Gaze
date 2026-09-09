@@ -137,27 +137,15 @@ struct KeystrokeUnlockBackend: UnlockBackend {
 		guard let password = try PasswordVault.password() else {
 			throw UnlockError.noPassword
 		}
-		guard let source = CGEventSource(stateID: .hidSystemState) else {
+		guard CGEventSource(stateID: .hidSystemState) != nil else {
 			throw UnlockError.eventSourceUnavailable
 		}
 
-		// The whole string goes in one Unicode packet rather than key-by-key: it is
-		// faster, and it avoids interleaving with anything else reaching the field.
-		var characters = Array(password.utf16)
-		guard
-			let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-			let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-		else {
-			throw UnlockError.eventSourceUnavailable
-		}
-		keyDown.keyboardSetUnicodeString(stringLength: characters.count, unicodeString: &characters)
-		keyUp.keyboardSetUnicodeString(stringLength: characters.count, unicodeString: &characters)
-		keyDown.post(tap: .cghidEventTap)
-		keyUp.post(tap: .cghidEventTap)
-
-		// Return, to submit the field.
-		CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: true)?.post(tap: .cghidEventTap)
-		CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: false)?.post(tap: .cghidEventTap)
+		// See `Keystrokes` for why the password goes in one packet rather than key by key.
+		Keystrokes.type(password)
+		// Return, to submit the field. The lock screen is submitted for you; autofill
+		// deliberately is not — see `AutofillService`.
+		Keystrokes.press(.ret)
 
 		Self.logger.notice("Submitted password to the login window.")
 	}

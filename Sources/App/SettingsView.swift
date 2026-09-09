@@ -1,3 +1,6 @@
+import AVFoundation
+import AppKit
+import ApplicationServices
 import SwiftUI
 
 /// The panes in the sidebar.
@@ -6,7 +9,20 @@ import SwiftUI
 /// around to find one switch, with the window mostly empty whichever one you landed on.
 enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	case general
+	/// The notch panel's own pane.
+	///
+	/// It used to be two groups at the top of General, and it is the largest thing in the
+	/// window by some distance — three rows of thumbnails and two sliders, all of it about
+	/// one object. Underneath it General also carried permissions, hardening, login items,
+	/// updates and the theme: seven groups on one pane, so the things people actually go
+	/// looking for sat below a fold created entirely by the notch previews.
+	case notch
 	case face
+	/// Saved apps Gaze can type a password into.
+	///
+	/// Its own pane rather than a group under Gaze: it is a list that grows, and a list
+	/// with an Add button at the bottom of a pane of switches reads as an afterthought.
+	case autofill
 	case credits
 	case about
 
@@ -15,7 +31,9 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	var title: String {
 		switch self {
 		case .general: return "General"
+		case .notch: return "Notch"
 		case .face: return "Gaze"
+		case .autofill: return "Autofill"
 		case .credits: return "Credits"
 		case .about: return "About"
 		}
@@ -24,7 +42,9 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 	var symbol: String {
 		switch self {
 		case .general: return "gearshape.fill"
+		case .notch: return "macbook"
 		case .face: return "faceid"
+		case .autofill: return "key.fill"
 		case .credits: return "heart.fill"
 		case .about: return "info"
 		}
@@ -40,19 +60,25 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 
 	/// Green for the app's own mark, neutral for everything else.
 	///
-	/// The one exception to monochrome icons, and it earns it: green means Gaze
-	/// everywhere else in this app, so the row that *is* Gaze should carry it.
+	/// All one colour. Green means "recognised" everywhere else in the app; spending it on
+	/// a sidebar row that is simply *labelled* Gaze diluted that, and made the row look
+	/// selected when it wasn't (Jis' note). The sidebar icons are a shape to scan by, not a
+	/// palette.
 	var tint: Color {
-		self == .face ? Theme.faceID : Theme.grey
+		Theme.grey
 	}
 
 	/// One line under the pane's title, saying what the pane is for.
 	var summary: String {
 		switch self {
 		case .general:
-			return "How Gaze looks on the lock screen, and what it's allowed to do"
+			return "How Gaze behaves on this Mac, and how it keeps itself up to date"
+		case .notch:
+			return "How the panel under the notch looks"
 		case .face:
-			return "Unlock your Mac by looking at it"
+			return "Unlock your Mac by looking at it — and what that's allowed to do"
+		case .autofill:
+			return "Apps Gaze can unlock for you by recognising your face"
 		case .credits:
 			return "The people whose work this is built on"
 		case .about:
@@ -66,89 +92,170 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 
 struct SettingsView: View {
 
+	/// The width of the settings column, matching System Settings' own detail measure.
+	/// Wider than this and a row's label and its control stop reading as one row.
+	private static let contentWidth: CGFloat = 620
+
 	let store: FaceEnrollmentStore
 	let lockout: LockoutManager
 
-	@State private var pane: SettingsPane = .face
+	/// `--settings-pane=general|face|credits|about` opens straight onto one pane.
+	///
+	/// Same reason as `--setup-step`: working on a pane, or photographing one, otherwise
+	/// means clicking to it after every rebuild.
+	@State private var pane: SettingsPane = {
+		guard
+			let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--settings-pane=") }),
+			let name = argument.split(separator: "=").last,
+			let pane = SettingsPane(rawValue: String(name))
+		else { return .face }
+		return pane
+	}()
 	@State private var settings = Preferences.shared
 	@State private var updates = UpdateChecker.shared
+	@State private var releases = ReleaseUpdateChecker.shared
 	@State private var passwordEntry = ""
 	@State private var passwordError: String?
+	/// Whether a password is stored, re-read whenever this window comes forward.
+	///
+	/// `@State` initialises once, and until "Change" existed that was harmless: the only
+	/// things that could store or revoke a password were the two buttons in this row, and
+	/// both set this themselves. "Change" hands the job to the setup window, so the password
+	/// can now change while Settings is sitting behind it — and the row would still be
+	/// showing whatever was true when the window opened, offering to store a password that
+	/// is already stored.
+	@State private var hasStoredPassword = PasswordVault.hasPassword
 	@State private var lockoutPassword = ""
 
 	@Environment(\.openWindow) private var openWindow
 
 	var body: some View {
-		HStack(spacing: 0) {
-			sidebar
-			detail
-		}
+		detail
+			// The pane switcher lives in the window's toolbar, which is where macOS puts
+			// one. `.principal` centres it between the traffic lights and the trailing
+			// edge — the same slot Finder's view switcher and Xcode's segmented controls
+			// use — and AppKit owns the glass, the height and the scroll-edge behaviour.
+			.toolbar {
+				ToolbarItem(placement: .principal) {
+					paneSegments
+				}
+			}
 		// A floor, not a fixed size.
 		//
 		// The window was pinned at exactly 700×540 and non-resizable, which meant a user who
 		// found the text small had no recourse, and a long string — a localised footer, a
 		// camera driver's error message — had nowhere to go but the clip. System Settings
 		// resizes; so does this now.
+		//
+		// `maxWidth: .infinity`, and it has to be — a `maxWidth: 920` here was a real bug.
+		//
+		// This view *is* the window's content, and `WindowGlass` is its background. Capping
+		// the view's width did not cap the window's: dragging past 920 left the view at 920
+		// inside a wider window, and the strips either side of it had no view in them at
+		// all. `VibrantBackground` sets `window.isOpaque = false` so the material can sample
+		// the desktop, so those strips were not merely unpainted, they were see-through —
+		// the window's left and right edges became holes onto the wallpaper.
+		//
+		// The reasonable thing the cap was reaching for — that a 620pt column of settings
+		// gains nothing from a 1400pt window — is a limit on the *window*, not on its
+		// content. Until it is one, filling is correct: whatever size the window is, the
+		// glass reaches its edges.
 		.frame(
-			minWidth: 660, idealWidth: 700, maxWidth: .infinity,
-			minHeight: 480, idealHeight: 560, maxHeight: .infinity)
+			minWidth: 660, idealWidth: 720, maxWidth: .infinity,
+			minHeight: 480, idealHeight: 600, maxHeight: .infinity)
 		// One sheet of glass, dense at the top and thinning as it falls.
 		//
-		// No divider between sidebar and detail, and no separate scrim on each: a hairline
-		// with two different fills either side is what cut the window into a "web app with a
-		// sidebar". On one unbroken sheet, the sidebar is just the left margin of the glass —
-		// the way the Siri panel and Spotlight treat their edges.
-		.background(WindowGlass(extraTranslucent: settings.appTheme == .glass))
+		// No divider between panes and no separate scrim on each: a hairline with two
+		// different fills either side is what cut the window into a "web app with a
+		// sidebar". On one unbroken sheet the chrome is just the edge of the glass — the way
+		// the Siri panel and Spotlight treat theirs.
+		.background {
+			// No `WallpaperBackdrop` here any more.
+			//
+			// It drew its own copy of the desktop picture inside the window, scaled to the
+			// window rather than to the screen — so the wallpaper indoors never lined up
+			// with the wallpaper outdoors. Move the window and the picture inside it stayed
+			// put; the highlight sweeping across your desktop stopped dead at the window's
+			// edge and a different, unrelated gradient carried on inside. That mismatch is
+			// what read as fake, and no amount of tuning the scrims above it could fix it,
+			// because the thing being tuned was a painting of a wallpaper rather than the
+			// wallpaper.
+			//
+			// A window is made of glass by sampling what is actually behind it, which is
+			// `.behindWindow` blending and nothing else. It costs the wallpaper being
+			// visible when the window sits over other windows — over a dark app the glass
+			// goes dark — but that is what glass does, and it is what every system window
+			// on macOS does.
+			//
+			// `keepsTitle` because the window has a title bar again: `WindowGlass` reaches
+			// into the host `NSWindow` and hides it, which was correct while the switcher
+			// was drawn in the content view, and would now take the toolbar down with it.
+			WindowGlass(keepsTitle: true, extraTranslucent: settings.appTheme == .glass)
+		}
 		// Nil for "follow system", which is what following the system means — forcing a
 		// scheme is the thing this setting exists to make optional.
 		.preferredColorScheme(settings.appTheme.colorScheme)
-		.onAppear { AppActivation.bringToFront() }
+		.onAppear {
+			AppActivation.bringToFront()
+			refreshExternalState()
+		}
+		// Both of these can be changed outside this window — the password by the setup flow
+		// that "Change" opens, Accessibility in System Settings — and neither sends a
+		// notification of its own. Coming back to the app is the moment to ask again.
+		.onReceive(
+			NotificationCenter.default.publisher(
+				for: NSApplication.didBecomeActiveNotification)
+		) { _ in
+			refreshExternalState()
+		}
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
 	}
 
 	// MARK: - Sidebar
 
-	private var sidebar: some View {
-		VStack(alignment: .leading, spacing: 2) {
-			ForEach(Array(SettingsPane.allCases.enumerated()), id: \.element) { index, item in
-				if item.isPrecededBySeparator {
-					Rectangle()
-						.fill(Theme.separator)
-						.frame(height: 1)
-						.padding(.horizontal, 10)
-						.padding(.vertical, 7)
-				}
-				SidebarItem(
-					pane: item,
-					isSelected: pane == item,
-					badge: badge(for: item),
-					select: { pane = item })
-					// ⌘1/⌘2/⌘3, the way every Mac app with tabbed preferences switches
-					// panes. The sidebar was mouse-only before this.
-					.keyboardShortcut(
-						KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+	/// The real macOS segmented control, not a drawing of one.
+	///
+	/// This was a hand-built row of pills in a capsule, and it read as a fake menu bar —
+	/// a floating bar of words across the top of a window is the shape of the *system* menu
+	/// bar, and putting a second one inside an app window is the single most reliable way to
+	/// look like a web page pretending to be a Mac app.
+	///
+	/// `Picker` with `.segmented` is AppKit's `NSSegmentedControl`. It comes with the right
+	/// metrics, the right selected fill, the right focus ring, keyboard traversal and
+	/// VoiceOver for free — and, more to the point, it is the control macOS actually uses
+	/// for a handful of tabs. The pill had to reimplement all of that and still only
+	/// resembled it.
+	///
+	/// The badge dots could not survive the move: a segment holds a label and an image, not
+	/// an arbitrary view. They are shown as a symbol on the segment instead, which is the
+	/// same information in the vocabulary the control has.
+	private var paneSegments: some View {
+		Picker("", selection: $pane) {
+			ForEach(SettingsPane.allCases) { item in
+				// `.titleAndIcon`, stated rather than left to the default.
+				//
+				// A `Label` in a segment collapses to icon-only when the control is not
+				// given room to state otherwise, and in the toolbar it is not: four
+				// unlabelled glyphs, one of which is a gear and one a heart, is a guessing
+				// game. The words are the thing being chosen between; the symbol only helps
+				// find the word.
+				Label(
+					item.title,
+					systemImage: badge(for: item) == nil ? item.symbol : "circle.fill"
+				)
+				.labelStyle(.titleAndIcon)
+				.tag(item)
 			}
-			Spacer(minLength: 0)
 		}
-		// Arrow keys once the sidebar has focus, matching a real source list.
-		.onMoveCommand { direction in
-			guard let current = SettingsPane.allCases.firstIndex(of: pane) else { return }
-			switch direction {
-			case .up where current > 0:
-				pane = SettingsPane.allCases[current - 1]
-			case .down where current < SettingsPane.allCases.count - 1:
-				pane = SettingsPane.allCases[current + 1]
-			default:
-				break
-			}
-		}
-		.accessibilityElement(children: .contain)
+		.pickerStyle(.segmented)
+		.labelsHidden()
+		// No `.frame(width: 420)` and no `.controlSize(.large)`.
+		//
+		// Both were sized for a control floating in the content area. In the toolbar the
+		// segmented control takes the toolbar's own metrics, and a hardcoded 420pt width
+		// fought the centring — the item is laid out by AppKit against the traffic lights
+		// and the trailing edge, so it needs to be free to be its natural size.
 		.accessibilityLabel("Settings panes")
-		.padding(.horizontal, 9)
-		// Clears the traffic lights, which sit over the sidebar on a hidden title bar.
-		.padding(.top, 38)
-		.padding(.bottom, 12)
-		.frame(width: 168)
 	}
 
 	/// A dot on the panes that want attention, so a problem is visible from any pane.
@@ -160,7 +267,7 @@ struct SettingsView: View {
 		case .general:
 			if case .available = updates.state { return Theme.faceID }
 			return nil
-		case .credits, .about:
+		case .notch, .autofill, .credits, .about:
 			return nil
 		}
 	}
@@ -170,42 +277,44 @@ struct SettingsView: View {
 	private var detail: some View {
 		ScrollView {
 			VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-				// The pane's own mark and a line saying what it is for.
+				// No page header here any more.
 				//
-				// A bare word at the top of a column tells you which tab you clicked, which
-				// you already knew. The icon carries the app's identity and the sentence
-				// tells someone opening this for the first time what they are looking at.
-				HStack(alignment: .top, spacing: 14) {
-					Image(systemName: pane.headerSymbol)
-						.font(Typography.glyph)
-						.foregroundStyle(pane.tint)
-						.frame(width: 44, height: 44)
-
-					VStack(alignment: .leading, spacing: 2) {
-						Text(pane.title)
-							.font(Typography.paneTitle)
-							.foregroundStyle(Theme.label)
-						Text(pane.summary)
-							.font(Typography.detail)
-							.foregroundStyle(Theme.secondaryLabel)
-							.fixedSize(horizontal: false, vertical: true)
-					}
-					Spacer(minLength: 0)
-				}
-				.padding(.bottom, 2)
-
+				// It was a 44pt tinted glyph, the pane's name, and a sentence describing it,
+				// stacked above every pane. The name duplicated the toolbar segment that was
+				// already lit to say the same word, and the glyph duplicated the symbol on
+				// that segment — so two thirds of it restated the control the user had just
+				// clicked. System Settings has no such header for the same reason.
+				//
+				// The sentence was the one part carrying information, and it has moved to
+				// where it applies: a `footer` on the first group of each pane, which is
+				// where macOS puts explanatory prose.
 				switch pane {
+				// Everything about unlocking with your face, in the order it becomes
+				// relevant: whether it works, what it does when it recognises you, what it
+				// needs permission to do that, how strict it is about accepting you, and
+				// whose face it knows.
+				//
+				// Permissions and Hardening used to sit on General, which put the camera
+				// permission three panes away from the camera and the anti-spoof switch
+				// nowhere near the faces it accepts or rejects. They were on General for the
+				// same reason everything was: General was where anything went that was not
+				// obviously a face. That left it carrying five groups while this pane carried
+				// three, and split one subject across two panes.
 				case .face:
 					if lockout.isLockedOut { lockoutSection }
 					hero
 					unlockSection
-					if store.isEnrolled { manageSection }
-				case .general:
-					NotchSettingsSection(settings: settings)
+					permissionsSection
 					securitySection
+					if store.isEnrolled { manageSection }
+				case .autofill:
+					AutofillSection(savedApps: AppServices.shared.savedApps, store: store)
+				case .general:
 					behaviourSection
 					updatesSection
 					appearanceSection
+				case .notch:
+					NotchSettingsSection(settings: settings)
 				case .credits:
 					creditsSection
 				case .about:
@@ -214,9 +323,19 @@ struct SettingsView: View {
 
 				Spacer(minLength: 0)
 			}
-			.frame(maxWidth: .infinity, alignment: .leading)
+			// A measure, then centred — not stretched to whatever width the window is.
+			//
+			// The groups were pinned left at full width, so dragging the window wider pulled
+			// every row's control away from its label until a switch could sit 600pt from
+			// the word it belonged to, with the right half of the window empty. Settings
+			// panes have a column width and keep it; the window growing gives you more rows
+			// on screen, not wider ones.
+			.frame(maxWidth: Self.contentWidth, alignment: .leading)
+			.frame(maxWidth: .infinity)
 			.padding(.horizontal, 22)
-			.padding(.top, 38)
+			// The toolbar owns the traffic-light clearance now, so this is just the gap
+			// under the glass rather than a hand-measured dodge around the buttons.
+			.padding(.top, 18)
 			.padding(.bottom, 26)
 		}
 		// Not `.never`.
@@ -239,12 +358,27 @@ struct SettingsView: View {
 			// side and the pane opened on a mostly blank box. A status row reads as part of
 			// the settings rather than as a splash screen.
 			HStack(spacing: 14) {
-				Image(
-					systemName: store.isEnrolled
-						? "faceid" : "person.crop.circle.badge.questionmark"
-				)
-				.font(Typography.glyph)
-				.foregroundStyle(heroTint)
+				// The system symbol when it is set up, a question when it is not.
+				//
+				// This is `faceid` rather than the icon's own mark, and the two being
+				// different is deliberate. The trademark worry is narrow: it is about an app
+				// wearing Apple's glyph as *its own identity*, which means the Dock and the
+				// disk. Inside the interface, system symbols are what system symbols are
+				// for, and `faceid` is the one glyph on macOS that means exactly "a face,
+				// being recognised". Matching the Dock icon here would cost that and buy
+				// nothing — the icon's keyhole says what the app is *for*, not what this row
+				// is reporting on.
+				Group {
+					if store.isEnrolled {
+						Image(systemName: "faceid")
+							.font(Typography.glyph)
+							.foregroundStyle(heroTint)
+					} else {
+						Image(systemName: "person.crop.circle.badge.questionmark")
+							.font(Typography.glyph)
+							.foregroundStyle(heroTint)
+					}
+				}
 				.frame(width: 42)
 				.animation(.easeOut(duration: 0.25), value: store.isEnrolled)
 
@@ -274,7 +408,7 @@ struct SettingsView: View {
 						Text(store.isEnrolled ? "Add a Face" : "Set Up Gaze")
 							.frame(maxWidth: .infinity)
 					}
-					.buttonStyle(store.isEnrolled ? .accent : .primaryAction)
+					.gazeButton(store.isEnrolled ? .standard : .primary, size: .large)
 
 					if store.isEnrolled {
 						Button {
@@ -283,7 +417,7 @@ struct SettingsView: View {
 						} label: {
 							Text("Test Recognition").frame(maxWidth: .infinity)
 						}
-						.buttonStyle(.quiet)
+						.gazeButton(size: .large)
 					}
 				}
 				.frame(width: 132)
@@ -332,9 +466,20 @@ struct SettingsView: View {
 			// same row rather than a button somewhere else in the pane.
 			HStack(alignment: .top, spacing: 16) {
 				ForEach(store.faces) { face in
+					// Touched so the tile redraws when a picture is chosen.
+					//
+					// Portraits live on disk rather than on `face`, and `portrait(for:)` is
+					// a method, so calling it observes nothing — without this read the tile
+					// would keep its initials until something else invalidated the body.
+					// It was written as `portraitRevision >= 0 ? … : nil`, which did perform
+					// the read but is unsigned and therefore always true, leaving a dead
+					// branch the compiler rightly complained about.
+					let _ = store.portraitRevision
 					FaceTile(
 						face: face,
+						portrait: store.portrait(for: face.id),
 						rename: { store.rename(face.id, to: $0) },
+						setPortrait: { store.setPortrait($0, for: face.id) },
 						remove: {
 							Task {
 								guard await BiometricGate.authorize(.removeEnrollment) else { return }
@@ -391,11 +536,28 @@ struct SettingsView: View {
 					SettingsField(placeholder: "Required", text: $lockoutPassword)
 						.frame(width: 140)
 					Button("Unlock") { clearLockout() }
-						.buttonStyle(.accent)
+						.gazeButton()
 						.disabled(lockoutPassword.isEmpty)
 				}
 			}
 		}
+	}
+
+	/// Opens setup on one screen.
+	///
+	/// The password and permission screens are skipped during a normal run once they are
+	/// satisfied, which is right the first time through and leaves them unreachable ever
+	/// after. Settings is where someone goes looking for them, so Settings is what names
+	/// them.
+	private func openSetup(at step: SetupStep) {
+		SetupRequest.begin(at: step)
+		AppActivation.bringToFront()
+		openWindow(id: "enrollment")
+	}
+
+	/// Re-reads the state this window shows but does not own.
+	private func refreshExternalState() {
+		hasStoredPassword = PasswordVault.hasPassword
 	}
 
 	// MARK: - Unlocking
@@ -476,16 +638,41 @@ struct SettingsView: View {
 		VStack(spacing: 0) {
 			SettingRow(
 				title: "Account password",
-				detail: "Checked against your account before it's stored",
+				detail: hasStoredPassword
+					? "Encrypted with a key from this Mac's Secure Enclave"
+					: "Checked against your account before it's stored",
 				symbol: "key.fill"
 			) {
 				HStack(spacing: 6) {
-					SettingsField(placeholder: "Required", text: $passwordEntry)
-						.frame(width: 140)
-					Button("Store") { storePassword() }
-						.buttonStyle(.accent)
-						.disabled(passwordEntry.isEmpty)
-						.fixedSize()
+					// Once it's stored there's nothing to type — the field goes away and a
+					// Revoke replaces Store. Leaving an editable field sitting there after
+					// the password is saved was the confusing part (Jis' note): it looked
+					// unsaved. Revoke clears it and brings the field back.
+					if hasStoredPassword {
+						Label("Stored", systemImage: "checkmark.circle.fill")
+							.font(.system(.callout, weight: .medium))
+							.foregroundStyle(Theme.faceID)
+						// Change, not just Revoke.
+						//
+						// Revoke was the only way to a stored password, so changing one meant
+						// deleting it first and typing the new one into a settings row with no
+						// verification screen around it — and leaving the Mac with no stored
+						// password in between. This opens the setup screen built for the job,
+						// which checks the password against the account before saving it.
+						Button("Change") { openSetup(at: .password) }
+							.gazeButton()
+							.fixedSize()
+						Button("Revoke", role: .destructive) { revokePassword() }
+							.gazeButton()
+							.fixedSize()
+					} else {
+						SettingsField(placeholder: "Required", text: $passwordEntry)
+							.frame(width: 140)
+						Button("Store") { storePassword() }
+							.gazeButton()
+							.disabled(passwordEntry.isEmpty)
+							.fixedSize()
+					}
 
 					// The answer where the question gets asked.
 					//
@@ -527,6 +714,64 @@ struct SettingsView: View {
 	/// hard Gaze is to fool, and how the app behaves on this Mac. Splitting them is also
 	/// what lets the icon colours mean something: the first group is the hardening group and
 	/// reads as one family, the second is plumbing and stays grey.
+	/// What Gaze has been allowed to do, and a way to change it.
+	///
+	/// There was no such group. Both permissions were asked for once during setup and then
+	/// never mentioned again — and because the setup flow skips a step whose answer is
+	/// already on disk, the screen that asked for Accessibility became unreachable the
+	/// moment it was granted. So the two things the app cannot work without had no status
+	/// anywhere in the interface, and revoking one in System Settings left Gaze silently
+	/// unable to type a password with nothing on screen saying why.
+	///
+	/// Read at draw time rather than cached: both can be changed in System Settings while
+	/// this window is open, and a remembered answer would be wrong the moment they are.
+	private var permissionsSection: some View {
+		SettingsSection(
+			title: "Permissions",
+			footer: "Gaze needs the camera to see you and Accessibility to type your password."
+		) {
+			SettingRow(
+				title: "Camera",
+				detail: cameraAccessGranted
+					? "Allowed" : "Not allowed — Gaze can't see you",
+				symbol: "camera.fill",
+				symbolTint: cameraAccessGranted ? nil : Theme.warning
+			) {
+				Button(cameraAccessGranted ? "Open Settings" : "Allow") {
+					openPrivacySettings("Privacy_Camera")
+				}
+				.gazeButton()
+				.fixedSize()
+			}
+
+			RowDivider(inset: 0)
+			SettingRow(
+				title: "Accessibility",
+				detail: AXIsProcessTrusted()
+					? "Allowed" : "Not allowed — Gaze can't type your password",
+				symbol: "accessibility",
+				symbolTint: AXIsProcessTrusted() ? nil : Theme.warning
+			) {
+				Button("Review") { openSetup(at: .permission) }
+					.gazeButton()
+					.fixedSize()
+			}
+		}
+	}
+
+	/// Whether the camera has been granted, asked fresh each time this is drawn.
+	private var cameraAccessGranted: Bool {
+		AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+	}
+
+	private func openPrivacySettings(_ anchor: String) {
+		guard
+			let url = URL(
+				string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)")
+		else { return }
+		NSWorkspace.shared.open(url)
+	}
+
 	private var securitySection: some View {
 		SettingsSection(title: "Hardening", footer: securityFooter) {
 			SettingToggle(
@@ -540,6 +785,23 @@ struct SettingsView: View {
 				symbol: "eye.trianglebadge.exclamationmark.fill",
 				isEnabled: Liveness.isAvailable,
 				isOn: bind(\.livenessEnabled))
+
+			RowDivider()
+			SettingToggle(
+				title: "Ask me to move before unlocking",
+				detail: "A blink, a turn or a nod, chosen at random each time",
+				symbol: "figure.walk.motion",
+				isOn: bind(\.requireChallenge))
+
+			RowDivider()
+			SettingToggle(
+				title: "Lock when I walk away",
+				// Says what it costs as well as what it does. This is the only setting here
+				// that makes Gaze act on its own, and the camera opening by itself is the
+				// thing somebody would otherwise notice and wonder about.
+				detail: "Checks the camera once you've been idle for 20 seconds",
+				symbol: "figure.walk.departure",
+				isOn: bind(\.walkAwayLock))
 
 			RowDivider()
 			SettingToggle(
@@ -636,8 +898,27 @@ struct SettingsView: View {
 				symbol: "arrow.trianglehead.2.clockwise"
 			) {
 				Button(updateButtonTitle) { updateAction() }
-					.buttonStyle(.accent)
+					.gazeButton()
 					.disabled(updates.state == .checking || updates.state == .pulling)
+			}
+
+			// The released version, from the site.
+			//
+			// Shown alongside the commit row rather than instead of it, because the two
+			// answer different questions and a given copy of Gaze can only answer one of
+			// them. A checkout knows how far behind `main` it is and nothing about what has
+			// been released; a downloaded copy in `/Applications` has no repository above it,
+			// so the row above it is permanently silent — which is how everybody who
+			// installed Gaze rather than cloning it had no way to hear about a new version.
+			RowDivider(inset: 0)
+			SettingRow(
+				title: releaseRowTitle,
+				detail: releaseRowDetail,
+				symbol: "sparkles"
+			) {
+				Button(releaseButtonTitle) { releaseAction() }
+					.gazeButton()
+					.disabled(releases.state == .checking)
 			}
 
 			if case .pulled = updates.state {
@@ -646,6 +927,42 @@ struct SettingsView: View {
 					kind: .warning,
 					message: "Run ./build.sh in the repository to apply the update.")
 			}
+		}
+	}
+
+	private var releaseRowTitle: String {
+		if case .available(let release) = releases.state {
+			return "Gaze \(release.tag) is available"
+		}
+		return "Released version"
+	}
+
+	private var releaseRowDetail: String? {
+		switch releases.state {
+		case .idle: return "Check gazeunlock.com for a new build."
+		case .checking: return "Checking gazeunlock.com…"
+		case .upToDate: return "You're on the latest release."
+		case .available(let release):
+			// The release's own title, when it has one worth showing. A tag on its own says
+			// a number changed; the title says what changed.
+			return release.name.isEmpty ? "A newer build is published." : release.name
+		case .failed(let message): return message
+		}
+	}
+
+	private var releaseButtonTitle: String {
+		switch releases.state {
+		case .available: return "Download"
+		case .checking: return "Checking…"
+		default: return "Check"
+		}
+	}
+
+	private func releaseAction() {
+		if case .available = releases.state {
+			releases.openDownload()
+		} else {
+			Task { await releases.check() }
 		}
 	}
 
@@ -688,6 +1005,134 @@ struct SettingsView: View {
 
 	// MARK: - About
 
+	/// Somebody's own picture, or their app's icon, from the bundle.
+	///
+	/// Nil is a normal answer, not a failure: the row falls back to its glyph, so a checkout
+	/// without `Resources/Credits` still builds and still reads correctly. That matches how
+	/// the setup card art behaves, and it is why nothing here throws.
+	private func creditPortrait(_ name: String) -> NSImage? {
+		guard
+			let url = Bundle.main.url(
+				forResource: name.lowercased(), withExtension: "png", subdirectory: "Credits")
+		else { return nil }
+		return NSImage(contentsOf: url)
+	}
+
+	/// An app one of the credited people made.
+	struct CreditApp {
+		let name: String
+		/// The app's own one-line description, in its author's words — and nil when nobody
+		/// has written one.
+		///
+		/// Optional because `credits.ts` only carries a description for the two apps Gaze is
+		/// actually built on. WallX is listed there as something Unxnown made, with a name,
+		/// an icon and a link and no words. Inventing a line for it would be writing someone
+		/// else's product description for them, which is how this pane got into trouble the
+		/// first time.
+		let what: String?
+		/// Bundled icon, named `app-<something>` so a person's portrait and an app's icon
+		/// cannot collide in the same folder.
+		let icon: String
+		let href: String
+	}
+
+	/// One credited person, and their app underneath them if they have one.
+	///
+	/// The person is the credit; the app is a fact about the person. Flattening the two into
+	/// one row — "cshariq — Sapphire — the recognition model…" — made the app read as the
+	/// thing being thanked, which is how DanFQ ended up credited as *Atoll* for work he did
+	/// himself. Two rows keep the distinction the site's data already draws: a `name` is
+	/// always someone, an `app` is always a product.
+	///
+	/// Indented and quieter than the person above it, because it is a note attached to that
+	/// row rather than a sibling of it.
+	private func creditRow(
+		name: String, detail: String, symbol: String,
+		link: String?, linkName: String?, app: CreditApp?
+	) -> some View {
+		VStack(spacing: 0) {
+			SettingRow(title: name, detail: detail, symbol: symbol, portrait: creditPortrait(name)) {
+				if let link, let linkName {
+					linkGlyph(linkName) { Self.open(link) }
+				}
+			}
+
+			if let app {
+				HStack(spacing: 10) {
+					if let icon = creditPortrait(app.icon) {
+						Image(nsImage: icon)
+							.resizable()
+							.interpolation(.high)
+							.aspectRatio(contentMode: .fill)
+							.frame(width: 20, height: 20)
+							.clipShape(.rect(cornerRadius: 5, style: .continuous))
+							.accessibilityHidden(true)
+					}
+
+					VStack(alignment: .leading, spacing: 0) {
+						// Labelled, so the row cannot be misread as a second person.
+						Text("\(app.name) — app")
+							.font(Typography.detail)
+							.foregroundStyle(Theme.label)
+						if let what = app.what {
+							Text(what)
+								.font(Typography.detail)
+								.foregroundStyle(Theme.tertiaryLabel)
+						}
+					}
+
+					Spacer(minLength: 8)
+					linkGlyph(app.name) { Self.open(app.href) }
+				}
+				// Indented past the portrait column above, so it hangs off the person.
+				.padding(.leading, Theme.rowInset + 26 + 12)
+				.padding(.trailing, Theme.rowInset)
+				.padding(.bottom, 11)
+			}
+		}
+	}
+
+	/// The one link control this pane uses, so every row's is the same width.
+	private func linkGlyph(_ name: String, action: @escaping () -> Void) -> some View {
+		Button(action: action) {
+			Image(systemName: "arrow.up.forward")
+		}
+		.gazeButton(.standard, size: .small)
+		.help("Open \(name)")
+		.accessibilityLabel("Open \(name)")
+	}
+
+	/// A row whose whole job is to open a link.
+	///
+	/// Same shape as the credits rows: one glyph button per row rather than the destination's
+	/// name on a capsule, so three of them stack without three different widths.
+	private func linkRow(
+		title: String, detail: String, symbol: String, url: String
+	) -> some View {
+		SettingRow(title: title, detail: detail, symbol: symbol) {
+			Button {
+				guard let link = URL(string: url) else { return }
+				NSWorkspace.shared.open(link)
+			} label: {
+				Image(systemName: "arrow.up.forward")
+			}
+			.gazeButton(.standard, size: .small)
+			.help("Open \(title)")
+			.accessibilityLabel("Open \(title)")
+		}
+	}
+
+	/// Where donations go, or nil while there is nowhere to send them.
+	///
+	/// The row does not appear until this is set. A Support button that opens a
+	/// page which does not exist is worse than no button, and this way the app
+	/// ships with the feature dormant rather than broken.
+	///
+	/// A link out, never a form. Taking card details inside a Mac app means a
+	/// merchant agreement and PCI obligations for a tip jar; every indie app
+	/// sends you to a page that already handles that properly.
+	private var donationURL: URL? { nil }
+
 	private var aboutSection: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			// No second identity block.
@@ -710,6 +1155,62 @@ struct SettingsView: View {
 				}
 			}
 
+			// Where to go next.
+			//
+			// This pane had two read-only rows and a paragraph, and every route out of the
+			// app — the site, the release notes for the version named directly above, the
+			// savedApp to report that something is broken — existed only in a README. An About
+			// pane is exactly where somebody looks for those, and "Gaze isn't working" with
+			// nowhere in the app to say so is how a bug becomes a person quietly giving up.
+			SettingsSection(
+				title: "Gaze on the web",
+				footer: "Release notes list what changed in each version, including this one."
+			) {
+				linkRow(
+					title: "Website",
+					detail: "gazeunlock.com",
+					symbol: "safari",
+					url: "https://gazeunlock.com")
+				RowDivider(inset: 0)
+				linkRow(
+					title: "Release notes",
+					detail: "What changed, version by version",
+					symbol: "list.bullet.rectangle",
+					url: "https://gazeunlock.com/releases")
+				RowDivider(inset: 0)
+				// The Discord, not the issue tracker.
+				//
+				// Both candidate repository URLs — the checkout's remote (`OwenCope/FaceID`)
+				// and the one the README gives (`OwenCope/Gaze`) — answer 404 to a signed-out
+				// request, which is what GitHub returns for a private repository *and* for one
+				// that does not exist. Either way, most people clicking this would land on a
+				// 404, and a support link that goes nowhere is worse than no support link.
+				//
+				// The Discord is where the feedback in the credits pane actually came from,
+				// and it is the one destination here that was checked and answers 200.
+				linkRow(
+					title: "Report a problem",
+					detail: "Ask in the Discord",
+					symbol: "exclamationmark.bubble",
+					url: "https://discord.gg/BFgKT5YJH")
+			}
+
+			if let donationURL {
+				SettingsSection(
+					title: "Support",
+					footer: "Gaze is free and always will be. This only exists for anyone who wants to."
+				) {
+					SettingRow(
+						title: "Buy me a coffee",
+						detail: "Opens in your browser",
+						symbol: "heart.fill", symbolTint: Theme.danger
+					) {
+						Button("Open") { NSWorkspace.shared.open(donationURL) }
+							.gazeButton()
+					}
+				}
+			}
+
 			// Said plainly, and said here rather than in a README nobody opens.
 			//
 			// atmos raised it in the server: the name invites people to assume this is what
@@ -720,15 +1221,32 @@ struct SettingsView: View {
 			// something having gone wrong; this is a permanent, unalarming fact about how the
 			// hardware works, and dressing it as an error is its own kind of dishonesty.
 			VStack(alignment: .leading, spacing: 6) {
-				Text("Not Apple's Face ID")
+				// Headed by what this *is*, not by whose trademark it is not.
+				//
+				// It read "Not Apple's Face ID", which made a registered mark the largest
+				// words in the pane and defined the app by a comparison to something it was
+				// never trying to be. Leading with the plain description is both more useful
+				// to a reader and a smaller target: the honest sentence is "a facial
+				// recognition app for Mac", and the Face ID paragraph stays because the
+				// difference is worth knowing — as the second thing said, not the first.
+				Text("What this is")
 					.font(Typography.groupTitle)
 					.foregroundStyle(Theme.label)
 				Text(
-					"Apple's Face ID uses a TrueDepth camera that projects thousands of "
-						+ "infrared dots to measure the shape of your face. Macs have no such "
-						+ "sensor. This app recognises you from the ordinary built-in camera, "
-						+ "which sees a flat image — so it cannot tell a face from a good "
-						+ "photograph of one the way an iPhone can."
+					"Gaze is a facial recognition app for Mac. It matches the face at your "
+						+ "built-in camera against the one you enrolled, and types your login "
+						+ "password when they agree."
+				)
+				.font(Typography.detail)
+				.foregroundStyle(Theme.secondaryLabel)
+				.fixedSize(horizontal: false, vertical: true)
+
+				Text(
+					"It is not Apple's Face ID, and not connected to Apple. Face ID uses a "
+						+ "TrueDepth camera that measures the shape of your face with infrared "
+						+ "dots; Macs have no such sensor. Gaze sees a flat image from an "
+						+ "ordinary camera, so it cannot tell a face from a good photograph of "
+						+ "one the way an iPhone can."
 				)
 				.font(Typography.detail)
 				.foregroundStyle(Theme.secondaryLabel)
@@ -748,50 +1266,126 @@ struct SettingsView: View {
 	/// bottom of an About page is not where you put that.
 	private var creditsSection: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+			// One glyph per row, not the app's name on a capsule.
+			//
+			// Each of these was a filled button labelled with the app it opens — "Sapphire",
+			// "DynamicLake", "Atoll" — which went wrong twice over. The name was already the
+			// first word of the row's own subtitle, so the button restated it; and because
+			// the three names are different lengths, the three capsules were different
+			// widths, leaving a ragged right edge down a group whose rows are otherwise
+			// identical in shape. Three mismatched pills is what the eye catches first.
+			//
+			// They all do the same thing — open a link — so they take the same control, at
+			// the same width, and the row's text says which link it is. The name moves to
+			// the tooltip and the accessibility label, where a control's purpose belongs.
+			// Six people, matching `credits.ts` on the site, which is the list that gets
+			// maintained.
+			//
+			// This pane had three of them, and got one of the three wrong: DanFQ was credited
+			// for *Atoll*, with the line "and for reading this code more carefully than I
+			// did". The site had already caught and fixed that, and its own note says why —
+			// "the app was never built on it, and crediting someone's product for work they
+			// did personally is a nicer-sounding kind of wrong." DanFQ gave ideas and
+			// feedback, as himself. He has a link to his GitHub, not to an app Gaze does not
+			// use.
+			//
+			// The self-deprecation went with it. "More carefully than I did" is not a credit
+			// — it says something about the author in a row that exists to say something
+			// about somebody else — and it is the kind of line that reads as charming once
+			// and as false modesty every time after.
+			//
+			// Three of the six are people rather than apps, so `nautey` has no link at all
+			// rather than a link invented to fill the column.
 			SettingsSection(
-				title: "Built on other people's work",
-				footer: "All three of them build Mac apps worth your time. Go and look at them."
+				title: "Who helped",
+				footer: "One borrowed model, one app this one learned its shape from, "
+					+ "and four people who made it better."
 			) {
-				SettingRow(
-					title: "cshariq",
-					detail: "Sapphire — the recognition model this app matches faces with",
-					symbol: "brain.head.profile"
-				) {
-					Button("Sapphire") { Self.open("https://sapphire-app.tech/") }
-						.buttonStyle(AccentButtonStyle.quiet)
-				}
+				creditRow(
+					name: "cshariq",
+					detail: "The recognition model this app matches faces with is theirs",
+					symbol: "brain.head.profile",
+					link: "https://github.com/cshariq", linkName: "cshariq on GitHub",
+					app: .init(
+						name: "Sapphire", what: "The notch, reimagined.",
+						icon: "app-sapphire", href: "https://sapphire-app.tech/"))
 
 				RowDivider()
-				SettingRow(
-					title: "Aviorrok",
-					detail: "DynamicLake — the notch panel and this window follow its lead",
-					symbol: "macbook"
-				) {
-					Button("DynamicLake") { Self.open("https://dynamiclake.com") }
-						.buttonStyle(AccentButtonStyle.quiet)
-				}
+				creditRow(
+					name: "Aviorrok",
+					detail: "The notch panel and this window both follow its lead",
+					symbol: "macbook",
+					link: nil, linkName: nil,
+					app: .init(
+						name: "DynamicLake", what: "Dynamic Island for Mac.",
+						icon: "app-dynamiclake", href: "https://dynamiclake.com"))
 
 				RowDivider()
-				SettingRow(
-					title: "DanFQ",
-					detail: "Atoll — and for reading this code more carefully than I did",
-					symbol: "hammer.fill"
-				) {
-					Button("Atoll") { Self.open("https://getatoll.app") }
-						.buttonStyle(AccentButtonStyle.quiet)
-				}
+				creditRow(
+					name: "Vanilla",
+					detail: "Built the anti-spoofing pipeline",
+					symbol: "eye.slash.fill",
+					link: "https://github.com/howjin", linkName: "Vanilla on GitHub",
+					app: nil)
+
+				RowDivider()
+				creditRow(
+					name: "Unxnown",
+					detail: "Set up the Discord, where every early build lands",
+					symbol: "bubble.left.and.bubble.right.fill",
+					link: "https://github.com/UnxnownYT", linkName: "Unxnown on GitHub",
+					app: .init(
+						name: "WallX", what: nil,
+						icon: "app-wallx", href: "https://github.com/UnxnownYT/WallX"))
+
+				RowDivider()
+				// Atoll is his, and belongs here — under him, labelled as his app.
+				//
+				// It was removed from this pane earlier for a good reason and the wrong one.
+				// The good reason: Gaze is not built on Atoll, so it cannot be the *credit* —
+				// he is credited for ideas and feedback, which is what he actually gave.
+				// The wrong one: dropping the app entirely, when the question "who is this
+				// person" has an obvious answer that a reader would want.
+				creditRow(
+					name: "DanFQ",
+					detail: "Ideas for the app, and a great deal of feedback on it",
+					symbol: "lightbulb.fill",
+					link: "https://github.com/danfq", linkName: "DanFQ on GitHub",
+					app: .init(
+						name: "Atoll", what: nil,
+						icon: "app-atoll", href: "https://getatoll.app"))
+
+				RowDivider()
+				creditRow(
+					name: "nautey",
+					// "…on the macOS beta" was in the site's copy and does not survive the trip
+					// into a credits row: it reads as a detail about his machine rather than
+					// as a thing he did. What he does is find the breakages first.
+					detail: "Moderates the Discord, and finds what's broken before anyone else",
+					symbol: "checkmark.seal.fill",
+					link: nil, linkName: nil,
+					app: nil)
 			}
 
 			// Plain text, not a group. An empty card with a caption under it is a group that
 			// forgot to have any rows.
+			//
+			// This was headed "And everyone who said what was wrong", over a paragraph
+			// listing everything the Discord had criticised — the settings layout, light
+			// mode, "what this app should not claim about itself" — ending "most of it was
+			// right".
+			//
+			// Which is the app talking about itself, at length, in the one section that
+			// exists to talk about other people. A reader learns nothing about the Discord
+			// from it; they learn that the author feels sheepish. Thanks are for the people
+			// who gave the feedback, not an inventory of the feedback.
 			VStack(alignment: .leading, spacing: 6) {
-				Text("And everyone who said what was wrong")
+				Text("And the Discord")
 					.font(Typography.groupTitle)
 					.foregroundStyle(Theme.label)
 				Text(
-					"The Discord picked apart every screenshot: the settings layout, light mode, "
-						+ "what the notch panel should look like at rest, and what this app should "
-						+ "not claim about itself. Most of it was right."
+					"Every screenshot in this app was picked apart by people there before it "
+						+ "shipped. Most of what they said was right, and most of it is in here."
 				)
 				.font(Typography.detail)
 				.foregroundStyle(Theme.secondaryLabel)
@@ -821,12 +1415,25 @@ struct SettingsView: View {
 				if try PasswordVault.store(passwordEntry) {
 					passwordEntry = ""
 					passwordError = nil
+					hasStoredPassword = true
 				} else {
 					passwordError = "That password didn't match your account."
 				}
 			} catch {
 				passwordError = error.localizedDescription
 			}
+		}
+	}
+
+	/// Clear the stored password. Brings the entry field (and Store) back, so it reads as
+	/// a toggle between "stored" and "not stored" rather than a one-way door.
+	private func revokePassword() {
+		Task {
+			guard await BiometricGate.authorize(.storePassword) else { return }
+			PasswordVault.remove()
+			passwordEntry = ""
+			passwordError = nil
+			hasStoredPassword = false
 		}
 	}
 
@@ -842,7 +1449,10 @@ struct SettingsView: View {
 
 // MARK: - Sidebar row
 
-private struct SidebarItem: View {
+/// One tab in the floating top-bar. A plain symbol + label in a capsule — no coloured
+/// icon tile, which was part of the "settings mockup" look; the selected tab is marked by
+/// a fill, the way a segmented control marks its selection.
+private struct TopBarItem: View {
 
 	let pane: SettingsPane
 	let isSelected: Bool
@@ -850,46 +1460,36 @@ private struct SidebarItem: View {
 	let select: () -> Void
 
 	@State private var isHovering = false
-	@FocusState private var isFocused: Bool
 
 	var body: some View {
 		Button(action: select) {
-			HStack(spacing: 9) {
-				IconTile(symbol: pane.symbol, tint: pane.tint)
+			HStack(spacing: 6) {
+				Image(systemName: pane.symbol)
+					.font(.system(size: 12, weight: .medium))
 				Text(pane.title)
 					.font(Typography.row)
-					.foregroundStyle(Theme.label)
 					.lineLimit(1)
-				Spacer(minLength: 4)
 				if let badge {
 					Circle()
 						.fill(badge)
-						.frame(width: 6, height: 6)
+						.frame(width: 5, height: 5)
 				}
 			}
-			.padding(.horizontal, 8)
+			.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
+			.padding(.horizontal, 12)
 			.padding(.vertical, 6)
 			.background {
-				RoundedRectangle(cornerRadius: 8, style: .continuous)
+				Capsule(style: .continuous)
 					.fill(
 						isSelected
 							? Theme.selection
 							: (isHovering ? Theme.hoverFill : .clear))
 			}
-			.contentShape(.rect)
+			.contentShape(.capsule)
 		}
 		.buttonStyle(.plain)
-		// Only the selected row takes focus, so the ring and the highlight are never on two
-		// different rows. Making all three focusable put the ring on "General" while the
-		// "Gaze" pane was showing, which reads as the sidebar disagreeing with itself.
-		.focusable(isSelected)
-		.focused($isFocused)
-		// AppKit's blue ring on top of the white one drawn above — two rings around one row,
-		// and a colour this window otherwise never uses.
 		.focusEffectDisabled()
 		.onHover { isHovering = $0 }
-		// Without this a screen reader announces three unrelated buttons and never says
-		// which pane is showing.
 		.accessibilityLabel(pane.title)
 		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
 		.accessibilityValue(badge == nil ? "" : "Needs attention")
@@ -899,13 +1499,16 @@ private struct SidebarItem: View {
 /// One enrolled face, as a tile.
 ///
 /// Modelled on the fingerprint tiles in Touch ID & Password: the glyph is the
-/// object, the name is under it and editable in place, and removal appears on
+/// object, the name is under it and editable in savedApp, and removal appears on
 /// approach rather than sitting there as a permanent invitation to destroy
 /// something.
 private struct FaceTile: View {
 
 	let face: FaceEnrollment
+	/// The picture somebody chose for this person, if they chose one.
+	var portrait: NSImage?
 	var rename: (String) -> Void
+	var setPortrait: (NSImage?) -> Void
 	var remove: () -> Void
 
 	@State private var hovering = false
@@ -917,9 +1520,17 @@ private struct FaceTile: View {
 	@State private var draft: String
 	@FocusState private var isEditing: Bool
 
-	init(face: FaceEnrollment, rename: @escaping (String) -> Void, remove: @escaping () -> Void) {
+	init(
+		face: FaceEnrollment,
+		portrait: NSImage?,
+		rename: @escaping (String) -> Void,
+		setPortrait: @escaping (NSImage?) -> Void,
+		remove: @escaping () -> Void
+	) {
 		self.face = face
+		self.portrait = portrait
 		self.rename = rename
+		self.setPortrait = setPortrait
 		self.remove = remove
 		_draft = State(initialValue: face.name)
 	}
@@ -927,18 +1538,72 @@ private struct FaceTile: View {
 	var body: some View {
 		VStack(spacing: 8) {
 			ZStack(alignment: .topTrailing) {
-				RoundedRectangle(cornerRadius: 16, style: .continuous)
-					.fill(Theme.faceID.opacity(0.16))
+				// A circle with initials in it — the way macOS draws a person.
+				//
+				// This was a green squircle with the app's own eye glyph in it, and it was
+				// wrong twice over.
+				//
+				// Wrong shape: every savedApp macOS shows a *person* — Users & Groups, the
+				// login window, Contacts, Photos' People album — shows a circle. A rounded
+				// square is what it uses for apps and files. This row is people.
+				//
+				// Wrong content, and worse: the glyph was identical on every tile, so a Mac
+				// with four enrolled faces showed four indistinguishable green squares and
+				// the name underneath did all the work. Initials are what macOS itself falls
+				// back to when a person has no picture, and they make the row scannable —
+				// which is the entire job of a tile.
+				//
+				// Wrong colour, too. Green means *recognised* everywhere in this app; a tile
+				// that merely carries somebody's name is not a recognition event, and
+				// spending the colour here is the same dilution the sidebar tint note warns
+				// about. The tile is neutral; the green stays where it means something.
+				// A portrait when there is one, initials when there is not.
+				//
+				// Initials are macOS's own fallback for a person with no picture, and they
+				// were the whole improvement over four identical glyphs. A real face is
+				// better still: on a Mac with several people enrolled it is the fastest
+				// possible way to tell one row from another, and it is the thing every other
+				// list of people on this system shows.
+				Circle()
+					.fill(Theme.surface)
 					.frame(width: 68, height: 68)
 					.overlay {
-						Image(systemName: "faceid")
-							.font(.system(size: 30, weight: .regular))
-							.foregroundStyle(Theme.faceID)
+						if let portrait {
+							Image(nsImage: portrait)
+								.resizable()
+								.interpolation(.high)
+								.aspectRatio(contentMode: .fill)
+								.clipShape(.circle)
+						} else {
+							Text(initials)
+								.font(.system(size: 25, weight: .medium, design: .rounded))
+								.foregroundStyle(Theme.secondaryLabel)
+						}
 					}
-					.overlay {
-						RoundedRectangle(cornerRadius: 16, style: .continuous)
-							.strokeBorder(Theme.faceID.opacity(0.28), lineWidth: 1)
+					.overlay { Circle().strokeBorder(Theme.separator, lineWidth: 1) }
+					.contextMenu {
+						Button("Choose Photo…") { choosePortrait() }
+						if portrait != nil {
+							Button("Remove Photo", role: .destructive) { setPortrait(nil) }
+						}
 					}
+
+				// A camera badge on hover, because a context menu nobody right-clicks is a
+				// feature nobody finds. Bottom-leading so it cannot collide with the remove
+				// button in the opposite corner.
+				if hovering {
+					Button(action: choosePortrait) {
+						Image(systemName: "camera.fill")
+							.font(.system(size: 10, weight: .semibold))
+							.foregroundStyle(.white)
+							.padding(5)
+							.background(Circle().fill(.black.opacity(0.55)))
+					}
+					.buttonStyle(.plain)
+					.help("Choose a photo for \(face.name)")
+					.offset(x: -46, y: 46)
+					.transition(.opacity)
+				}
 
 				if hovering {
 					Button(action: remove) {
@@ -973,6 +1638,35 @@ private struct FaceTile: View {
 		.onHover { hovering = $0 }
 	}
 
+	/// One letter, or two when the name has a surname to take one from.
+	///
+	/// Taken from the committed `face.name` rather than the draft, so the tile does not
+	/// flicker through partial initials while somebody is retyping the name under it.
+	/// Opens the system picker and hands back what was chosen.
+	///
+	/// `NSOpenPanel` rather than a drop target or a `PhotosPicker`: this is a Mac, the file
+	/// is on disk, and the panel is the thing people already know. Restricted to images so
+	/// the panel cannot return something the store then has to reject.
+	private func choosePortrait() {
+		let panel = NSOpenPanel()
+		panel.allowedContentTypes = [.image]
+		panel.allowsMultipleSelection = false
+		panel.canChooseDirectories = false
+		panel.prompt = "Choose"
+		panel.message = "Pick a photo for \(face.name)."
+		guard panel.runModal() == .OK, let url = panel.url,
+			let image = NSImage(contentsOf: url)
+		else { return }
+		setPortrait(image)
+	}
+
+	private var initials: String {
+		let words = face.name.split(separator: " ").filter { !$0.isEmpty }
+		let letters = words.prefix(2).compactMap(\.first)
+		guard !letters.isEmpty else { return "?" }
+		return String(letters).uppercased()
+	}
+
 	private func commit() {
 		let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
 		// An empty name is a slip, not an instruction. Put the old one back rather
@@ -1000,10 +1694,23 @@ private struct AddFaceTile: View {
 	var body: some View {
 		Button(action: action) {
 			VStack(spacing: 8) {
-				RoundedRectangle(cornerRadius: 16, style: .continuous)
-					.strokeBorder(
-						Theme.secondaryLabel.opacity(hovering ? 0.55 : 0.3),
-						style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+				// A filled tile that lightens on hover, not a dashed outline.
+				//
+				// The dashed rectangle is a drop-zone convention borrowed from the web, and
+				// it is the one shape on this pane that has no counterpart anywhere in
+				// macOS — Photos, Users & Groups and Touch ID all add with a filled well.
+				// It also read as a placeholder rather than a control: a dashed box is what
+				// an interface draws where something is *missing*, so the tile looked like
+				// a gap in the row instead of the way to fill it.
+				//
+				// Lightening on hover rather than darkening, because a darker chip reads as
+				// a hole punched in the surface.
+				// A circle, matching the faces it stands beside. A squircle next to a row of
+				// round avatars reads as a different kind of thing rather than as the next
+				// slot in the same row.
+				Circle()
+					.fill(Theme.surface.opacity(hovering ? 1.6 : 1))
+					.overlay { Circle().strokeBorder(Theme.separator, lineWidth: 1) }
 					.frame(width: 68, height: 68)
 					.overlay {
 						Image(systemName: "plus")
