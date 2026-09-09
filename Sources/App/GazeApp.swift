@@ -192,6 +192,10 @@ final class AppServices {
 	let lockout = LockoutManager()
 	let savedApps = SavedAppStore()
 
+	/// Setup, hung out of the notch. Lazy because it needs `store`, which is declared
+	/// above it, and because an app that never runs setup should not build the panel.
+	lazy var setupNotch = SetupNotchController(store: store)
+
 	/// The autofill shortcut, and the panel it reports through.
 	///
 	/// The capsule is owned here rather than made per-fill: it is a window, and building
@@ -515,9 +519,12 @@ struct MenuBarContent: View {
 		// and the menu was the only way in for anyone who never opens Settings.
 		if store.canAddFace {
 			Button(store.isEnrolled ? "Add a Face…" : "Set Up Gaze…") {
+				// The notch, not a window. `AppActivation.bringToFront()` is deliberately
+				// not called: it flips the app to a regular activation policy and puts a
+				// Dock tile up, which is the wrong shape for a panel hanging off the menu
+				// bar. The controller activates the app on its own, without the tile.
 				SetupRequest.begin()
-				AppActivation.bringToFront()
-				openWindow(id: "enrollment")
+				AppServices.shared.setupNotch.show()
 			}
 		}
 		if store.isEnrolled {
