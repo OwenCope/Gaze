@@ -55,6 +55,7 @@ final class SetupNotchController {
 	private var host: NSHostingView<AnyView>?
 	private var model: SetupNotchModel?
 	private var notchInset: CGFloat = 0
+	private var cutoutWidth: CGFloat = 0
 
 	private let store: FaceEnrollmentStore
 
@@ -81,7 +82,8 @@ final class SetupNotchController {
 		// The physical cutout's height, so the panel starts behind it and grows downward.
 		// Zero on a Mac without a notch, where it simply drops from the top edge — which is
 		// the right fallback rather than a special case.
-		notchInset = screen.safeAreaInsets.top
+		notchInset = NotchMetrics.height(on: screen)
+		cutoutWidth = NotchMetrics.width(on: screen) ?? 0
 
 		let model = SetupNotchModel()
 		self.model = model
@@ -105,6 +107,7 @@ final class SetupNotchController {
 					store: store,
 					model: model,
 					notchInset: notchInset,
+					cutoutWidth: cutoutWidth,
 					onHeight: { [weak self] height in self?.setContentHeight(height) },
 					onFinish: { [weak self] in self?.hide() })))
 		// The content does not get to decide how big the window is. `SetupFlow`-era views
@@ -192,6 +195,7 @@ private struct SetupNotchPanel: View {
 	let store: FaceEnrollmentStore
 	let model: SetupNotchModel
 	let notchInset: CGFloat
+	let cutoutWidth: CGFloat
 	let onHeight: (CGFloat) -> Void
 	let onFinish: () -> Void
 
@@ -214,13 +218,10 @@ private struct SetupNotchPanel: View {
 		.background {
 			// The same shape the unlock capsule uses, so the two read as one object doing
 			// two jobs rather than as two panels that both happen to live in the notch.
-			NotchPanelShape(topRadius: 17, bottomRadius: 26)
+			// Starts as the cutout and widens below it, so the panel is the notch opening
+			// rather than a card lying across the menu bar.
+			SetupNotchShape(cutoutWidth: cutoutWidth, cutoutHeight: notchInset)
 				.fill(.black)
-				.overlay {
-					NotchPanelShape(topRadius: 17, bottomRadius: 26)
-						.fill(.ultraThinMaterial)
-						.opacity(0.3)
-				}
 		}
 		.ignoresSafeArea()
 	}
