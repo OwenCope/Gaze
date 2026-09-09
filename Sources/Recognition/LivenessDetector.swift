@@ -38,55 +38,130 @@ enum Liveness {
 	static var isAvailable: Bool { detector() != nil }
 }
 
-/// Wraps a bundled anti-spoof model: one image input, one score output.
+/// Wraps a bundled anti-spoof model. Handles two shapes of model, because the two
+/// anti-spoof models worth trying take their input differently:
+///
+///  - **Image input** — the model declares an image feature. Fed a `contextCrop`
+///    (face + margin, so screen bezels and paper edges stay in frame) as a pixel
+///    buffer. This is the drop-in path for a typical CoreML anti-spoof export.
+///  - **Multi-array input** `[1,3,S,S]` — Sapphire's `MiniFAS`. Fed the frame's centre
+///    square scaled to S, RGB, `/255`, exactly as Sapphire serves it. Its output is
+///    `[realLogit, spoofLogit]`, so the genuine score is `softmax(...)[0]`.
+///
+/// Getting the serving wrong here is worse than having no model — a mis-fed model is
+/// confidently wrong rather than absent — so each path mirrors its model's training
+/// convention rather than sharing one.
 struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 	let identifier: String
-	/// The conventional operating point for this model family — the same cut-off
-	/// Sapphire uses. Lower admits more spoofs; higher rejects more real faces.
-	let threshold: Float = 0.85
+	let threshold: Float
 
 	private let model: MLModel
 	private let inputName: String
 	private let side: Int
+	private let imageInput: Bool
 
 	init?() {
 		guard
 			let url = Bundle.main.url(forResource: "Liveness", withExtension: "mlmodelc"),
-			let model = try? MLModel(contentsOf: url),
-			let image = model.modelDescription.inputDescriptionsByName
-				.first(where: { $0.value.type == .image })?.value,
-			let constraint = image.imageConstraint
+			let model = try? MLModel(contentsOf: url)
 		else { return nil }
 
-		self.model = model
-		self.inputName = image.name
-		self.side = constraint.pixelsWide
-		self.identifier = "coreml-liveness:\(constraint.pixelsWide)"
+		let inputs = model.modelDescription.inputDescriptionsByName
+
+		if let image = inputs.first(where: { $0.value.type == .image })?.value,
+			let constraint = image.imageConstraint {
+			self.model = model
+			self.inputName = image.name
+			self.side = constraint.pixelsWide
+			self.imageInput = true
+			self.threshold = 0.85
+			self.identifier = "coreml-liveness-img:\(constraint.pixelsWide)"
+		} else if let arr = inputs.first(where: { $0.value.multiArrayConstraint != nil })?.value,
+			let constraint = arr.multiArrayConstraint, constraint.shape.count == 4 {
+			// MiniFAS-family: [1, 3, S, S].
+			self.model = model
+			self.inputName = arr.name
+			self.side = constraint.shape[3].intValue
+			self.imageInput = false
+			// Empirically (serving-finder, 2026-08-19): with the 2.7 face crop + (x-127.5)/128
+			// normalisation, class 1 is "real" and it separates cleanly — a live face ≈ 1.0,
+			// a photo ≈ 0.0. 0.5 sits in the middle of that gap with room for lighting.
+			self.threshold = 0.5
+			self.identifier = "coreml-liveness-arr:\(self.side):v2"
+		} else {
+			return nil
+		}
 	}
 
 	func score(_ sample: FaceSample) -> Float? {
-		// Deliberately a looser crop than recognition uses: the tell-tales live at the
-		// edges — a screen bezel, the border of a sheet of paper — so cropping tightly
-		// to the face throws away the evidence.
-		//
-		// This said exactly that and then called `alignedCrop`, which is the tight
-		// eye-warped crop the comment warns against. The dataset capture writes
-		// `contextCrop`, so a model trained on it must be fed `contextCrop` here or
-		// it sees something it has never been shown.
+		if imageInput {
+			guard
+				let crop = FaceAligner.contextCrop(sample, side: side, margin: Liveness.cropMargin),
+				let out = try? model.prediction(
+					from: try MLDictionaryFeatureProvider(
+						dictionary: [inputName: MLFeatureValue(pixelBuffer: crop)])),
+				let array = firstMultiArray(out), array.count > 0
+			else { return nil }
+			// Two-class image exports put genuine at index 1; single-output at index 0.
+			return array.count >= 2 ? array[1].floatValue : array[0].floatValue
+		}
+
+		// Multi-array path (MiniFAS): the MiniFASNet family is trained on a face crop
+		// scaled by the number in its name (2.7), NOT the whole frame. Fed a full frame it
+		// stops discriminating and calls everything real (a photo scored 1.000). The 2.7
+		// context crop is that training framing. RGB, /255, softmax[0].
 		guard
 			let crop = FaceAligner.contextCrop(sample, side: side, margin: Liveness.cropMargin),
-			let output = try? model.prediction(
+			let tensor = Self.tensor(from: crop, side: side),
+			let out = try? model.prediction(
 				from: try MLDictionaryFeatureProvider(
-					dictionary: [inputName: MLFeatureValue(pixelBuffer: crop)])),
-			let name = output.featureNames.first(where: {
-				output.featureValue(for: $0)?.multiArrayValue != nil
-			}),
-			let array = output.featureValue(for: name)?.multiArrayValue,
-			array.count > 0
+					dictionary: [inputName: MLFeatureValue(multiArray: tensor)])),
+			let array = firstMultiArray(out), array.count >= 2
 		else { return nil }
 
-		// Two-class models put the genuine score at index 1; single-output models put it
-		// at index 0.
-		return array.count >= 2 ? array[1].floatValue : array[0].floatValue
+		// Class 1 is "real" for this model at this serving (see serving-finder note above).
+		let real = array[1].floatValue
+		let spoof = array[0].floatValue
+		let m = max(real, spoof)
+		let er = exp(real - m), es = exp(spoof - m)
+		return er / (er + es)
+	}
+
+	private func firstMultiArray(_ out: MLFeatureProvider) -> MLMultiArray? {
+		guard let name = out.featureNames.first(where: {
+			out.featureValue(for: $0)?.multiArrayValue != nil
+		}) else { return nil }
+		return out.featureValue(for: name)?.multiArrayValue
+	}
+
+	/// BGRA crop → planar RGB `[1,3,side,side]`, scaled to [0,1] — MiniFAS's convention
+	/// (Sapphire: `isBGR:false, isNormalizedTo01:true`).
+	private static func tensor(from buffer: CVPixelBuffer, side: Int) -> MLMultiArray? {
+		guard
+			let array = try? MLMultiArray(
+				shape: [1, 3, NSNumber(value: side), NSNumber(value: side)], dataType: .float32)
+		else { return nil }
+
+		CVPixelBufferLockBaseAddress(buffer, .readOnly)
+		defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+		guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
+
+		let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
+		let pixels = base.assumingMemoryBound(to: UInt8.self)
+		let out = array.dataPointer.assumingMemoryBound(to: Float32.self)
+		let plane = side * side
+
+		for y in 0..<side {
+			let row = pixels + y * rowBytes
+			for x in 0..<side {
+				let px = row + x * 4  // BGRA
+				let b = Float32(px[0]), g = Float32(px[1]), r = Float32(px[2])
+				let i = y * side + x
+				out[i] = (r - 127.5) / 128
+				out[plane + i] = (g - 127.5) / 128
+				out[2 * plane + i] = (b - 127.5) / 128
+			}
+		}
+		return array
 	}
 }

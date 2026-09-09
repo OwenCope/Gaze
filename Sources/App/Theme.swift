@@ -41,18 +41,95 @@ enum Theme {
 		light: Color(red: 0.93, green: 0.93, blue: 0.94),
 		dark: Color(red: 0.078, green: 0.078, blue: 0.082))
 
-	/// Group fill, over the glass rather than instead of it.
-	///
-	/// A flat rectangle is what made every group read as a grey slab: it is a *painted*
-	/// panel, so it sits at the same depth as everything else and the window flattens into
-	/// one sheet of cardboard. Real glass has a blur of its own, which is what separates a
-	/// group from the thing behind it.
+	/// A group's fill — and, since `GlassSurface` lost its outline, the only thing marking
+	/// where a group starts and stops.
 	///
 	/// Light mode takes white rather than a lightened black — Jis G Jacob's point, and the
 	/// right one: a group in light mode is a white card, not a pale grey one.
-	static let surface = dynamic(light: .white.opacity(0.55), dark: .white.opacity(0.07))
-	static let surfaceRaised = dynamic(light: .white.opacity(0.85), dark: .white.opacity(0.12))
+	///
+	/// It was 0.07 in dark, which is barely a tint: it could afford to be that faint only
+	/// because a hairline was drawn round it to say where the edge was. Tone has to carry
+	/// that on its own now, the way System Settings does it, so the step up from the ground
+	/// is a step you can actually see.
+	static let surface = dynamic(light: .white.opacity(0.62), dark: .white.opacity(0.12))
+	static let surfaceRaised = dynamic(light: .white.opacity(0.88), dark: .white.opacity(0.18))
 	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
+
+	// MARK: - Setup / enrolment (dark-only)
+
+	/// The setup and enrolment windows force a dark appearance — the screen is mostly camera,
+	/// and a dark surround keeps the face the brightest thing on it. Being dark-only, they
+	/// can't use the dynamic tokens above, so their grounds and label levels live here as one
+	/// value each rather than as the `.white.opacity(...)` literals that had drifted across
+	/// five files (0.5 here, 0.6 there, for the same job).
+	///
+	/// Black. This was a dark grey for a while, on the reasoning that black reads as a
+	/// phone splash screen and a native macOS window ground is grey — true of a window
+	/// with a title bar and a toolbar, which this no longer has. As a borderless panel the
+	/// grey read as an unfinished sheet instead, and the black is what makes the camera,
+	/// the glass buttons and the white type sit *on* something.
+	static let setupGround = Color.black
+	/// The muted line under a title — same level as `secondaryLabel` resolves to in dark.
+	static let setupSecondary = Color.white.opacity(0.68)
+	/// The quietest text — a "Not now", a caption. Matches `tertiaryLabel` in dark.
+	static let setupTertiary = Color.white.opacity(0.52)
+	/// An unfilled enrolment tick, and the placeholder ring before capture starts. Was three
+	/// different values (`0.34,0.34,0.36`, `.white.opacity(0.14)`) for the one visual role.
+	static let tickEmpty = Color(white: 0.34)
+
+	/// The ground every setup screen sits on.
+	///
+	/// Black, with one barely-there lift behind the content.
+	///
+	/// Flat black across a 560×720 panel has nothing in it to say where the front of the
+	/// window is, so there is a single soft highlight centred where the figure sits — the
+	/// thing the screen is about is also the brightest part of it. No vignette: there is
+	/// nothing to darken towards from black, and the earlier one was only there to hold
+	/// the window's edge against the desktop, which black does by itself.
+	///
+	/// 5%, which is under the threshold of reading as a gradient. It should not be visible
+	/// as an effect; it should only be visible that the flat version was flat.
+	static var setupBackground: some View {
+		ZStack {
+			setupGround
+
+			RadialGradient(
+				colors: [.white.opacity(0.05), .clear],
+				center: UnitPoint(x: 0.5, y: 0.32),
+				startRadius: 0,
+				endRadius: 420
+			)
+		}
+		.ignoresSafeArea()
+	}
+
+	// MARK: - Motion
+
+	/// The app's timing, in one place.
+	///
+	/// These were scattered as literals — `.easeInOut(duration: 0.3)` for a step change,
+	/// `.spring(response: 0.5, dampingFraction: 0.72)` for a mark, `.easeOut(0.22)` for a
+	/// dim — which is why setup read as a stack of separate screens rather than one flow:
+	/// nothing moved on a shared clock.
+	///
+	/// `standard` is Apple's own curve (0.32, 0.72, 0, 1) — the one UIKit and AppKit use
+	/// for view transitions. It leaves immediately and arrives slowly, which is what makes
+	/// a transition feel like the screen was already moving before you looked at it.
+	enum Motion {
+		/// Screen-to-screen, and anything that moves a whole block of content.
+		static let standard = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.42)
+		/// The same curve, shortened — a control changing state under the pointer.
+		static let quick = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.26)
+		/// Something arriving that should feel physical: a tick, a mark, a result.
+		static let arrive = Animation.spring(response: 0.46, dampingFraction: 0.78)
+
+		/// How far a block travels as it arrives. Small on purpose — a long slide reads
+		/// as a page turn, and these are not pages.
+		static let rise: CGFloat = 12
+		/// The blur an element carries in from. Enough to read as focus resolving; not
+		/// enough to look like a mistake in a screenshot.
+		static let entryBlur: CGFloat = 6
+	}
 
 	// MARK: - Icon palette
 
@@ -123,7 +200,7 @@ enum Theme {
 	/// system's own glass surfaces — Spotlight, the Siri panel, the notch capsule this app
 	/// already draws — are much rounder than a settings group used to be.
 	static let cornerRadius: CGFloat = 16
-	static let rowInset: CGFloat = 15
+	static let rowInset: CGFloat = 18
 	static let sectionSpacing: CGFloat = 22
 }
 
@@ -155,44 +232,86 @@ struct WindowGlass: View {
 		extraTranslucent ? .black.opacity(opacity) : Theme.scrim(opacity)
 	}
 
+	/// A plain solid ground, in whichever appearance it's drawn: white in light, grey in
+	/// dark. This is the default now — a window that shows the desktop through itself reads
+	/// as an overlay, not an app, and the translucency was most of what made it feel
+	/// "vibe-coded". `VibrantBackground` stays underneath purely for its title-bar handling;
+	/// the opaque colour on top of it is what you actually see. Semi Liquid Glass
+	/// (`extraTranslucent`) still gets the real material for anyone who wants it.
+	private static let solidGround = Theme.dynamic(
+		light: Color(white: 0.98),
+		dark: Color(white: 0.145))
+
 	var body: some View {
 		ZStack {
-			VibrantBackground(material: .underWindowBackground, hidesTitle: !keepsTitle)
+			// `.behindWindow` on both paths: the material samples the desktop, which is the
+			// only way a window is actually glazed rather than painted.
+			//
+			// This briefly used `.withinWindow` on the glass theme so the material would
+			// frost `WallpaperBackdrop`'s copy of the desktop picture. That did make the
+			// wallpaper visible, but it was the wrong wallpaper — an image scaled to the
+			// window, sitting still while the real one moved. Sampling the desktop means
+			// what shows through is what is behind, in the right place, at the right scale,
+			// updating as the window moves.
+			VibrantBackground(
+				material: extraTranslucent ? .hudWindow : .underWindowBackground,
+				hidesTitle: !keepsTitle,
+				blending: .behindWindow)
 
-			LinearGradient(
-				stops: [
-					// The glass theme runs a longer way than the default: nearly opaque at the
-					// top so headings sit on something solid, and nearly clear at the foot.
-					// A gradient that only travels from 0.86 to 0.12 reads as "slightly
-					// uneven"; one that travels from 0.94 to 0.04 reads as a gradient.
-					.init(color: scrim(extraTranslucent ? 0.94 : 0.74), location: 0),
-					.init(color: scrim(extraTranslucent ? 0.78 : 0.62), location: 0.32),
-					.init(color: scrim(extraTranslucent ? 0.34 : 0.44), location: 0.68),
-					.init(color: scrim(extraTranslucent ? 0.04 : 0.26), location: 1),
-				],
-				startPoint: .top,
-				endPoint: .bottom)
-
-			// The specular top edge. A single hairline of light along the upper rim is what
-			// tells the eye a surface is glass rather than paint — it is the highlight of a
-			// physical sheet catching the light above it.
-			VStack(spacing: 0) {
+			if extraTranslucent {
+				// A fall from top to bottom, not a blackout.
+				//
+				// These stops used to start at 0.94, which is opaque black in all but name.
+				// Stacked on `WallpaperBackdrop`'s own 0.62 and the material between them,
+				// the window carried three separate scrims and the wallpaper could not
+				// survive them — the glass theme rendered as the same flat slab as the solid
+				// one, which is what made picking it feel like it did nothing.
+				//
+				// `WallpaperBackdrop` is the one that owes us legibility and is already
+				// sized for it. This one only has to give the sheet its top-to-bottom
+				// gradient, so it starts under half and reaches clear.
 				LinearGradient(
-					colors: [.white.opacity(0.22), .clear],
-					startPoint: .top, endPoint: .bottom)
-					.frame(height: 90)
-				Spacer(minLength: 0)
+					stops: [
+						.init(color: scrim(0.26), location: 0),
+						.init(color: scrim(0.18), location: 0.32),
+						.init(color: scrim(0.07), location: 0.68),
+						.init(color: scrim(0), location: 1),
+					],
+					startPoint: .top,
+					endPoint: .bottom)
+
+				// The specular top edge — the highlight that tells the eye it's glass. Only
+				// on the glass theme; on a solid window it would be an unexplained sheen.
+				VStack(spacing: 0) {
+					LinearGradient(
+						colors: [.white.opacity(0.22), .clear],
+						startPoint: .top, endPoint: .bottom)
+						.frame(height: 90)
+					Spacer(minLength: 0)
+				}
+				.blendMode(.plusLighter)
+				.opacity(0.5)
+			} else {
+				Self.solidGround
 			}
-			.blendMode(.plusLighter)
-			.opacity(0.5)
 		}
 		.ignoresSafeArea()
 	}
 }
 
-/// A group's surface: material, a breath of white, and a rim that catches light at the top.
+/// A group's surface: a fill, and nothing else.
 ///
-/// Flat, now that the buttons carry the glass.
+/// No outline. This carried a hairline `strokeBorder` all the way round, and drawing a line
+/// around a group is the single loudest non-native thing this window did — System Settings
+/// separates a group from its background by *tone alone*, a slightly lighter fill on a
+/// darker ground, and never by an edge. An outlined rounded rectangle is a web card, and
+/// four of them stacked down a pane read as a web page however native everything inside
+/// them is.
+///
+/// Losing the edge means the fill has to do the work the edge was doing, which is why
+/// `Theme.surface` is no longer almost-transparent — see its own note.
+///
+/// Flat, too, now that the buttons carry the glass.
 ///
 /// This used to be material plus a lit rim, on the argument that depth is what separates a
 /// group from its background. The argument was right and applied to the wrong element: with
@@ -215,11 +334,6 @@ struct GlassSurface: ViewModifier {
 	func body(content: Content) -> some View {
 		content
 			.background { shape.fill(fill) }
-			.overlay {
-				// A single even hairline, not a lit rim. A gradient edge is how you draw a
-				// raised surface, and this one is deliberately not raised any more.
-				shape.strokeBorder(Theme.separator, lineWidth: 1)
-			}
 			.clipShape(shape)
 	}
 }
@@ -250,6 +364,35 @@ enum Typography {
 
 	/// The pane heading in the detail column.
 	static let paneTitle = Font.system(.title2, weight: .bold)
+
+	// The three setup sizes below are larger than any macOS text style, so they are written
+	// as a style *scaled* rather than as a fixed point size.
+	//
+	// `Font.system(size:)` does not move when somebody raises their text size — it is a
+	// number of points, forever — and these three carry every word on the setup screens:
+	// the title, the one line under it, and the hero. Set as literals, the flow that
+	// introduces the app was the part of the app that ignored the accessibility setting
+	// most completely.
+	//
+	// Anchored to the closest style rather than all to `.body`, because the styles do not
+	// grow at the same rate at accessibility sizes — a display face is meant to grow more
+	// slowly than body copy, and scaling a title from `.body` would have it overtake
+	// everything around it. macOS's own metrics are `.body` 13pt and `.largeTitle` 26pt,
+	// which is where the ratios come from.
+
+	/// A setup screen's title. One size across welcome / capture / done, where there used to
+	/// be three (25 / 26 / 30pt) for the same "screen title" role.
+	static let setupTitle = Font.largeTitle.weight(.bold).scaled(by: 34.0 / 26.0)
+
+	/// The one line on the opening screen, and nothing else.
+	///
+	/// Bigger than `setupTitle` and tracked tighter. A hero line set at body tracking
+	/// looks like a heading that happened to be large; the negative tracking is most of
+	/// what separates a product's first screen from a dialog's.
+	static let setupHero = Font.largeTitle.weight(.bold).scaled(by: 52.0 / 26.0)
+
+	/// Body copy under a setup title.
+	static let setupBody = Font.body.scaled(by: 14.0 / 13.0)
 
 	/// A group's heading.
 	static let groupTitle = Font.headline
@@ -286,6 +429,13 @@ enum Typography {
 	/// The Gaze mark used as a picture rather than as text — the hero row, the About
 	/// panel. Fixed rather than scaled: this is an illustration sized against the layout
 	/// around it, and it is never the only statement of what it says.
+	///
+	/// This is the rule the rest of the app's remaining `.system(size:)` literals follow.
+	/// Text scales; drawings do not. `StoredPasswordRowArt` and `PermissionRowIllustration`
+	/// are reconstructions of real rows, composed at the size they are displayed, and the
+	/// notch panel is drawn against a physical cutout — grow the type inside any of them and
+	/// the picture stops being a picture of the thing. A fixed size in one of those is a
+	/// decision, not an oversight.
 	static let glyph = Font.system(size: 34, weight: .thin)
 	static let glyphLarge = Font.system(size: 40, weight: .thin)
 }
@@ -302,18 +452,32 @@ struct VibrantBackground: NSViewRepresentable {
 	/// Settings draws its own heading, so its title would be a second one. A utility window
 	/// like the recognition test has no heading of its own and needs to keep AppKit's.
 	var hidesTitle = true
+	/// What the material is allowed to sample.
+	///
+	/// `.behindWindow` frosts the desktop. `.withinWindow` frosts whatever this app drew
+	/// underneath it, which is the only one of the two that can see `WallpaperBackdrop`.
+	///
+	/// This was hardcoded to `.behindWindow`, and that is why the wallpaper every comment
+	/// in this file talks about has never once appeared on screen: a `behindWindow` effect
+	/// view composites the desktop into its rectangle, so it does not blend with the
+	/// SwiftUI view below it in the stack — it replaces it. `WallpaperBackdrop` was being
+	/// drawn and then painted over on every frame. What you actually saw was the desktop
+	/// behind the window, and over a dark desktop that is a flat grey slab, which is
+	/// precisely the "painted rather than glazed" failure this type was written to avoid.
+	var blending: NSVisualEffectView.BlendingMode = .behindWindow
 
 	func makeNSView(context: Context) -> NSVisualEffectView {
 		let view = TransparentHostView()
 		view.hidesTitle = hidesTitle
 		view.material = material
-		view.blendingMode = .behindWindow
+		view.blendingMode = blending
 		view.state = .active
 		return view
 	}
 
 	func updateNSView(_ view: NSVisualEffectView, context: Context) {
 		view.material = material
+		view.blendingMode = blending
 	}
 
 	/// Clears the window behind itself, and takes the title bar out of the way.
@@ -419,11 +583,21 @@ struct IconTile: View {
 	var isEnabled = true
 
 	var body: some View {
+		// A glyph, not a badge.
+		//
+		// This drew each symbol on its own rounded, filled tile — a lighter square inside
+		// an already-light group. System Settings does that in its *sidebar*, where the
+		// tile's colour is what tells Wi-Fi from Bluetooth at a glance, and never in a
+		// detail pane: there the icon is a bare glyph in the row's leading column. A grey
+		// square behind a grey glyph adds a second rounded rectangle inside every row and
+		// carries no information, since these tiles were all the same colour anyway.
+		//
+		// Bigger and secondary-weight to compensate: the tile was doing the work of making
+		// a 13pt glyph findable, and size and tone do it instead.
 		Image(systemName: symbol)
-			.font(.system(size: 13, weight: .medium))
-			.foregroundStyle(tint ?? Theme.label)
+			.font(.system(size: 17, weight: .regular))
+			.foregroundStyle(tint ?? Theme.secondaryLabel)
 			.frame(width: 26, height: 26)
-			.glassSurface(cornerRadius: 8, fill: Theme.surfaceRaised)
 			.opacity(isEnabled ? 1 : 0.45)
 	}
 }
@@ -438,12 +612,30 @@ struct SettingRow<Trailing: View>: View {
 	/// SF Symbol shown in a tinted tile at the leading edge.
 	var symbol: String?
 	var symbolTint: Color?
+	/// A picture that stands in for the glyph — a person's portrait, an app's icon.
+	///
+	/// Only the credits rows pass one. Everywhere else the icon column is a shape to scan
+	/// by and a photograph would be noise; on a list of people it is the opposite, because
+	/// a face is the fastest way to tell one person from another and a row of identical
+	/// grey glyphs is the slowest.
+	var portrait: NSImage?
 	var isEnabled = true
 	@ViewBuilder var trailing: Trailing
 
 	var body: some View {
 		HStack(spacing: 12) {
-			if let symbol {
+			if let portrait {
+				// Rounded square, not a circle. Half of these are app icons, and macOS app
+				// icons are squircles — circling them crops the artwork its designer chose.
+				Image(nsImage: portrait)
+					.resizable()
+					.interpolation(.high)
+					.aspectRatio(contentMode: .fill)
+					.frame(width: 26, height: 26)
+					.clipShape(.rect(cornerRadius: 6, style: .continuous))
+					.opacity(isEnabled ? 1 : 0.45)
+					.accessibilityHidden(true)
+			} else if let symbol {
 				IconTile(symbol: symbol, tint: symbolTint, isEnabled: isEnabled)
 			}
 			VStack(alignment: .leading, spacing: 2) {
@@ -460,9 +652,13 @@ struct SettingRow<Trailing: View>: View {
 			Spacer(minLength: 8)
 			trailing
 		}
+		// System Settings' own row metrics. Its rows sit just under 50pt and are inset
+		// further from the group's edge than 15pt — the density here was a touch tighter
+		// than the system's everywhere, and being consistently a few points tight is the
+		// kind of difference you read as "not quite right" without being able to name it.
 		.padding(.horizontal, Theme.rowInset)
-		.padding(.vertical, 9)
-		.frame(minHeight: 42)
+		.padding(.vertical, 11)
+		.frame(minHeight: 48)
 	}
 }
 
@@ -675,128 +871,84 @@ struct SettingsField: View {
 		}
 		.textFieldStyle(.plain)
 		.font(Typography.row)
-		.padding(.horizontal, 10)
-		.padding(.vertical, 6)
-		// Recessed rather than raised: a field is a well cut into the glass, so it takes a
-		// darker fill and an inner rim, the opposite of a group's lit top edge.
-		.background {
-			RoundedRectangle(cornerRadius: 8, style: .continuous)
-				.fill(Theme.dynamic(light: .white.opacity(0.9), dark: .black.opacity(0.22)))
-				.overlay {
-					RoundedRectangle(cornerRadius: 8, style: .continuous)
-						.strokeBorder(
-							LinearGradient(
-								colors: [Theme.dynamic(light: .black.opacity(0.18), dark: .black.opacity(0.35)), .white.opacity(0.1)],
-								startPoint: .top, endPoint: .bottom),
-							lineWidth: 1)
-				}
-		}
+		.padding(.horizontal, 14)
+		.padding(.vertical, 7)
+		// The system's glass, in a capsule — the same treatment `GlassField` gives the field
+		// on the setup screen.
+		//
+		// This drew its own well: a rounded rectangle at radius 8, filled darker than the
+		// group behind it, with a hairline round the edge. Two problems. It was the one
+		// control in the window still hand-drawn, so on macOS 26 it sat in a row between a
+		// real glass button and a real glass popup looking like neither; and it was the only
+		// text field in the app that was not a capsule, so the password field in Settings and
+		// the password field in setup — the same field, asking the same question — had
+		// different shapes.
+		//
+		// `.glassEffect` is the real material, with the system's own focus ring, so there is
+		// nothing left here to approximate.
+		.glassEffect(.regular, in: .capsule)
 	}
 }
 
-/// The app's push button — the *only* one.
+/// The app's push button.
 ///
-/// There used to be three button languages: this, `.borderedProminent`, and a bare green
-/// text button, with no rule for which went where. Enrolment stacked two of them fourteen
-/// points apart. One style with three prominences is what makes a button look like a button
-/// everywhere in the app.
-struct AccentButtonStyle: ButtonStyle {
+/// The system's own button styles — `.bordered` for anything, `.borderedProminent` for the
+/// one action a screen exists for — and nothing else. On macOS 26 these render as real
+/// Liquid Glass, with the system's press, hover and focus behaviour for free; a hand-rolled
+/// glass style could only ever approximate them, and the whole point is that a button here
+/// reads as Apple's because it *is* Apple's.
+///
+/// No custom tint: buttons take the system accent, which keeps green reserved for the one
+/// thing it means everywhere else in this app — *recognised*. A destructive button is a plain
+/// `Button(role: .destructive)`, which the system already draws in red.
+enum GazeButtonProminence {
+	/// The action the screen exists for — at most one per screen. Filled (`.borderedProminent`).
+	case primary
+	/// Everything else. Bordered.
+	case standard
+}
 
-	enum Prominence {
-		/// Filled and tinted. The action the screen exists for — at most one per screen.
-		case primary
-		/// Tinted background, for anything that isn't.
-		case standard
-		/// No background until hovered. Sits beside another button without competing.
-		case quiet
+extension View {
+	/// Apply the app's standard push-button styling. `size` defaults to `.regular`; hero and
+	/// setup actions take `.large`.
+	func gazeButton(_ prominence: GazeButtonProminence = .standard, size: ControlSize = .regular)
+		-> some View
+	{
+		modifier(GazeButtonModifier(prominence: prominence, size: size))
 	}
+}
 
-	var role: ButtonRole?
-	var prominence: Prominence = .standard
+struct GazeButtonModifier: ViewModifier {
+	let prominence: GazeButtonProminence
+	let size: ControlSize
 
-	func makeBody(configuration: Configuration) -> some View {
-		ButtonBody(configuration: configuration, role: role, prominence: prominence)
-	}
-
-	/// A view rather than a bare `configuration.label` chain, because focus and hover are
-	/// state — and a `ButtonStyle` cannot hold state itself.
-	private struct ButtonBody: View {
-
-		let configuration: Configuration
-		let role: ButtonRole?
-		let prominence: Prominence
-
-		/// Custom button styles lose AppKit's focus ring, so the app was unusable by
-		/// keyboard: you could tab onto a button and get no indication you had. This puts
-		/// the ring back. It only ever shows when the user has turned on keyboard access —
-		/// which is exactly the person it is for.
-		@Environment(\.isFocused) private var isFocused
-		@State private var isHovering = false
-
-		/// White unless the button is destructive.
-		///
-		/// A primary action gets its weight from being *filled* — white on the wallpaper,
-		/// with the label knocked out in black — rather than from being coloured. Green here
-		/// would have made the loudest control on the screen the one place green does not
-		/// mean "recognised".
-		private var tint: Color {
-			role == .destructive ? Theme.danger : Theme.label
-		}
-
-		var body: some View {
-			configuration.label
-				.font(Typography.control)
-				.foregroundStyle(prominence == .primary ? Theme.onAccent : tint)
-				.padding(.horizontal, 12)
-				.padding(.vertical, 5)
-				// Glass on the control, flat on the container it sits in.
-				//
-				// Aviorrok's suggestion, and it inverts what the window was doing: groups
-				// were glass and buttons were a wash of white, so the surface you *can't*
-				// touch had the depth and the surface you can had none. Glass here reads as
-				// a physical control lying on the panel, and it gives the system's own
-				// pressed and hover response for free through `.interactive()`.
-				//
-				// `quiet` stays flat until it is hovered. It exists to sit beside another
-				// button without competing, and a second piece of glass beside the first is
-				// exactly the competition it is there to avoid.
-				.background {
-					let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-					if prominence == .quiet && !isHovering && !configuration.isPressed {
-						shape.fill(.clear)
-					} else {
-						shape
-							.fill(tint.opacity(fillOpacity))
-							.glassEffect(.regular.interactive(), in: shape)
-					}
+	func body(content: Content) -> some View {
+		Group {
+			// `.glass` / `.glassProminent` are the Liquid Glass styles proper: a lensing,
+			// refracting control rather than `.bordered`'s flat capsule with a glass-ish
+			// fill. Same system press, hover and focus behaviour, same accent, and no
+			// hand-rolled material — this is Apple's, which is the whole point.
+			if #available(macOS 26.0, *) {
+				switch prominence {
+				case .primary: content.buttonStyle(.glassProminent)
+				case .standard: content.buttonStyle(.glass)
 				}
-				.overlay {
-					RoundedRectangle(cornerRadius: 7, style: .continuous)
-						.strokeBorder(Theme.label.opacity(isFocused ? 0.9 : 0), lineWidth: 2)
-						.padding(-2)
+			} else {
+				switch prominence {
+				case .primary: content.buttonStyle(.borderedProminent)
+				case .standard: content.buttonStyle(.bordered)
 				}
-				.contentShape(.rect(cornerRadius: 7, style: .continuous))
-				.onHover { isHovering = $0 }
-				.animation(.easeOut(duration: 0.12), value: isHovering)
-		}
-
-		private var fillOpacity: Double {
-			switch prominence {
-			case .primary: configuration.isPressed ? 0.78 : (isHovering ? 1 : 0.92)
-			case .standard: configuration.isPressed ? 0.26 : (isHovering ? 0.2 : 0.14)
-			case .quiet: configuration.isPressed ? 0.18 : (isHovering ? 0.1 : 0)
 			}
 		}
-	}
-}
-
-extension ButtonStyle where Self == AccentButtonStyle {
-	static var accent: AccentButtonStyle { AccentButtonStyle() }
-	static var quiet: AccentButtonStyle { AccentButtonStyle(prominence: .quiet) }
-	static var destructive: AccentButtonStyle { AccentButtonStyle(role: .destructive) }
-	/// Filled white. At most one per screen — the thing the screen is for.
-	static var primaryAction: AccentButtonStyle {
-		AccentButtonStyle(prominence: .primary)
+		.controlSize(size)
+		// Capsule, everywhere, stated once.
+		//
+		// `.glass` picks its own shape from the control's size, so a regular button came out
+		// a rounded rectangle and a small one came out nearly a capsule — two shapes for the
+		// same control, side by side in the same row on the credits and test panes. macOS 26
+		// draws its own glass controls as capsules; matching that also means the app has one
+		// button shape rather than a shape per size.
+		.buttonBorderShape(.capsule)
 	}
 }
 

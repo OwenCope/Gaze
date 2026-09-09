@@ -5,57 +5,58 @@ import SwiftUI
 /// One claim, one sentence saying what it costs, and a way out. The temptation
 /// with a first screen is to explain the whole app; nobody reads that, and the
 /// question actually being asked is only "do I want this at all". What the app
-/// does with a face belongs on the screen where the face is taken, which is
+/// does with a face belongs on the screens where the face is taken, which is
 /// where it appears.
+///
+/// The only screen set as a hero, and the only one with no progress row: you are
+/// not on step one of anything until you have said yes.
 struct SetupWelcomeStep: View {
 	var onContinue: () -> Void
 	var onSkip: () -> Void
 
-	@State private var appeared = false
+	@State private var isSkipHovering = false
 
 	var body: some View {
-		VStack(spacing: 0) {
-			Spacer()
+		SetupScaffold(
+			title: "Unlock by looking",
+			message:
+				"Gaze watches for you when your screen is locked, and enters your password "
+				+ "when it recognizes you.",
+			isHero: true,
+			// 216, not 180. The mark is the only object on an 880×660 window and it was
+			// drawing at 130pt inside its own 180pt frame — small enough that the screen read
+			// as a dialog that had lost its content rather than as a title page. The window
+			// has the room; the one thing on it should use some of it.
+			figureHeight: 216,
+			showsHero: true
+		) {
+			SetupMark(kind: .looking, diameter: 216)
+		} actions: {
+			SetupButton(action: onContinue)
 
-			SetupMark(kind: .looking, diameter: 180)
-				.scaleEffect(appeared ? 1 : 0.86)
-				.opacity(appeared ? 1 : 0)
-				.animation(.spring(response: 0.55, dampingFraction: 0.72), value: appeared)
-
-			Spacer().frame(height: 36)
-
-			Text("Unlock by looking")
-				.font(.system(size: 30, weight: .bold))
-				.multilineTextAlignment(.center)
-				.opacity(appeared ? 1 : 0)
-				.offset(y: appeared ? 0 : 10)
-				.animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1), value: appeared)
-
-			Text("Gaze watches for you when your screen is locked, and enters your password when it recognizes you.")
-				.font(.callout)
-				.foregroundStyle(.white.opacity(0.6))
-				.multilineTextAlignment(.center)
-				.fixedSize(horizontal: false, vertical: true)
-				.padding(.horizontal, 40)
-				.padding(.top, 10)
-				.opacity(appeared ? 1 : 0)
-				.offset(y: appeared ? 0 : 10)
-				.animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.18), value: appeared)
-
-			Spacer()
-
-			VStack(spacing: 14) {
-				SetupButton(action: onContinue)
-				Button("Not now", action: onSkip)
-					.buttonStyle(.plain)
-					.font(.callout)
-					.foregroundStyle(.white.opacity(0.5))
-			}
-			.opacity(appeared ? 1 : 0)
-			.animation(.easeOut(duration: 0.4).delay(0.28), value: appeared)
+			// A control, not a line of grey text.
+			//
+			// "Not now" was `.buttonStyle(.plain)` with no padding and no hover, so it had a
+			// hit target the exact size of the words and gave nothing back when the pointer
+			// reached it — which on the one screen where somebody might genuinely want to
+			// decline is the wrong thing to make hard to press. It stays quiet, because
+			// declining should not compete with continuing, but it behaves like something
+			// you can click.
+			//
+			// Lightens on hover rather than darkening: a darker chip on a dark ground reads
+			// as a hole punched in the screen.
+			Button("Not now", action: onSkip)
+				.buttonStyle(.plain)
+				.font(Typography.setupBody)
+				.foregroundStyle(isSkipHovering ? Theme.setupSecondary : Theme.setupTertiary)
+				.padding(.horizontal, 16)
+				.padding(.vertical, 7)
+				.background {
+					Capsule().fill(.white.opacity(isSkipHovering ? 0.08 : 0))
+				}
+				.contentShape(.capsule)
+				.onHover { isSkipHovering = $0 }
+				.animation(Theme.Motion.quick, value: isSkipHovering)
 		}
-		.padding(.horizontal, 32)
-		.padding(.bottom, 32)
-		.onAppear { appeared = true }
 	}
 }

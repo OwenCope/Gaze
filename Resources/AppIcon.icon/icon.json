@@ -1,46 +1,30 @@
 {
-  "fill" : {
-    "linear-gradient" : [
-      "gray:0.00000,1.00000",
-      "gray:0.49663,1.00000"
-    ],
-    "orientation" : {
-      "start" : {
-        "x" : 0.5,
-        "y" : 0
-      },
-      "stop" : {
-        "x" : 0.5,
-        "y" : 0.7
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.00744,0.14132,0.00000,1.00000",
+          "display-p3:0.00000,1.00000,0.03884,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "linear-gradient" : [
+          "display-p3:0.00000,0.00000,0.00000,1.00000",
+          "extended-gray:0.25000,1.00000"
+        ]
       }
     }
-  },
+  ],
   "groups" : [
     {
       "layers" : [
         {
-          "hidden-specializations" : [
-            {
-              "value" : true
-            },
-            {
-              "idiom" : "square",
-              "value" : false
-            },
-            {
-              "idiom" : "watchOS",
-              "value" : false
-            }
-          ],
-          "image-name" : "Untitled-design-inverted.png",
-          "name" : "Untitled-design-inverted",
-          "position" : {
-            "scale" : 0.85,
-            "translation-in-points" : [
-              -0.4249999999999545,
-              -0.4249999999999545
-            ]
-          }
+          "glass" : true,
+          "image-name" : "gaze-mark.png",
+          "name" : "gaze-mark"
         }
       ],
       "shadow" : {
@@ -49,7 +33,7 @@
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.5
+        "value" : 0.3
       }
     }
   ],

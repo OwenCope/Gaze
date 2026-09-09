@@ -11,25 +11,32 @@ import AppKit
 /// hollow while it waits for a face and fills as the angles land, with no
 /// transition and nothing to press.
 ///
-/// The result is that the only controls in setup are Continue on the welcome and
-/// Done at the end. Everything between is the camera.
+/// The result is that this screen has no button at all once the camera is running.
+/// It is the middle of the flow and the only part that is genuinely waiting on the
+/// person rather than on a decision.
 struct SetupCaptureStep: View {
 
+	var position: SetupPosition?
 	let camera: CameraController
 	/// Nil until permission is granted — there is nothing to enroll into yet.
 	let model: EnrollmentModel?
 	var onAuthorized: () -> Void
+	var onBack: (() -> Void)?
 
 	@State private var isAuthorized = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
 	@State private var isRequesting = false
 
-	private let ringSide: CGFloat = 268
-	private let previewSide: CGFloat = 200
+	private let ringSide: CGFloat = 300
+	private let previewSide: CGFloat = 224
 
 	var body: some View {
-		VStack(spacing: 0) {
-			Spacer()
-
+		SetupScaffold(
+			position: position,
+			title: title,
+			message: caption,
+			figureHeight: ringSide,
+			onBack: onBack
+		) {
 			ZStack {
 				if let model {
 					EnrollmentRing(
@@ -40,7 +47,7 @@ struct SetupCaptureStep: View {
 					.frame(width: ringSide, height: ringSide)
 				} else {
 					Circle()
-						.strokeBorder(.white.opacity(0.14), lineWidth: 2)
+						.strokeBorder(Theme.tickEmpty, lineWidth: 2)
 						.frame(width: ringSide, height: ringSide)
 				}
 
@@ -54,7 +61,7 @@ struct SetupCaptureStep: View {
 							// each time someone glances at the trackpad.
 							Circle()
 								.fill(.black.opacity(camera.faceMissing ? 0.5 : 0))
-								.animation(.easeOut(duration: 0.22), value: camera.faceMissing)
+								.animation(Theme.Motion.quick, value: camera.faceMissing)
 						}
 				} else {
 					Circle()
@@ -63,46 +70,25 @@ struct SetupCaptureStep: View {
 						.overlay {
 							Image(systemName: "video.slash.fill")
 								.font(.system(size: 38, weight: .medium))
-								.foregroundStyle(.white.opacity(0.32))
+								.foregroundStyle(Theme.setupTertiary)
 						}
 				}
 			}
-
-			Spacer().frame(height: 34)
-
-			Text(title)
-				.font(.system(size: 26, weight: .bold))
-				.contentTransition(.opacity)
-
-			Text(caption)
-				.font(.callout)
-				.foregroundStyle(.white.opacity(0.6))
-				.multilineTextAlignment(.center)
-				.fixedSize(horizontal: false, vertical: true)
-				.padding(.horizontal, 40)
-				.padding(.top, 8)
-				// Fixed so the layout does not jump as the wording changes under it.
-				.frame(height: 44, alignment: .top)
-
-			Spacer()
-
+		} actions: {
 			// A button only where there is a decision. Once the camera is running the
 			// screen is waiting on a face, not on a click.
-			Group {
-				if !isAuthorized {
-					SetupButton(title: isRequesting ? "Requesting…" : "Allow Camera Access", action: requestAccess)
-						.disabled(isRequesting)
-				} else {
-					Text(model.map { "\(Int($0.progress * 100))%" } ?? "")
-						.font(.system(size: 15, weight: .semibold).monospacedDigit())
-						.foregroundStyle(.white.opacity(0.5))
-						.opacity(showsPercentage ? 1 : 0)
-				}
+			if !isAuthorized {
+				SetupButton(title: isRequesting ? "Requesting…" : "Allow Camera Access", action: requestAccess)
+					.disabled(isRequesting)
+			} else {
+				Text(model.map { "\(Int($0.progress * 100))%" } ?? "")
+					.font(Typography.setupBody.weight(.semibold).monospacedDigit())
+					.foregroundStyle(Theme.setupTertiary)
+					.opacity(showsPercentage ? 1 : 0)
+					.animation(Theme.Motion.quick, value: showsPercentage)
+					.frame(height: 28)
 			}
-			.frame(height: 40)
 		}
-		.padding(.horizontal, 32)
-		.padding(.bottom, 32)
 		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
 			refresh()
 		}
@@ -123,7 +109,7 @@ struct SetupCaptureStep: View {
 		guard isAuthorized else {
 			return "Nothing is recorded, and no images ever leave this Mac."
 		}
-		guard let model else { return "" }
+		guard let model else { return " " }
 		if case .capturing = model.phase { return model.instruction }
 		return camera.faceMissing ? "Look at the camera and fill the circle." : "Hold there."
 	}

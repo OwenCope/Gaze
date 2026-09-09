@@ -16,6 +16,21 @@ final class NotchCapsuleModel {
 		case locked
 		case scanning
 		case notRecognised
+		/// Matched the enrolled face, but the anti-spoof model judged it a fake — a photo
+		/// or a screen held to the camera. Its own phase, not `notRecognised`, because it
+		/// is a different answer: "that is your face, but it isn't you here."
+		case spoofRejected
+		/// Recognised, and now being asked to prove they are present — blink, turn, nod.
+		///
+		/// Between the match and the password, and only when the user has asked for it. The
+		/// object detector catches a device held in frame; this catches the case it cannot,
+		/// a photograph filling the whole frame with no bezel to see. A photo cannot blink.
+		///
+		/// The prompt travels with the phase rather than being read from a model, because
+		/// the panel is drawn by an `NSHostingView` in a different process context from the
+		/// watcher that picks the action, and a shared observable across that boundary is a
+		/// great deal of machinery for one short string.
+		case challenge(prompt: String, symbol: String, hintX: CGFloat, hintY: CGFloat, pulses: Bool)
 		/// Recognised, and the password has gone in. The tick.
 		case success
 		/// The Mac is actually open. The padlock lets go.
@@ -36,6 +51,24 @@ final class NotchCapsuleModel {
 		/// Success keeps the panel open to carry the tick. Unlocked is back to resting: the
 		/// panel is already on its way home and the padlock is the only thing left to say.
 		var isCompact: Bool { self == .locked || self == .unlocked }
+
+		/// The words the panel shows, where the phase carries its own.
+		var challengePrompt: String? {
+			if case .challenge(let prompt, _, _, _, _) = self { return prompt }
+			return nil
+		}
+
+		/// How the mark should move to demonstrate the action, if it should.
+		var challengeHint: (x: CGFloat, y: CGFloat, pulses: Bool)? {
+			if case .challenge(_, _, let x, let y, let pulses) = self { return (x, y, pulses) }
+			return nil
+		}
+
+		/// The action's own symbol, shown beside the words rather than instead of the face.
+		var challengeSymbol: String? {
+			if case .challenge(_, let symbol, _, _, _) = self { return symbol }
+			return nil
+		}
 
 		/// The padlock is drawn in every phase.
 		///
@@ -89,17 +122,43 @@ enum IslandMetrics {
 /// of every retract was cut off and the panel appeared to snap out of the notch.
 enum NotchAnimation {
 
-	/// Growing out. Springy, because emerging should feel like it has some life in it.
-	static let expand = Animation.spring(response: 0.44, dampingFraction: 0.78)
+	/// Growing out. A spring, because the panel emerges from a physical object and should
+	/// carry a little momentum doing it — and because a spring survives interruption, which
+	/// matters when a face arrives while the panel is still on its way out.
+	///
+	/// Shortened from `response: 0.44`. That is ~440ms for the *entrance* of an indicator
+	/// somebody sees every time they open their Mac; at that length you watch it arrive
+	/// instead of reading it. `dampingFraction: 0.8` keeps the overshoot inside the 0.1–0.3
+	/// bounce band — present enough to feel physical, not enough to wobble.
+	static let expand = Animation.spring(response: 0.34, dampingFraction: 0.8)
 
-	/// Going home. `.smooth` rather than a spring: no overshoot, and a duration that means
-	/// what it says, so the controller can wait exactly long enough.
-	static let retractDuration: TimeInterval = 0.55
-	static var retract: Animation { .smooth(duration: retractDuration) }
+	/// Going home. Ease-out, and quicker than the grow.
+	///
+	/// Two changes from `.smooth(duration: 0.55)`.
+	///
+	/// The curve: `.smooth` is SwiftUI's stock ease, and stock easings are too weak to read
+	/// as deliberate — this is the strong ease-out (0.23, 1, 0.32, 1), which leaves
+	/// immediately and settles slowly.
+	///
+	/// The duration: 550ms was longer than the grow, which is backwards. An entrance is the
+	/// part somebody is waiting for; an exit is the part they have already stopped caring
+	/// about, and holding a panel on screen for over half a second after its job is done is
+	/// how a status indicator starts feeling like an obstacle.
+	static let retractDuration: TimeInterval = 0.26
+	static var retract: Animation {
+		.timingCurve(0.23, 1, 0.32, 1, duration: retractDuration)
+	}
 
 	/// Between phases — the drop opening and closing as the state changes.
-	static let phaseDuration: TimeInterval = 0.5
-	static var phase: Animation { .smooth(duration: phaseDuration) }
+	///
+	/// Ease-in-**out**, not ease-out: this is not something entering or leaving, it is the
+	/// same object changing shape on screen, and movement between two on-screen states wants
+	/// symmetry at both ends. 280ms rather than 500 keeps it under the threshold where a
+	/// state change starts reading as a transition you have to sit through.
+	static let phaseDuration: TimeInterval = 0.28
+	static var phase: Animation {
+		.timingCurve(0.77, 0, 0.175, 1, duration: phaseDuration)
+	}
 
 	/// How long the controller must leave the window alive after asking it to retract.
 	/// The margin is for the frame the animation finishes on.
@@ -146,6 +205,15 @@ struct NotchCapsule: View {
 	var cutoutWidth: CGFloat = 0
 
 	@State private var breathe = false
+	/// Drives the challenge's demonstration, 0…1, run as a repeating autoreverse.
+	///
+	/// A plain `@State` toggled on appear rather than a `TimelineView` or a symbol effect:
+	/// the movement has to be an *offset of the mark*, and the symbol effects Apple ships
+	/// (`.breathe`, `.bounce`, `.wiggle`) all animate the glyph's own drawing rather than its
+	/// position, so none of them can lean a face to the left.
+	@State private var challengeNudge: CGFloat = 0
+
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 	@State private var expanded = false
 
 	/// Proportional to what is actually showing, not to the window.
@@ -290,7 +358,11 @@ struct NotchCapsule: View {
 					// down to where it sits. The same two values in reverse on the way back,
 					// so it leaves the way it arrived rather than simply disappearing.
 					.offset(y: islandIsOut ? 0 : islandHiddenOffset)
-					.scaleEffect(islandIsOut ? 1 : 0.24, anchor: .top)
+					// 0.24 is close to appearing from nothing, which is the one entrance
+					// that never looks right — but the island genuinely emerges from behind
+					// the cutout, so the scale is spatial rather than a pop. Reduced motion
+					// still opts out of it.
+					.scaleEffect(islandIsOut || reduceMotion ? 1 : 0.24, anchor: .top)
 					.opacity(islandIsOut ? 1 : 0)
 					.animation(
 						islandIsOut ? NotchAnimation.expand : NotchAnimation.retract,
@@ -328,14 +400,62 @@ struct NotchCapsule: View {
 			}
 
 			if showsDrop && !isIsland {
-				content
-					.frame(width: glyphSide, height: glyphSide)
+				VStack(spacing: 7) {
+					content
+						.frame(width: glyphSide, height: glyphSide)
+						// The mark performs the action it is asking for.
+						//
+						// A face that leans left says "turn left" before the words under it
+						// have been read, and keeps saying it while you do — which matters,
+						// because the person is looking at the camera rather than at the
+						// text. Blink and open-mouth have no direction, so they pulse in
+						// place; anything else would be miming a movement nobody asked for.
+						//
+						// Transform only, per the rule that transforms and opacity are the
+						// two things that cost nothing to animate. A 6pt lean on a ~28pt
+						// mark is legible without the panel appearing to wobble.
+						.offset(
+							x: challengeNudge * (model.phase.challengeHint?.x ?? 0) * 6,
+							y: challengeNudge * (model.phase.challengeHint?.y ?? 0) * 6)
+						.scaleEffect(
+							(model.phase.challengeHint?.pulses ?? false)
+								? 1 + challengeNudge * 0.08 : 1)
+
+					// One line under the mark, only while something is being asked.
+					//
+					// The panel had no text in it at all before this, and the reason it can
+					// have some now is that the request is not a status — it is an
+					// instruction, and an instruction that arrives as a bare glyph is a
+					// riddle. "Turn your head left" cannot be mistaken for anything else.
+					if let prompt = model.phase.challengePrompt {
+						HStack(spacing: 5) {
+							Image(systemName: model.phase.challengeSymbol ?? "figure.walk.motion")
+								.font(.system(size: 10, weight: .semibold))
+							Text(prompt)
+								.font(.system(size: 11, weight: .medium))
+								.lineLimit(1)
+								.fixedSize()
+						}
+						.foregroundStyle(.white)
+						// Arrives with the words rather than under them: a caption that slides
+						// up into place reads as part of the same panel, where one that fades
+						// in on the spot reads as a second thing appearing.
+						.transition(
+							.opacity.combined(with: .offset(y: -4)))
+					}
+				}
 					// Centred in the solid band — not the whole window (whose top third is
 					// behind the cutout) and not the whole visible drop (whose lower part
 					// fades to clear, which would dissolve the glyph along with it).
 					.padding(.top, glyphTop)
 					.opacity(expanded ? 1 : 0)
-					.scaleEffect(expanded ? 1 : 0.72, anchor: .top)
+					// Reduced motion keeps the fade and drops the scale.
+					//
+					// This is the biggest movement the panel makes — a glyph growing from
+					// 72% while the drop grows around it — and "reduce motion" is a request
+					// to stop exactly that. Gentler, not gone: the opacity change still says
+					// the panel arrived, so nothing is lost but the travel.
+					.scaleEffect(expanded || reduceMotion ? 1 : 0.72, anchor: .top)
 					// Out before the panel is, so the panel never closes over a glyph that
 					// is still solid — that overlap is what made the retract look like two
 					// separate events instead of one.
@@ -349,7 +469,25 @@ struct NotchCapsule: View {
 		// The grow from padlock to scanner is the same spring, so the two states read as
 		// one object changing rather than two panels swapping.
 		.animation(NotchAnimation.phase, value: model.phase.isCompact)
-		.modifier(Shaker(active: model.phase == .notRecognised))
+		// The demonstration runs only while something is being asked, and stops dead when it
+		// is answered — a mark still leaning left after the unlock has begun would be asking
+		// for something that no longer matters.
+		//
+		// `reduceMotion` drops the movement and keeps the words. That is the honest fallback
+		// here: the caption is the instruction in full, so nothing is lost but the shortcut.
+		.onChange(of: model.phase.challengePrompt) { _, prompt in
+			guard prompt != nil, !reduceMotion else {
+				withAnimation(.easeOut(duration: 0.18)) { challengeNudge = 0 }
+				return
+			}
+			challengeNudge = 0
+			withAnimation(
+				.easeInOut(duration: 0.62).repeatForever(autoreverses: true)
+			) {
+				challengeNudge = 1
+			}
+		}
+		.modifier(Shaker(active: model.phase == .notRecognised || model.phase == .spoofRejected))
 		.onAppear {
 			breathe = true
 			// Driven from the view's own state rather than straight off the model: the
@@ -545,7 +683,7 @@ struct NotchCapsule: View {
 	/// Same size, same band, same idea. Ruken's suggestion and Sapphire's behaviour: the mark
 	/// belongs beside the housing, not in a panel drawn over the lock screen.
 	private var earMark: some View {
-		Image(systemName: model.phase == .success ? "checkmark.circle.fill" : "faceid")
+		Image(systemName: model.phase == .success ? "checkmark.circle.fill" : (model.phase == .spoofRejected ? "eye.slash.circle.fill" : "faceid"))
 			.font(.system(size: 12, weight: .semibold))
 			.foregroundStyle(earTint)
 			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
@@ -559,7 +697,8 @@ struct NotchCapsule: View {
 			//
 			// The cycle is quick, so `isActive` turning false ends it almost immediately.
 			.symbolEffect(
-				.breathe, options: .repeating.speed(1.8), isActive: model.phase == .scanning)
+				.breathe, options: .repeating.speed(1.0),
+				isActive: model.phase == .scanning || model.phase.challengePrompt != nil)
 			.symbolEffect(.bounce, value: model.phase == .notRecognised)
 			.frame(width: earWidth, height: restingBarHeight)
 	}
@@ -567,7 +706,7 @@ struct NotchCapsule: View {
 	private var earTint: Color {
 		switch model.phase {
 		case .success: return Theme.faceID
-		case .notRecognised: return Theme.danger
+		case .notRecognised, .spoofRejected: return Theme.danger
 		default: return .white
 		}
 	}
@@ -666,9 +805,16 @@ struct NotchCapsule: View {
 	///
 	/// Hand-drawing the Gaze mark and morphing it to a tick was the wrong instinct:
 	/// every version was a guess at the real animation and read as an approximation.
-	/// `faceid` and `checkmark.circle.fill` are both system symbols, and
-	/// `.replace.magic` is the transition Apple uses to morph between them — so this is
-	/// the genuine article rather than an imitation of it.
+	/// `eye` and `checkmark.circle.fill` are both system symbols, and `.replace.magic` is
+	/// the transition Apple uses to morph between them — so this is the genuine article
+	/// rather than an imitation of it.
+	///
+	/// The mark used to be `faceid`, and that was two problems in one glyph: it is Apple's
+	/// own trademarked Face ID mark, and it claims a capability this app does not have.
+	/// `eye` keeps every one of the system animations — which is the whole reason not to
+	/// hand-draw the mark — while saying the true thing, and it is the mark the website
+	/// uses. It also pairs with `eye.slash.circle.fill`, the spoof rejection, which now
+	/// reads as the negation of the resting mark rather than as an unrelated glyph.
 	private var content: some View {
 		Image(systemName: symbolName)
 			.font(
@@ -696,8 +842,9 @@ struct NotchCapsule: View {
 			//
 			// The cycle is quick, so `isActive` turning false ends it almost immediately.
 			.symbolEffect(
-				.breathe, options: .repeating.speed(1.8), isActive: model.phase == .scanning)
+				.breathe, options: .repeating.speed(1.0), isActive: model.phase == .scanning)
 			.symbolEffect(.bounce, value: model.phase == .notRecognised)
+			.symbolEffect(.bounce, value: model.phase == .spoofRejected)
 			// The shackle springing open. `.bounce` on the padlock is the one moment in the
 			// sequence that should feel mechanical rather than smooth — a lock is a physical
 			// thing, and it lets go all at once.
@@ -758,7 +905,14 @@ struct NotchCapsule: View {
 		// A bare tick when a glass disc is drawn behind it — two circles, one filled and one
 		// of glass, would read as a badge stuck on a badge.
 		case .success: return showsGlassTick ? "checkmark" : "checkmark.circle.fill"
-		case .scanning, .notRecognised: return "faceid"
+		case .spoofRejected: return "eye.slash.circle.fill"
+		// The face, not the challenge's own symbol.
+		//
+		// A challenge is not a different state from scanning — it is scanning, with one more
+		// thing asked. Swapping the mark out would say the camera had stopped looking at the
+		// exact moment it is looking hardest. The action's symbol goes in the caption line
+		// underneath instead, where it sits beside the words it belongs to.
+		case .challenge, .scanning, .notRecognised: return "faceid"
 		}
 	}
 
@@ -773,8 +927,8 @@ struct NotchCapsule: View {
 		// White inside the glass disc: the green is in the glass, and a green tick on a green
 		// disc loses the shape that carries the meaning.
 		case .success: return showsGlassTick ? .white : Theme.faceID
-		case .notRecognised: return Theme.danger
-		case .locked, .scanning, .unlocked: return .white
+		case .notRecognised, .spoofRejected: return Theme.danger
+		case .locked, .scanning, .unlocked, .challenge: return .white
 		}
 	}
 }

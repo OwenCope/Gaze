@@ -1,5 +1,7 @@
+import AppKit
 import Observation
 import SwiftUI
+import Vision
 
 /// Live recognition, with the numbers shown.
 ///
@@ -7,6 +9,10 @@ import SwiftUI
 /// recognition actually good enough to unlock with? Enrolling a face proves nothing on
 /// its own — what matters is the margin between your score and a stranger's, and the only
 /// way to see that is to watch it run.
+///
+/// The anti-spoof read-out mirrors what the lock screen actually checks (`AntiSpoofGate`):
+/// the passive texture model and the object detector, the two signals that gate a real
+/// unlock. Blink is shown alongside as the plainest demonstration that a photo can't pass.
 ///
 /// Nothing here changes any setting or unlocks anything. It is safe to leave open.
 struct RecognitionTestView: View {
@@ -20,6 +26,42 @@ struct RecognitionTestView: View {
 	@State private var floor: Float = 1
 	@State private var samples = 0
 	@State private var lastDisplayUpdate = Date.distantPast
+	/// Shut by default — see the note on the disclosure in `readout`.
+	@State private var showsDetail = false
+
+	/// Object-detector anti-spoof (`SpoofDetector`): how confidently the Roboflow-trained
+	/// detector sees a held phone/screen/photo in the frame. nil when no model is installed.
+	/// This is the signal that catches the held-photo attack — it looks for the device, not
+	/// the face's texture.
+	@State private var spoofConf: Float?
+	private let spoof = SpoofDetector()
+
+	/// Active challenge–response liveness: a randomly chosen action the user has to perform.
+	/// The one anti-spoof signal a webcam can do well — a photo can't turn its head or blink
+	/// on demand, and the demand is random.
+	@State private var challenge = LivenessChallenge()
+
+	// ── Blink liveness ────────────────────────────────────────────────
+	/// Eye openness (height/width of the eye landmarks), ~0.30 open, <0.15 shut. A photo
+	/// holds one value forever; a live person's dips when they blink. That dip-then-recover
+	/// is the thing a flat image can't fake, in any light.
+	@State private var eyeOpen: Float = 0
+	@State private var eyesShut = false
+	@State private var blinked = false
+
+	/// The head's measured orientation, shown under Details.
+	///
+	/// Which way Vision's yaw runs has been got wrong three times in this app — the turn
+	/// challenge asked for the opposite of what it said, the enrolment ring lit the tick
+	/// across from the one being looked at, and the nod completed on a raised chin. Each
+	/// time it was settled by argument about which way a camera faces, and each time the
+	/// argument lost to the camera.
+	///
+	/// So the figure is on screen, with the word the code derives from it beside it. If the
+	/// word says "left" while the head is turning right, the convention is wrong and it takes
+	/// two seconds rather than a rebuild to find out. It sits under the Details disclosure
+	/// with the other raw numbers, shut by default.
+	@State private var pose: FacePose = .zero
 
 	/// Accumulated between publishes. Deliberately a reference type held in @State so
 	/// mutating it does not invalidate the view.
@@ -46,19 +88,11 @@ struct RecognitionTestView: View {
 		// Room for the traffic lights: the title bar is transparent and content runs under
 		// it, so the top inset is the window's own chrome now.
 		.padding(.top, 18)
-		// No trailing `Spacer`. It existed to fill a fixed 620pt frame, and once the frame
-		// went content-sized it did nothing but manufacture dead air under the Reset button.
 		.frame(width: 420)
-		// The same glass as the settings window. This was the one surface still painted
-		// opaque, and next to the glazed settings window it read as a prop from a different
-		// app. The camera disc and score bar sit on glass just as legibly.
+		// The same glass as the settings window.
 		.background(WindowGlass(keepsTitle: true))
-		// Committed to dark, deliberately, rather than following the system.
-		//
-		// This window is mostly camera. A black surround is what keeps the eye on the preview
-		// rather than on the wall behind it — the same reason Photo Booth and QuickTime's
-		// recorder stay dark whatever the system is set to. Its readouts are tuned against a
-		// dark ground too, so following the appearance leaves them washed out on light.
+		// Committed to dark, deliberately, rather than following the system. This window is
+		// mostly camera, and a dark surround keeps the eye on the preview.
 		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
@@ -73,12 +107,6 @@ struct RecognitionTestView: View {
 
 	// MARK: - Sections
 
-	/// No title.
-	///
-	/// The window's own title bar already says "Test Recognition" an inch above this, and it
-	/// said it in a different size and weight — two headings for one window, disagreeing
-	/// about how to draw the same six words. What is left is the line that says something
-	/// the title bar cannot.
 	private var header: some View {
 		Text(store.isEnrolled
 			? "Nothing is unlocked here. Look at the camera and watch the score."
@@ -89,27 +117,18 @@ struct RecognitionTestView: View {
 			.fixedSize(horizontal: false, vertical: true)
 	}
 
-	/// The verdict, as a pill rather than bare text.
+	/// The verdict: a status dot and a word. No pill, no glow — colour only when it means
+	/// something (green = recognised), grey otherwise.
 	private var verdict: some View {
-		HStack(spacing: 7) {
-			Image(systemName: matched ? "checkmark.circle.fill" : verdictSymbol)
-				.font(.system(.body, weight: .semibold))
+		HStack(spacing: 8) {
+			Circle()
+				.fill(matched ? Theme.faceID : Theme.tertiaryLabel)
+				.frame(width: 7, height: 7)
 			Text(statusText)
-				.font(.system(.body, weight: .medium))
+				.font(.system(.callout, weight: .medium))
+				.foregroundStyle(matched ? Theme.label : Theme.secondaryLabel)
 		}
-		.foregroundStyle(matched ? Theme.faceID : Theme.secondaryLabel)
-		.padding(.horizontal, 14)
-		.padding(.vertical, 7)
-		.background(
-			Capsule().fill((matched ? Theme.faceID : Color.white).opacity(matched ? 0.14 : 0.06)))
 		.animation(.easeOut(duration: 0.2), value: matched)
-	}
-
-	private var verdictSymbol: String {
-		if camera.state == .denied { return "video.slash.fill" }
-		if !store.isEnrolled { return "person.crop.circle.badge.questionmark" }
-		if camera.faceMissing { return "viewfinder" }
-		return "xmark.circle.fill"
 	}
 
 	@ViewBuilder
@@ -144,26 +163,20 @@ struct RecognitionTestView: View {
 			VStack(spacing: 7) {
 				GeometryReader { geometry in
 					ZStack(alignment: .leading) {
-						Capsule().fill(.white.opacity(0.07))
+						Capsule().fill(Theme.label.opacity(0.08))
 
 						Capsule()
-							.fill(
-								LinearGradient(
-									colors: matched
-										? [Theme.faceID.opacity(0.7), Theme.faceID]
-										: [Theme.warning.opacity(0.6), Theme.warning],
-									startPoint: .leading, endPoint: .trailing)
-							)
+							.fill(matched ? Theme.faceID : Theme.secondaryLabel)
 							.frame(width: geometry.size.width * CGFloat(max(0, min(1, score))))
 
 						// Where the match threshold sits.
 						Rectangle()
-							.fill(Theme.label.opacity(0.65))
-							.frame(width: 2)
+							.fill(Theme.label.opacity(0.55))
+							.frame(width: 1.5)
 							.offset(x: geometry.size.width * CGFloat(store.embedder.matchThreshold))
 					}
 				}
-				.frame(height: 8)
+				.frame(height: 6)
 				.animation(.easeOut(duration: 0.12), value: score)
 
 				HStack {
@@ -176,87 +189,268 @@ struct RecognitionTestView: View {
 				.font(Typography.mono)
 			}
 
-			// The two numbers that actually decide whether a threshold is usable: how low
-			// the enrolled face drops, and how high anyone else reaches.
+			// The liveness checks stay in the open: they are the part of this window someone
+			// is asked to *do* something about.
+			antiSpoofSection
+
+			// Everything numeric goes behind a disclosure, shut by default.
 			//
-			// The sample count belongs to the run, not to either figure. Printing it under
-			// both tiles put the same number on screen twice, side by side, reading as two
-			// measurements that happened to agree.
-			VStack(spacing: 8) {
-				HStack(spacing: 10) {
-					statTile(
-						label: "Lowest", value: floor == 1 ? 0 : floor,
-						tint: Theme.warning, symbol: "arrow.down")
-					statTile(
-						label: "Highest", value: peak,
-						tint: Theme.faceID, symbol: "arrow.up")
+			// This window is reachable from Settings by anyone, and it opened on `spoof
+			// 0.000`, `threshold 0.50`, `eye openness 0.290` and a run of three-decimal
+			// figures — a panel that answers "is this working" in a language only the person
+			// who wrote it speaks. The question almost everybody has is answered by the word
+			// under the camera and the bar under that; the figures matter to the one person
+			// tuning a threshold, and they are still one click away for them.
+			DisclosureGroup(isExpanded: $showsDetail) {
+				VStack(spacing: 0) {
+					statRow("Lowest", String(format: "%.3f", floor == 1 ? 0 : floor))
+					RowDivider(inset: 0)
+					statRow("Highest", String(format: "%.3f", peak))
+					RowDivider(inset: 0)
+					statRow("Samples", "\(samples)")
+					RowDivider(inset: 0)
+					statRow("Turn", String(format: "%@  %+.2f", turnWord, pose.yaw))
+					RowDivider(inset: 0)
+					statRow("Nod", String(format: "%@  %+.2f", nodWord, pose.pitch))
 				}
+				.glassSurface()
+				.padding(.top, 8)
 
-				Text("\(samples) \(samples == 1 ? "sample" : "samples")")
-					.font(Typography.caption)
-					.foregroundStyle(Theme.tertiaryLabel)
-					.contentTransition(.numericText())
-			}
-
-			VStack(spacing: 10) {
 				Text("If this is you, watch the lowest. If it isn't, watch the highest.")
 					.font(Typography.detail)
 					.foregroundStyle(Theme.tertiaryLabel)
-					.multilineTextAlignment(.center)
 					.fixedSize(horizontal: false, vertical: true)
+					.frame(maxWidth: .infinity, alignment: .leading)
+					.padding(.top, 8)
+			} label: {
+				Text("Details")
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+			}
+			.animation(Theme.Motion.quick, value: showsDetail)
+
+			VStack(spacing: 10) {
 
 				Button("Reset") {
 					pending.peak = 0
 					pending.floor = 1
 					pending.samples = 0
+					blinked = false
+					eyesShut = false
+					challenge.next()
 					publish()
 				}
-				.buttonStyle(.accent)
+				.gazeButton()
 			}
 		}
 	}
 
-	private func statTile(label: String, value: Float, tint: Color, symbol: String) -> some View {
-		VStack(spacing: 4) {
-			HStack(spacing: 4) {
-				Image(systemName: symbol)
-					.font(.system(.caption2, weight: .bold))
-				Text(label)
-					.font(Typography.metricLabel)
-			}
-			// Sentence case. `LOWEST` letterspaced is an iOS group header, and this is a
-			// caption on a figure, not a header at all.
-			.foregroundStyle(tint)
+	/// Which way the code currently believes the head is turned. Derived from the one stated
+	/// convention on `FacePose.yaw` — negative is the user's own left — so a disagreement
+	/// between this word and the head in the preview is a bug in that convention, visible.
+	private var turnWord: String {
+		if pose.yaw < -0.15 { return "left " }
+		if pose.yaw > 0.15 { return "right" }
+		return "centre"
+	}
 
-			Text(String(format: "%.3f", value))
-				.font(Typography.metric)
+	/// Same, for pitch: Vision reports chin-down as positive. The rest value is not
+	/// necessarily zero, so read this as a direction of travel rather than an absolute.
+	private var nodWord: String {
+		if pose.pitch > 0.15 { return "down " }
+		if pose.pitch < -0.15 { return "up   " }
+		return "level "
+	}
+
+	/// A label-left, mono-value-right row. The whole readout is a spec list, not a grid of
+	/// tiles — no glass, no arrows, no per-figure colour.
+	private func statRow(_ label: String, _ value: String) -> some View {
+		HStack {
+			Text(label)
+				.font(Typography.detail)
+				.foregroundStyle(Theme.secondaryLabel)
+			Spacer()
+			Text(value)
+				.font(Typography.mono)
 				.foregroundStyle(Theme.label)
-				.monospacedDigit()
 				.contentTransition(.numericText())
 		}
-		.frame(maxWidth: .infinity)
-		.padding(.vertical, 12)
-		.glassSurface()
+		.padding(.horizontal, 13)
+		.padding(.vertical, 9)
 		.accessibilityElement(children: .combine)
-		.accessibilityLabel("\(label) score")
-		.accessibilityValue(String(format: "%.3f", value))
+		.accessibilityLabel(label)
+		.accessibilityValue(value)
+	}
+
+	// MARK: - Anti-spoof
+
+	/// Average eye openness (height/width of the eye landmarks). A photo sits at one value;
+	/// a blink makes it dip and recover.
+	private func eyeOpenness(_ lm: VNFaceLandmarks2D) -> Float? {
+		func openness(_ region: VNFaceLandmarkRegion2D?) -> Float? {
+			guard let p = region?.normalizedPoints, p.count >= 4 else { return nil }
+			let xs = p.map { $0.x }, ys = p.map { $0.y }
+			guard let minX = xs.min(), let maxX = xs.max(),
+				let minY = ys.min(), let maxY = ys.max(), maxX - minX > 0.0001
+			else { return nil }
+			return Float((maxY - minY) / (maxX - minX))
+		}
+		let vals = [openness(lm.leftEye), openness(lm.rightEye)].compactMap { $0 }
+		guard !vals.isEmpty else { return nil }
+		return vals.reduce(0, +) / Float(vals.count)
+	}
+
+	private func updateBlink(_ sample: FaceSample) {
+		guard let o = eyeOpenness(sample.landmarks) else { return }
+		eyeOpen = o
+		if o < 0.15 {
+			eyesShut = true
+		} else if eyesShut && o > 0.22 {
+			blinked = true
+			eyesShut = false
+		}
+	}
+
+	/// The three liveness signals, as one group.
+	///
+	/// These were three blocks separated by a bare `Divider`, floating on the window ground
+	/// under three more floating figures — the window read as a printout because nothing on
+	/// it was ever bounded. On a surface, with rules between the rows, they read as what they
+	/// are: a short list of checks, each with a verdict.
+	private var antiSpoofSection: some View {
+		VStack(spacing: 0) {
+			// Active challenge — a randomly chosen action the user has to perform. This is the
+			// real anti-spoof: a photo can't do it, and because the ask is random a recording
+			// of one action can't answer a demand for another.
+			HStack(spacing: 11) {
+				Image(systemName: challenge.isComplete ? "checkmark.circle.fill" : challenge.action.symbol)
+					.font(.system(size: 19, weight: .semibold))
+					.foregroundStyle(challenge.isComplete ? Theme.faceID : Theme.label)
+					.contentTransition(.symbolEffect(.replace))
+					.frame(width: 24)
+				VStack(alignment: .leading, spacing: 1) {
+					Text("Prove you're really here")
+						.font(Typography.detail).foregroundStyle(Theme.secondaryLabel)
+					Text(challenge.isComplete ? "Passed" : challenge.action.prompt)
+						.font(.system(.callout, weight: .semibold))
+						.foregroundStyle(challenge.isComplete ? Theme.faceID : Theme.label)
+						.contentTransition(.opacity)
+				}
+				Spacer(minLength: 8)
+				Button(challenge.isComplete ? "Again" : "Skip") { challenge.next() }
+					.gazeButton(size: .small)
+			}
+			.padding(.horizontal, 13)
+			.padding(.vertical, 10)
+			.animation(.easeOut(duration: 0.2), value: challenge.isComplete)
+
+			RowDivider(inset: 0)
+
+			// Object detector — looks for a held phone/screen/photo in the whole frame. The
+			// verdict inverts: a high confidence means a device is present, so low is good.
+			if spoof != nil {
+				let conf = spoofConf ?? 0
+				let threshold = spoof?.threshold ?? 0.5
+				signalBar(
+					title: "Photo or screen held up",
+					value: conf,
+					threshold: threshold,
+					pass: conf < threshold,
+					passWord: "Clear", failWord: "Device seen",
+					valueLabel: "spoof",
+					invert: true)
+				RowDivider(inset: 0)
+			}
+
+			// Blink — the one thing a photo can't do, in any light. Openness dips on a blink
+			// and this latches "Live"; a flat image holds one value and never trips.
+			VStack(spacing: 7) {
+				HStack {
+					Text("Blink")
+						.font(Typography.detail).foregroundStyle(Theme.secondaryLabel)
+					Spacer()
+					Text(blinked ? "Live — blinked" : "Blink to prove")
+						.font(.system(.caption, weight: .semibold))
+						.foregroundStyle(blinked ? Theme.faceID : Theme.tertiaryLabel)
+				}
+				if showsDetail {
+					HStack {
+						Text(String(format: "eye openness %.3f", eyeOpen))
+							.foregroundStyle(Theme.secondaryLabel)
+						Spacer()
+						Text(eyesShut ? "shut" : "open")
+							.foregroundStyle(Theme.tertiaryLabel)
+					}
+					.font(Typography.mono)
+				}
+			}
+			.padding(.horizontal, 13)
+			.padding(.vertical, 10)
+		}
+		.glassSurface()
+	}
+
+	/// One anti-spoof signal: a label, a pass/fail word, a bar with the threshold marked, and
+	/// the raw value. `invert` is for a signal where *high* is bad (the object detector).
+	private func signalBar(
+		title: String, value: Float, threshold: Float, pass: Bool,
+		passWord: String, failWord: String, valueLabel: String, invert: Bool = false
+	) -> some View {
+		let barColor = pass ? Theme.faceID : Theme.warning
+		return VStack(spacing: 7) {
+			HStack {
+				Text(title)
+					.font(Typography.detail).foregroundStyle(Theme.secondaryLabel)
+				Spacer()
+				Text(pass ? passWord : failWord)
+					.font(.system(.caption, weight: .semibold))
+					.foregroundStyle(pass ? Theme.faceID : Theme.warning)
+			}
+			GeometryReader { geometry in
+				ZStack(alignment: .leading) {
+					Capsule().fill(.white.opacity(0.07))
+					Capsule()
+						.fill(invert ? Theme.secondaryLabel : barColor)
+						.frame(width: geometry.size.width * CGFloat(max(0, min(1, value))))
+					Rectangle().fill(Theme.label.opacity(0.65)).frame(width: 2)
+						.offset(x: geometry.size.width * CGFloat(threshold))
+				}
+			}
+			.frame(height: 8)
+			.animation(.easeOut(duration: 0.12), value: value)
+			// The figure and its threshold follow the Details disclosure. The bar already
+			// says where this signal sits against the line it has to stay under, which is
+			// the whole content of the number — printing `spoof 0.000 threshold 0.50` under
+			// it as well tells a general reader nothing they can act on.
+			if showsDetail {
+				HStack {
+					Text(String(format: "%@ %.3f", valueLabel, value))
+						.foregroundStyle(pass ? Theme.faceID : Theme.secondaryLabel)
+					Spacer()
+					Text("threshold \(String(format: "%.2f", threshold))")
+						.foregroundStyle(Theme.tertiaryLabel)
+				}
+				.font(Typography.mono)
+			}
+		}
+		.padding(.horizontal, 13)
+		.padding(.vertical, 10)
 	}
 
 	private var statusText: String {
 		if case .failed(let reason) = camera.state { return reason }
 		if camera.state == .denied { return "Camera access is off" }
 		if !store.isEnrolled { return "Not enrolled" }
-		if camera.faceMissing { return "No face" }
+		// The reason, not just the fact. This window exists to explain why recognition is or
+		// is not happening, and "No face" over a picture of your own face — which is what a
+		// second face in the background produced — is the least useful thing it could say.
+		if camera.faceMissing { return camera.absence?.summary ?? "No face" }
 		return matched ? "Recognised" : "Not recognised"
 	}
 
-	/// Throttles the visible score to ~10Hz.
-	///
-	/// Embedding still runs on every frame — the peak and floor need every sample to be
-	/// meaningful — but publishing `score` to the view on all of them rebuilt this whole
-	/// screen 30 times a second. That is exactly the loop that had the app sitting at 79%
-	/// CPU, and here the bar, tiles and gradients make each rebuild more expensive still.
-	/// A score that updates ten times a second is indistinguishable to the eye.
+	/// Throttles the visible score to ~10Hz. Embedding still runs on every frame — the peak
+	/// and floor need every sample — but publishing to the view on all of them rebuilt this
+	/// whole screen 30 times a second.
 	private static let displayInterval: TimeInterval = 0.1
 
 	private func evaluate() {
@@ -270,13 +464,6 @@ struct RecognitionTestView: View {
 
 		let result = store.matches(sample)
 
-		// Accumulate outside SwiftUI's observation.
-		//
-		// `peak`, `floor` and `samples` were @State, so writing them on every frame
-		// invalidated the view 30 times a second no matter what the throttle below did —
-		// the early return skipped the score but the extremes had already dirtied it.
-		// Plain instance storage accumulates silently and is published on the same tick as
-		// the score.
 		pending.peak = max(pending.peak, result.score)
 		pending.floor = min(pending.floor, result.score)
 		pending.samples += 1
@@ -286,6 +473,12 @@ struct RecognitionTestView: View {
 		let now = Date()
 		guard now.timeIntervalSince(lastDisplayUpdate) >= Self.displayInterval else { return }
 		lastDisplayUpdate = now
+		// Score the anti-spoof signal on the throttled tick only — it's a Core ML pass, too
+		// heavy to run on all 30 frames a second.
+		spoofConf = spoof?.spoofConfidence(sample)
+		pose = sample.pose
+		updateBlink(sample)
+		challenge.consume(sample)
 		publish()
 	}
 

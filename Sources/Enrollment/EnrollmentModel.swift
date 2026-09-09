@@ -82,6 +82,17 @@ final class EnrollmentModel {
 		framesWithFace += 1
 		if case .positioning = phase {
 			guard framesWithFace > 8, sample.quality >= Self.minimumQuality else { return }
+			// Capture one straight-ahead print before the turning begins.
+			//
+			// Every other print in the set is taken mid-turn — `capture` only runs once the
+			// head is off-centre (`isEngaged`) — so without this the frontal pose is the one
+			// angle never enrolled. And the frontal pose is the common one: at the lock screen
+			// people look straight at the Mac, then get matched against a set of turned prints.
+			// This lands the most-used direction in the set on the first pass. Only pass 1, so
+			// it isn't duplicated.
+			if pass == 1, let frontal = embedder.embed(sample) {
+				prints.append(frontal)
+			}
 			phase = .capturing(pass: pass)
 		}
 

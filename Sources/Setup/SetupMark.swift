@@ -1,20 +1,13 @@
+import AppKit
 import SwiftUI
-#if HAS_FACEIDKIT
-import FaceIDKit
-#endif
 
-/// The animated mark setup shows: looking, recognised, or not.
+/// The mark setup shows: looking, recognised, or not.
 ///
-/// The only place in this flow that knows FaceIDKit exists. Everything else is
-/// plain SwiftUI, which is the point — the animations are licensed to this app
-/// and cannot be in the repository, so if the `#if` were sprinkled through the
-/// step views then half the setup flow would be unbuildable for anyone else.
-/// Confined here, the fallback is one substitution and the rest of the flow
-/// never knows which it got.
-///
-/// The fallback is not a placeholder. `faceid` and `checkmark.circle.fill` are
-/// system symbols with real transitions behind them, and a build without
-/// FaceIDKit should look plainer, never broken.
+/// It's the app's own icon — the Gaze target — rather than an invented scanner or Apple's
+/// `faceid` glyph. It sits still: a native onboarding screen doesn't breathe or pulse, and an
+/// idle looping animation is decoration with no signal (this one used to scale-breathe the
+/// icon forever). The one beat of motion is the one that means something — a tick or cross
+/// bouncing in on the result. Ours, plain SwiftUI, no framework.
 struct SetupMark: View {
 
 	enum Kind: Equatable {
@@ -28,51 +21,28 @@ struct SetupMark: View {
 	/// Bump to replay the result animation. Ignored while looking.
 	var trigger: Int = 0
 
+	private var icon: NSImage { NSApplication.shared.applicationIconImage ?? NSImage() }
+
 	var body: some View {
-		#if HAS_FACEIDKIT
-		switch kind {
-		case .looking:
-			FaceIDScanView(
-				isVisible: true,
-				isScanning: true,
-				faceColor: .white,
-				scanColor: Theme.faceID
-			)
-			.frame(width: diameter, height: diameter)
-		case .success, .failure:
-			FaceIDSuccessView(
-				diameter: diameter,
-				color: kind == .success ? Theme.faceID : Theme.danger,
-				result: kind == .success ? .success : .failure,
-				trigger: trigger
-			)
-			.frame(width: diameter, height: diameter)
+		ZStack {
+			Image(nsImage: icon)
+				.resizable()
+				.interpolation(.high)
+				.frame(width: diameter * 0.72, height: diameter * 0.72)
+				.overlay(alignment: .bottomTrailing) {
+					if kind != .looking {
+						Image(systemName: kind == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
+							.font(.system(size: diameter * 0.2, weight: .bold))
+							.symbolRenderingMode(.palette)
+							.foregroundStyle(.white, kind == .success ? Theme.faceID : Theme.danger)
+							.background(Circle().fill(Theme.setupGround).padding(2))
+							.offset(x: diameter * 0.05, y: diameter * 0.05)
+							.transition(.scale(scale: 0.7).combined(with: .opacity))
+							.symbolEffect(.bounce, value: trigger)
+					}
+				}
 		}
-		#else
-		Image(systemName: symbolName)
-			.font(.system(size: diameter * 0.55, weight: .regular))
-			.symbolRenderingMode(.hierarchical)
-			.foregroundStyle(tint)
-			.frame(width: diameter, height: diameter)
-			.contentTransition(.symbolEffect(.replace.magic(fallback: .replace.downUp)))
-			.symbolEffect(.breathe, options: .repeating.speed(1.6), isActive: kind == .looking)
-			.symbolEffect(.bounce, value: trigger)
-		#endif
-	}
-
-	private var symbolName: String {
-		switch kind {
-		case .looking: return "faceid"
-		case .success: return "checkmark.circle.fill"
-		case .failure: return "exclamationmark.circle.fill"
-		}
-	}
-
-	private var tint: Color {
-		switch kind {
-		case .looking: return .white
-		case .success: return Theme.faceID
-		case .failure: return Theme.danger
-		}
+		.frame(width: diameter, height: diameter)
+		.animation(.spring(response: 0.5, dampingFraction: 0.72), value: kind)
 	}
 }
