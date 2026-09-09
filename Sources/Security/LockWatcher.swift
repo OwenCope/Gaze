@@ -301,6 +301,18 @@ final class LockWatcher {
 		/// Set after a rejection, so the next try starts from a clean slate.
 		var cooldownUntil: Date?
 
+		// Counters, so "nobody in front of the camera" can say what it actually saw.
+		//
+		// That message was the only thing this loop reported on failure, and it is a
+		// conclusion rather than an observation — it reads as "you walked away" when the
+		// truth might be a camera delivering black frames, a face found and discarded by
+		// the quality gate every time, or two faces in shot. Those need different fixes
+		// and looked identical from outside.
+		var ticks = 0
+		var framesWithFace = 0
+		var qualityRejects = 0
+		var lastAbsence = "none"
+
 		// Keeps looking until the person gives up, not until a stopwatch runs out.
 		//
 		// This used to be a single 12-second window from the moment the screen locked, and
@@ -315,7 +327,9 @@ final class LockWatcher {
 		while !Task.isCancelled, isLocked, lockout.mayAttempt() {
 			try? await Task.sleep(for: .milliseconds(60))
 
+			ticks += 1
 			guard !camera.faceMissing, let sample = camera.sample else {
+				lastAbsence = camera.absence?.summary ?? "no sample"
 				// Face left the frame — both runs are broken and start again from zero.
 				matchingSince = nil
 				faceSince = nil
@@ -349,7 +363,11 @@ final class LockWatcher {
 			// Too far, too small or too blurred to judge. Skip it rather than grade it: a
 			// bad frame is not a rejection, and counting it as one burned attempts on frames
 			// we should never have scored. A held match survives a brief blur this way.
-			guard FrameQuality.isUsable(sample) else { continue }
+			framesWithFace += 1
+			guard FrameQuality.isUsable(sample) else {
+				qualityRejects += 1
+				continue
+			}
 
 			let result = store.matches(sample)
 			guard result.matched else {
@@ -494,7 +512,8 @@ final class LockWatcher {
 		// record here — the loop ended because the person left or because the lockout took
 		// over, and neither is a new failure. Counting one here as well meant walking away
 		// cost an attempt.
-		Self.logger.notice("Search ended; nobody in front of the camera.")
+		Self.logger.notice(
+			"Search ended. ticks=\(ticks) withFace=\(framesWithFace) qualityRejected=\(qualityRejects) lastAbsence=\(lastAbsence, privacy: .public)")
 		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .idle)
 
 		// Back to the padlock rather than vanishing — the Mac is still locked, and the
