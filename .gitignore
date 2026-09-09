@@ -17,3 +17,11 @@ Plugin/build/
 # to be opened up.
 Frameworks/
 
+
+# Training data. A gigabyte of labelled spoof images, and git history is forever —
+# the model built from it (Resources/Spoof.mlmodel) is what the app actually needs.
+Face Spoof Detection.v1i.createml/
+dataset-subset/
+
+# Per-session agent scratch, not project configuration.
+.claude/

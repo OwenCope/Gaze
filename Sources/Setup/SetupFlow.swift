@@ -118,7 +118,7 @@ struct SetupFlow: View {
 			return
 		}
 		do {
-			try store.save(prints: model.prints, cameraID: cameraID)
+			try store.add(prints: model.prints, cameraID: cameraID)
 			camera.stop()
 			failure = nil
 			withAnimation(.easeInOut(duration: 0.3)) { step = .done }

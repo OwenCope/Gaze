@@ -171,7 +171,7 @@ final class LockWatcher {
 		let camera = CameraController()
 		await camera.start(
 			pinnedDeviceID: Preferences.shared.requireBuiltInCamera
-				? store.enrollment?.cameraID : nil)
+				? store.pinnedCameraID : nil)
 		defer { camera.stop() }
 
 		guard camera.state == .running else {

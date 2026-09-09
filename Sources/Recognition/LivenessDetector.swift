@@ -20,6 +20,12 @@ protocol LivenessDetector: Sendable {
 }
 
 enum Liveness {
+	/// How much of the scene around the face the anti-spoof model is shown, in
+	/// face-widths. Stated once, because the capture tool and the detector must
+	/// agree exactly — a model trained on one framing and served another is worse
+	/// than no model, since it is confidently wrong rather than absent.
+	static let cropMargin: CGFloat = 2.7
+
 	/// The detector to use, or nil when none is available.
 	///
 	/// Nil is the normal state: no model ships with the app, since Sapphire's `MiniFAS`
@@ -62,8 +68,13 @@ struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 		// Deliberately a looser crop than recognition uses: the tell-tales live at the
 		// edges — a screen bezel, the border of a sheet of paper — so cropping tightly
 		// to the face throws away the evidence.
+		//
+		// This said exactly that and then called `alignedCrop`, which is the tight
+		// eye-warped crop the comment warns against. The dataset capture writes
+		// `contextCrop`, so a model trained on it must be fed `contextCrop` here or
+		// it sees something it has never been shown.
 		guard
-			let crop = FaceAligner.alignedCrop(sample, side: side),
+			let crop = FaceAligner.contextCrop(sample, side: side, margin: Liveness.cropMargin),
 			let output = try? model.prediction(
 				from: try MLDictionaryFeatureProvider(
 					dictionary: [inputName: MLFeatureValue(pixelBuffer: crop)])),

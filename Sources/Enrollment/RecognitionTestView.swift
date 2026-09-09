@@ -62,7 +62,7 @@ struct RecognitionTestView: View {
 		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
-			await camera.start(pinnedDeviceID: store.enrollment?.cameraID)
+			await camera.start(pinnedDeviceID: store.pinnedCameraID)
 		}
 		.onDisappear {
 			camera.stop()

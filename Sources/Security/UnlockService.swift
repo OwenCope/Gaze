@@ -109,13 +109,13 @@ final class UnlockService {
 			Self.logger.notice("Refusing: locked out.")
 			return .lockedOut
 		}
-		guard let enrollment = store.enrollment else { return .unavailable }
+		guard store.isEnrolled else { return .unavailable }
 
 		let camera = CameraController()
 		// Pinned to the camera enrolled against, so a swapped or virtual device fails
 		// rather than silently authenticating from a different sensor.
 		await camera.start(pinnedDeviceID: Preferences.shared.requireBuiltInCamera
-			? enrollment.cameraID : nil)
+			? store.pinnedCameraID : nil)
 		defer { camera.stop() }
 
 		guard camera.state == .running else {

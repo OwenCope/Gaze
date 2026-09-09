@@ -37,6 +37,23 @@ else
 	echo "  ! no FaceEmbedding.mlpackage — using landmark-geometry fallback"
 fi
 
+# The anti-spoof model, if one has been dropped in.
+#
+# `LivenessDetector` looks for `Liveness.mlmodelc` in the bundle and disables the
+# whole feature when it is missing — which it always was, because nothing here
+# compiled it. The setting sat permanently greyed out reading "No anti-spoof
+# model is installed", and there was no way to install one.
+#
+# Optional for the same reason the embedder is: the weights are somebody else's
+# and their licence decides whether they can ship.
+if [ -d "$ROOT/Resources/Liveness.mlpackage" ]; then
+	echo "→ Compiling anti-spoof model"
+	xcrun coremlc compile "$ROOT/Resources/Liveness.mlpackage" "$STAGE/Contents/Resources" >/dev/null
+	echo "  ✓ Liveness.mlmodelc"
+else
+	echo "  ! no Liveness.mlpackage — a photograph of you will pass"
+fi
+
 # FaceIDKit is optional in exactly the way the model above is, and for a sharper
 # reason: it is Aviorrok's, licensed for this app alone, and cannot live in the
 # repository. This project is meant to be opened up one day, and a build that

@@ -40,6 +40,15 @@ struct GazeApp: App {
 		}
 		.windowResizability(.contentSize)
 
+		// Behind a launch flag, and deliberately not in any menu. Collecting an
+		// anti-spoof dataset is a job for whoever is building the model, not a
+		// feature — but the crops have to come from this pipeline, so the tool has
+		// to live in this app.
+		Window("Capture Dataset", id: "dataset") {
+			DatasetCaptureView()
+		}
+		.windowResizability(.contentSize)
+
 		Window("Set Up Gaze", id: "enrollment") {
 			EnrollmentWindow(store: store)
 		}
@@ -306,8 +315,11 @@ struct MenuBarContent: View {
 
 		Divider()
 
-		if !store.isEnrolled {
-			Button("Set Up Gaze…") {
+		// Shown whether or not a face is enrolled — there can be more than one now,
+		// and the menu was the only way in for anyone who never opens Settings.
+		if store.canAddFace {
+			Button(store.isEnrolled ? "Add a Face…" : "Set Up Gaze…") {
+				SetupRequest.begin()
 				AppActivation.bringToFront()
 				openWindow(id: "enrollment")
 			}
@@ -356,6 +368,17 @@ struct EnrollmentWindow: View {
 			//
 			// It lives here because this window is the only scene guaranteed to exist at
 			// launch, so it is the only place holding an `openWindow` this early.
+			// Same trick as `--settings`: this window is the only scene guaranteed to
+			// exist at launch, so it is the only place holding an `openWindow` early
+			// enough to hand off to another one.
+			if CommandLine.arguments.contains("--capture-dataset") {
+				try? await Task.sleep(for: .milliseconds(200))
+				AppActivation.bringToFront()
+				openWindow(id: "dataset")
+				dismissWindow(id: "enrollment")
+				return
+			}
+
 			if CommandLine.arguments.contains("--settings") {
 				// One runloop turn before opening. `openWindow` called while the scene graph
 				// is still being set up is dropped silently — the flag looked ignored.
@@ -370,10 +393,9 @@ struct EnrollmentWindow: View {
 			}
 
 			// Launch presents this window unconditionally; step back out if the user is
-			// already set up and simply started the app.
-			// Also close on a background launch: a launchd-started agent must not put a
-			// setup window on screen, whatever the enrolment state.
-			if store.isEnrolled || AppActivation.isBackgroundLaunch {
+			// already set up and simply started the app. Anything opened on purpose —
+			// "Add a Face", the menu item — stays, which is the whole point of it.
+			if SetupRequest.shouldDismissImmediately(isEnrolled: store.isEnrolled) {
 				dismissWindow(id: "enrollment")
 				AppActivation.returnToBackgroundIfIdle()
 			} else {

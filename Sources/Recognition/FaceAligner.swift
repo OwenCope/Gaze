@@ -82,4 +82,70 @@ enum FaceAligner {
 		context.render(warped, to: buffer)
 		return buffer
 	}
+
+	/// A square crop around the face with room to spare, for the anti-spoof model.
+	///
+	/// Deliberately not `alignedCrop`. That warps the pupils onto two fixed pixels,
+	/// which is right for recognition — pose is noise there — and wrong here: what
+	/// gives a spoof away is at the *edges*. A phone's bezel, the border of a sheet
+	/// of paper, the rectangle of glare across a screen, the hand holding it. Warp
+	/// tightly to the eyes and every one of those is cropped out of frame, leaving
+	/// the model to judge liveness from a face that looks, by construction, exactly
+	/// like a face.
+	///
+	/// `margin` is how many face-widths across the crop is: 1 is the bounding box
+	/// itself, 2.7 is the operating point the MiniFASNet family is trained at.
+	///
+	/// No rotation either. A held phone is often slightly tilted, and that tilt is
+	/// evidence — straightening it throws the evidence away.
+	static func contextCrop(_ sample: FaceSample, side: Int, margin: CGFloat = 2.7) -> CVPixelBuffer? {
+		let image = CIImage(cvPixelBuffer: sample.pixelBuffer)
+		let extent = image.extent
+		guard extent.width > 0, extent.height > 0 else { return nil }
+
+		let box = sample.boundingBox
+		let faceRect = CGRect(
+			x: box.minX * extent.width + extent.minX,
+			y: box.minY * extent.height + extent.minY,
+			width: box.width * extent.width,
+			height: box.height * extent.height)
+		guard faceRect.width > 1, faceRect.height > 1 else { return nil }
+
+		// Square, so the model never sees the aspect ratio stretched — a stretched
+		// pixel grid is itself a moiré-like artefact and would be learned as one.
+		let wanted = max(faceRect.width, faceRect.height) * margin
+		var crop = CGRect(
+			x: faceRect.midX - wanted / 2,
+			y: faceRect.midY - wanted / 2,
+			width: wanted, height: wanted)
+
+		// Slide back inside the frame rather than clamping the size, which would
+		// change the scale and make crops from faces near an edge incomparable with
+		// the rest of the set.
+		crop.origin.x = min(max(crop.minX, extent.minX), extent.maxX - crop.width)
+		crop.origin.y = min(max(crop.minY, extent.minY), extent.maxY - crop.height)
+		crop = crop.intersection(extent)
+		guard crop.width > 1, crop.height > 1 else { return nil }
+
+		let scale = CGFloat(side) / crop.width
+		let rendered = image
+			.cropped(to: crop)
+			.transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
+			.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+			.cropped(to: CGRect(x: 0, y: 0, width: side, height: side))
+		guard !rendered.extent.isEmpty else { return nil }
+
+		var buffer: CVPixelBuffer?
+		let status = CVPixelBufferCreate(
+			kCFAllocatorDefault, side, side, kCVPixelFormatType_32BGRA,
+			[
+				kCVPixelBufferCGImageCompatibilityKey: true,
+				kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+			] as CFDictionary,
+			&buffer)
+		guard status == kCVReturnSuccess, let buffer else { return nil }
+
+		context.render(rendered, to: buffer)
+		return buffer
+	}
 }

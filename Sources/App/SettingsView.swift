@@ -267,10 +267,11 @@ struct SettingsView: View {
 				// their widths is what makes them read as a pair.
 				VStack(alignment: .trailing, spacing: 6) {
 					Button {
+						SetupRequest.begin()
 						AppActivation.bringToFront()
 						openWindow(id: "enrollment")
 					} label: {
-						Text(store.isEnrolled ? "Set Up Again" : "Set Up Gaze")
+						Text(store.isEnrolled ? "Add a Face" : "Set Up Gaze")
 							.frame(maxWidth: .infinity)
 					}
 					.buttonStyle(store.isEnrolled ? .accent : .primaryAction)
@@ -303,36 +304,76 @@ struct SettingsView: View {
 		if store.isCorrupted {
 			return "Your enrolled face couldn't be read and has been ignored"
 		}
-		if let enrollment = store.enrollment {
-			return "\(enrollment.prints.count) angles captured on \(enrollment.enrolledAt.formatted(date: .abbreviated, time: .shortened))"
+		switch store.faces.count {
+		case 0: return "Enroll your face to unlock this Mac by looking at it"
+		case 1: return "One face can open this Mac"
+		default: return "\(store.faces.count) faces can open this Mac"
 		}
-		return "Enrol your face to unlock this Mac by looking at it"
 	}
 
+	/// The enrolled faces, one row each.
+	///
+	/// A list rather than a single "Remove enrolled face" button, because there can
+	/// be several now. The footer is the important part: every face here opens
+	/// *this* account with *this* password, so a second face is not a second user —
+	/// it is giving somebody your login. That has to be said where faces are added,
+	/// not buried in a document nobody opens.
 	private var manageSection: some View {
 		SettingsSection(
-			title: "Enrolled face",
-			footer: store.embedder.identifier.hasPrefix("landmark")
-				? "No recognition model is installed, so Gaze is matching face geometry only. "
-					+ "That tells you from a stranger but is much weaker than a trained model."
-				: nil
+			title: store.faces.count == 1 ? "Enrolled face" : "Enrolled faces",
+			footer: manageFooter
 		) {
-			// The recognition model used to be a row here. Nebulark's point in the server was
-			// that nobody outside the project can act on `coreml:112x112` — it is a build
-			// detail taking up space in the pane you actually use. It lives in About now.
-			SettingRow(
-				title: "Remove enrolled face",
-				symbol: "trash.fill", symbolTint: Theme.danger
-			) {
-				Button("Remove", role: .destructive) {
-					Task {
-						guard await BiometricGate.authorize(.removeEnrollment) else { return }
-						store.removeEnrollment()
+			// Tiles in a row, the way Touch ID & Password lists fingerprints.
+			//
+			// Apple has already answered this exact question — several enrolments of
+			// the same biometric, each named, added and removed — and the answer is
+			// not a list of rows. A tile is the size of the thing it represents, the
+			// name sits under it where a name belongs, and adding one is a tile in the
+			// same row rather than a button somewhere else in the pane.
+			HStack(alignment: .top, spacing: 16) {
+				ForEach(store.faces) { face in
+					FaceTile(
+						face: face,
+						rename: { store.rename(face.id, to: $0) },
+						remove: {
+							Task {
+								guard await BiometricGate.authorize(.removeEnrollment) else { return }
+								store.remove(face.id)
+							}
+						})
+				}
+
+				if store.canAddFace {
+					AddFaceTile {
+						SetupRequest.begin()
+						AppActivation.bringToFront()
+						openWindow(id: "enrollment")
 					}
 				}
-				.buttonStyle(AccentButtonStyle.destructive)
+
+				Spacer(minLength: 0)
 			}
+			.padding(.horizontal, Theme.rowInset)
+			.padding(.vertical, 16)
 		}
+	}
+
+	private var manageFooter: String {
+		var lines: [String] = []
+		if store.faces.count > 1 {
+			lines.append(
+				"Any of these faces unlocks this Mac with your password. "
+					+ "They are not separate accounts.")
+		}
+		if !store.canAddFace {
+			lines.append("Gaze holds up to \(FaceEnrollmentStore.maximumFaces) faces.")
+		}
+		if store.embedder.identifier.hasPrefix("landmark") {
+			lines.append(
+				"No recognition model is installed, so Gaze is matching face geometry only. "
+					+ "That tells you from a stranger but is much weaker than a trained model.")
+		}
+		return lines.joined(separator: " ")
 	}
 
 	// MARK: - Lockout
@@ -852,5 +893,133 @@ private struct SidebarItem: View {
 		.accessibilityLabel(pane.title)
 		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
 		.accessibilityValue(badge == nil ? "" : "Needs attention")
+	}
+}
+
+/// One enrolled face, as a tile.
+///
+/// Modelled on the fingerprint tiles in Touch ID & Password: the glyph is the
+/// object, the name is under it and editable in place, and removal appears on
+/// approach rather than sitting there as a permanent invitation to destroy
+/// something.
+private struct FaceTile: View {
+
+	let face: FaceEnrollment
+	var rename: (String) -> Void
+	var remove: () -> Void
+
+	@State private var hovering = false
+	/// The name being typed, committed on Return or when focus leaves.
+	///
+	/// Bound straight through, every keystroke rewrote the vault and re-encrypted
+	/// the whole record — and deleting the last character wrote an empty name that
+	/// the store then rejected, so the field could not be cleared to retype.
+	@State private var draft: String
+	@FocusState private var isEditing: Bool
+
+	init(face: FaceEnrollment, rename: @escaping (String) -> Void, remove: @escaping () -> Void) {
+		self.face = face
+		self.rename = rename
+		self.remove = remove
+		_draft = State(initialValue: face.name)
+	}
+
+	var body: some View {
+		VStack(spacing: 8) {
+			ZStack(alignment: .topTrailing) {
+				RoundedRectangle(cornerRadius: 16, style: .continuous)
+					.fill(Theme.faceID.opacity(0.16))
+					.frame(width: 68, height: 68)
+					.overlay {
+						Image(systemName: "faceid")
+							.font(.system(size: 30, weight: .regular))
+							.foregroundStyle(Theme.faceID)
+					}
+					.overlay {
+						RoundedRectangle(cornerRadius: 16, style: .continuous)
+							.strokeBorder(Theme.faceID.opacity(0.28), lineWidth: 1)
+					}
+
+				if hovering {
+					Button(action: remove) {
+						Image(systemName: "minus.circle.fill")
+							.font(.system(size: 17))
+							.symbolRenderingMode(.palette)
+							.foregroundStyle(.white, Theme.danger)
+					}
+					.buttonStyle(.plain)
+					.help("Remove this face")
+					.offset(x: 7, y: -7)
+					.transition(.scale.combined(with: .opacity))
+				}
+			}
+			.animation(.easeOut(duration: 0.15), value: hovering)
+
+			TextField("Name", text: $draft)
+				.textFieldStyle(.plain)
+				.font(Typography.detail)
+				.foregroundStyle(Theme.label)
+				.multilineTextAlignment(.center)
+				.lineLimit(1)
+				.frame(width: 84)
+				.focused($isEditing)
+				.onSubmit(commit)
+				.onChange(of: isEditing) { _, editing in if !editing { commit() } }
+				// Someone else's edit — a rename from another window, or the record
+				// reloading — should show here rather than being overwritten by a
+				// draft the user never touched.
+				.onChange(of: face.name) { _, name in if !isEditing { draft = name } }
+		}
+		.onHover { hovering = $0 }
+	}
+
+	private func commit() {
+		let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+		// An empty name is a slip, not an instruction. Put the old one back rather
+		// than leaving a tile with no label under it.
+		guard !trimmed.isEmpty else {
+			draft = face.name
+			return
+		}
+		guard trimmed != face.name else { return }
+		rename(trimmed)
+	}
+}
+
+/// The tile that starts another enrolment.
+///
+/// In the row with the faces, not off in a corner of the pane: adding one is the
+/// same kind of act as removing one, and Touch ID puts its "Add Fingerprint" in
+/// exactly this position.
+private struct AddFaceTile: View {
+
+	var action: () -> Void
+
+	@State private var hovering = false
+
+	var body: some View {
+		Button(action: action) {
+			VStack(spacing: 8) {
+				RoundedRectangle(cornerRadius: 16, style: .continuous)
+					.strokeBorder(
+						Theme.secondaryLabel.opacity(hovering ? 0.55 : 0.3),
+						style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+					.frame(width: 68, height: 68)
+					.overlay {
+						Image(systemName: "plus")
+							.font(.system(size: 22, weight: .medium))
+							.foregroundStyle(Theme.secondaryLabel)
+					}
+
+				Text("Add a Face")
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+					.lineLimit(1)
+					.frame(width: 84)
+			}
+		}
+		.buttonStyle(.plain)
+		.onHover { hovering = $0 }
+		.animation(.easeOut(duration: 0.15), value: hovering)
 	}
 }
