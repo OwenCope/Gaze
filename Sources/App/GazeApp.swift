@@ -304,6 +304,18 @@ final class AppServices {
 		lockWatcher?.stop()
 		lockWatcher = nil
 
+		// The lock screen space, built now rather than when the screen first locks.
+		//
+		// `LockScreenSpace.shared` is a lazy static, and the only thing that touched it was
+		// `adopt(window)` inside the capsule's `show()`. So on the first lock after launch
+		// the space was created, levelled and shown *after* the window had already been
+		// ordered in — all in one runloop turn, racing the window server. Measured at 407ms
+		// after "Screen locked", which is the wrong side of the moment it is needed.
+		//
+		// Touching it at startup costs one space that sits empty until something is put in
+		// it, and removes the race entirely.
+		_ = LockScreenSpace.shared
+
 		// The answering service runs whatever the backend is.
 		//
 		// It was started only for `.authPlugin`, on the reasoning that the plugin was the

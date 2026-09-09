@@ -13,6 +13,15 @@ final class NotchCapsuleController {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "NotchCapsule")
 
+	/// Asked of the window server rather than remembered, for the diagnostic line below.
+	private static func screenIsLocked() -> Bool {
+		guard
+			let session = CGSessionCopyCurrentDictionary() as? [String: Any],
+			let locked = session["CGSSessionScreenIsLocked"] as? Bool
+		else { return false }
+		return locked
+	}
+
 	private var window: NSWindow?
 	private var host: NSHostingView<AnyView>?
 	private var contentSize: CGSize = .zero
@@ -50,6 +59,9 @@ final class NotchCapsuleController {
 		guard let window else { return }
 		window.alphaValue = 1
 		window.orderFrontRegardless()
+		Self.logger.notice(
+			"show: window \(window.windowNumber) level \(window.level.rawValue) visible \(window.isVisible) locked \(Self.screenIsLocked())"
+		)
 		// After ordering in, never before: the window number does not exist until then.
 		LockScreenSpace.shared.adopt(window)
 

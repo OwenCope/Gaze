@@ -93,9 +93,21 @@ final class LockScreenSpace {
 	/// Must be called after the window exists on screen — it is addressed by window
 	/// number, which is only assigned once the window has been ordered in.
 	func adopt(_ window: NSWindow) {
-		guard isAvailable, let addWindows else { return }
+		guard isAvailable, let addWindows else {
+			Self.logger.error("adopt: space unavailable, window stays on the normal level.")
+			return
+		}
+		let number = window.windowNumber
+		guard number > 0 else {
+			// Addressed by window number, which does not exist until the window has been
+			// ordered in. Silently adopting nothing is how this fails invisibly.
+			Self.logger.error("adopt: window has no number yet; not adopted.")
+			return
+		}
 		// The trailing 7 is the selector mask SkyLight expects for a full move.
-		_ = addWindows(connection, space, [window.windowNumber] as CFArray, 7)
+		let status = addWindows(connection, space, [number] as CFArray, 7)
+		Self.logger.notice(
+			"adopt: window \(number) into space \(self.space) → \(status)")
 	}
 
 	func release(_ window: NSWindow) {

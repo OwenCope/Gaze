@@ -227,7 +227,13 @@ struct NotchCapsule: View {
 	/// A radius proportional to the drop goes to nothing as the panel retracts, and the last
 	/// thing you see before it disappears is a hard-cornered rectangle. The floor keeps the
 	/// resting lip rounded, which is the whole reason it hangs below the cutout at all.
-	private var cornerRadius: CGFloat { min(15, max(9, max(0, visibleHeight) / 1.9)) }
+	/// Capped at 26, not 15.
+	///
+	/// 15 was set when the panel was small, and on a fully dropped panel it reads as a
+	/// square-cornered box — the corner is there but too tight to see against 160pt of
+	/// height. The floor and the divisor are unchanged, so the retracting animation still
+	/// keeps its rounded lip all the way down; only the ceiling moved.
+	private var cornerRadius: CGFloat { min(26, max(9, max(0, visibleHeight) / 1.9)) }
 
 	// MARK: - Island
 
@@ -315,7 +321,7 @@ struct NotchCapsule: View {
 	/// the physical cutout and a flare there would put two curves on screen that belong to
 	/// nothing; as it drops, the flare opens with it so the join is always the width of the
 	/// thing it is joining.
-	private var flareRadius: CGFloat { min(12, max(0, visibleHeight) / 2.4) }
+	private var flareRadius: CGFloat { min(17, max(0, visibleHeight) / 2.4) }
 
 	private var shape: NotchPanelShape {
 		NotchPanelShape(topRadius: flareRadius, bottomRadius: cornerRadius)
