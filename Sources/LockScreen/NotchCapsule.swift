@@ -336,8 +336,18 @@ struct NotchCapsule: View {
 			// bar, and taking the bar away took the ground with it. The bar is the notch;
 			// the island is a thing the notch hands down. Both, always.
 			background
+				// Widened by the flare on each side, not narrowed by it.
+				//
+				// `NotchPanelShape` insets its body to leave room for the flares, so
+				// passing `backgroundWidth` straight through made the panel's body 2×12pt
+				// narrower than it had been — the walls moved inward and the panel stopped
+				// lining up with the cutout. Adding the flare back on means the body stays
+				// exactly `backgroundWidth` and the wings extend beyond it, which is what
+				// "flared" is supposed to mean.
 				.frame(
-					width: isIsland || isOnEar ? compactBarWidth : backgroundWidth,
+					width: isIsland || isOnEar
+						? compactBarWidth
+						: backgroundWidth + flareRadius * 2,
 					height: expanded
 						? (isIsland || isOnEar ? restingBarHeight : currentHeight)
 						: notchInset)
