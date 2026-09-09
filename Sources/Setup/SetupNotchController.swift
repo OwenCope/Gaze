@@ -38,6 +38,23 @@ final class SetupNotchController {
 	private final class FocusableNotchWindow: NSWindow {
 		override var canBecomeKey: Bool { true }
 		override var canBecomeMain: Bool { true }
+
+		var onEscape: (() -> Void)?
+
+		/// Escape closes it. A borderless window has no traffic lights, so without this
+		/// there is genuinely no way out of it — which is what happened: a panel that had
+		/// grown past the screen with no close button and no key handler.
+		override func cancelOperation(_ sender: Any?) {
+			onEscape?()
+		}
+
+		override func keyDown(with event: NSEvent) {
+			if event.keyCode == 53 {
+				onEscape?()
+				return
+			}
+			super.keyDown(with: event)
+		}
 	}
 
 	private var window: NSWindow?
@@ -91,7 +108,19 @@ final class SetupNotchController {
 					store: store,
 					notchInset: notchInset,
 					onFinish: { [weak self] in self?.hide() })))
+		// The content does not get to decide how big the window is.
+		//
+		// `SetupFlow` was written for a window with `.windowResizability(.contentSize)`, so
+		// it carries a large intrinsic size — and `NSHostingView` publishes that through
+		// Auto Layout, which grew this panel from 460pt to most of the screen. Clamping the
+		// hosting view to the frame stops the content dictating the container.
+		host.translatesAutoresizingMaskIntoConstraints = true
+		host.autoresizingMask = [.width, .height]
+		host.frame = NSRect(origin: .zero, size: size)
 		window.contentView = host
+		window.contentMinSize = size
+		window.contentMaxSize = size
+		window.onEscape = { [weak self] in self?.hide() }
 
 		self.window = window
 		self.host = host
