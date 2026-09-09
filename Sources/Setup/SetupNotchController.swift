@@ -111,11 +111,6 @@ final class SetupNotchController {
 		host.autoresizingMask = [.width, .height]
 		host.frame = NSRect(origin: .zero, size: window.frame.size)
 		window.contentView = host
-		// Pinned, not merely sized. Without min == max the hosting view's fitting size
-		// wins — and the content asks for `maxHeight: .infinity`, so the panel grew to the
-		// full height of the screen. These have to move with every resize, below.
-		window.contentMinSize = window.frame.size
-		window.contentMaxSize = window.frame.size
 
 		self.window = window
 		self.host = host
@@ -161,12 +156,6 @@ final class SetupNotchController {
 		let target = frame(for: step, on: screen)
 		guard target != window.frame else { return }
 
-		// Widened before shrinking, narrowed after growing: a frame outside the current
-		// min/max is clamped rather than applied, so the limits have to admit the target
-		// before the animation starts.
-		window.contentMinSize = NSSize(width: target.width, height: min(target.height, window.frame.height))
-		window.contentMaxSize = NSSize(width: target.width, height: max(target.height, window.frame.height))
-
 		NSAnimationContext.runAnimationGroup { context in
 			context.duration = Self.resizeDuration
 			// Leaves quickly and arrives slowly, which is what makes the panel look like it
@@ -174,10 +163,6 @@ final class SetupNotchController {
 			context.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
 			context.allowsImplicitAnimation = true
 			window.animator().setFrame(target, display: true)
-		} completionHandler: {
-			// Re-pin once it has arrived, so the content cannot drift the panel afterwards.
-			window.contentMinSize = target.size
-			window.contentMaxSize = target.size
 		}
 	}
 }

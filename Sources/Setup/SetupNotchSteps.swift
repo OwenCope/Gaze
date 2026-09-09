@@ -136,10 +136,7 @@ struct SetupNotchStepFrame<Content: View>: View {
 			content
 				.padding(.top, 2)
 		}
-		// Fills the width and takes the height it is given. `maxHeight: .infinity` was
-		// asking for as much height as exists, which an `NSHostingView` reports as its
-		// fitting size — and the window obliged, to the bottom of the screen.
-		.frame(maxWidth: .infinity)
+		.frame(maxWidth: .infinity, maxHeight: .infinity)
 		.padding(.horizontal, SetupNotchMetrics.contentPadding)
 		.padding(.vertical, 18)
 	}
