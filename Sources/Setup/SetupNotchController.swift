@@ -87,7 +87,9 @@ final class SetupNotchController {
 		self.model = model
 
 		let window = SetupPanelWindow(
-			contentRect: frame(for: model.step, on: screen),
+			// A provisional height. The content reports its real one on first layout, and
+			// the window follows within a frame or two.
+			contentRect: frame(contentHeight: 220, on: screen),
 			styleMask: .borderless, backing: .buffered, defer: false)
 		window.isOpaque = false
 		window.backgroundColor = .clear
@@ -103,6 +105,7 @@ final class SetupNotchController {
 					store: store,
 					model: model,
 					notchInset: notchInset,
+					onHeight: { [weak self] height in self?.setContentHeight(height) },
 					onFinish: { [weak self] in self?.hide() })))
 		// The content does not get to decide how big the window is. `SetupFlow`-era views
 		// carry large intrinsic sizes, and `NSHostingView` publishes those through Auto
@@ -119,11 +122,6 @@ final class SetupNotchController {
 
 		self.window = window
 		self.host = host
-
-		// Set after the window exists, so the first resize has something to move.
-		model.onStepChange = { [weak self] step in
-			self?.resize(to: step)
-		}
 
 		window.makeKeyAndOrderFront(nil)
 		// An accessory app is not active until it says so, and an inactive app's window
@@ -147,8 +145,8 @@ final class SetupNotchController {
 	///
 	/// The top edge never moves: `origin.y` falls as the height grows, so the panel appears
 	/// to extend downward out of the notch rather than to slide up and down the screen.
-	private func frame(for step: SetupNotchStep, on screen: NSScreen) -> NSRect {
-		let height = step.height + notchInset
+	private func frame(contentHeight: CGFloat, on screen: NSScreen) -> NSRect {
+		let height = max(120, contentHeight) + notchInset
 		return NSRect(
 			x: screen.frame.midX - SetupNotchMetrics.width / 2,
 			y: screen.frame.maxY - height,
@@ -156,10 +154,16 @@ final class SetupNotchController {
 			height: height)
 	}
 
-	private func resize(to step: SetupNotchStep) {
+	/// Called by the content whenever its laid-out height changes.
+	///
+	/// The window is the follower here, which is the whole point: a step that grows because
+	/// an error line appeared, or shrinks because a button went away, moves the panel
+	/// without anybody updating a constant.
+	func setContentHeight(_ height: CGFloat) {
 		guard let window, let screen = window.screen ?? NSScreen.main else { return }
-		let target = frame(for: step, on: screen)
-		guard target != window.frame else { return }
+		let target = frame(contentHeight: height, on: screen)
+		// Sub-point changes are layout noise, not a resize worth animating.
+		guard abs(target.height - window.frame.height) > 0.5 else { return }
 
 		// Widened before shrinking, narrowed after growing: a frame outside the current
 		// min/max is clamped rather than applied, so the limits have to admit the target
@@ -188,6 +192,7 @@ private struct SetupNotchPanel: View {
 	let store: FaceEnrollmentStore
 	let model: SetupNotchModel
 	let notchInset: CGFloat
+	let onHeight: (CGFloat) -> Void
 	let onFinish: () -> Void
 
 	var body: some View {
@@ -197,7 +202,10 @@ private struct SetupNotchPanel: View {
 			Color.clear.frame(height: notchInset)
 
 			SetupNotchContent(store: store, model: model, onFinish: onFinish)
-				.frame(maxWidth: .infinity, maxHeight: .infinity)
+				.onPreferenceChange(SetupPanelHeightKey.self) { height in
+					guard height > 0 else { return }
+					onHeight(height)
+				}
 		}
 		.background {
 			// The same shape the unlock capsule uses, so the two read as one object doing
