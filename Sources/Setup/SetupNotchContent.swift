@@ -33,14 +33,6 @@ struct SetupNotchContent: View {
 		.padding(.horizontal, SetupNotchMetrics.horizontalPadding)
 		.padding(.top, 18)
 		.padding(.bottom, SetupNotchMetrics.verticalPadding)
-		// Lays out at its ideal height rather than at the height the window is offering.
-		//
-		// Without this the measurement is circular: the content sits inside a window of a
-		// fixed size, so it is compressed to fit and then reports the compressed height —
-		// the window resizes to what it already was, and the last control stays clipped
-		// off the bottom. `fixedSize` makes it ignore the proposed height and take what it
-		// actually needs, which is the number the window should be following.
-		.fixedSize(horizontal: false, vertical: true)
 		.animation(SetupNotchMetrics.morph, value: model.step)
 		.measuringPanelHeight()
 	}
