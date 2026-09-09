@@ -81,12 +81,22 @@ struct NotchPanelShape: Shape {
 
 		guard top > 0 else { return path }
 
+		// The wedges reach a point *inside* the body rather than stopping exactly on its
+		// wall.
+		//
+		// Abutting on the same coordinate looks correct and renders wrong: both edges get
+		// antialiased against the background, so the join shows as a faint seam running
+		// down each side of the panel. Overlapping by a point puts the boundary inside
+		// filled area where it cannot be seen, and changes nothing about the outline —
+		// the body already covers everything the overlap adds.
+		let bite: CGFloat = 1
+
 		// Left flare: along the screen edge, down the body's wall, then a concave quarter
 		// turn back out to where it started. A quadratic with its control point at the
 		// corner is exactly that turn.
 		path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-		path.addLine(to: CGPoint(x: body.minX, y: rect.minY))
-		path.addLine(to: CGPoint(x: body.minX, y: rect.minY + top))
+		path.addLine(to: CGPoint(x: body.minX + bite, y: rect.minY))
+		path.addLine(to: CGPoint(x: body.minX + bite, y: rect.minY + top))
 		path.addQuadCurve(
 			to: CGPoint(x: rect.minX, y: rect.minY),
 			control: CGPoint(x: body.minX, y: rect.minY))
@@ -94,8 +104,8 @@ struct NotchPanelShape: Shape {
 
 		// Right flare, mirrored.
 		path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-		path.addLine(to: CGPoint(x: body.maxX, y: rect.minY))
-		path.addLine(to: CGPoint(x: body.maxX, y: rect.minY + top))
+		path.addLine(to: CGPoint(x: body.maxX - bite, y: rect.minY))
+		path.addLine(to: CGPoint(x: body.maxX - bite, y: rect.minY + top))
 		path.addQuadCurve(
 			to: CGPoint(x: rect.maxX, y: rect.minY),
 			control: CGPoint(x: body.maxX, y: rect.minY))
