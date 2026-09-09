@@ -93,17 +93,9 @@ struct GazeApp: App {
 		// macOS window is closed and inventing our own would be worse; `SetupScaffold`
 		// insets its chrome to clear them.
 		.windowStyle(.hiddenTitleBar)
-		// No launch presentation. Setup is opened deliberately or not at all.
-		//
-		// This scene used to present itself at every launch and dismiss again when a face
-		// was already enrolled. That dance was always fragile — it depends on the store
-		// having loaded before the window's `task` runs — and under a `KeepAlive`
-		// LaunchAgent it became untenable: every restart of the agent put a large window
-		// on screen, and the one restart where the dismiss lost its race left it there.
-		//
-		// A fresh install still lands in setup; `AppDelegate` opens the notch panel when
-		// nothing is enrolled, which is an explicit decision made once rather than a
-		// window that presents itself and then argues about whether it should have.
+		// Opens on launch so a fresh install lands straight in setup. `EnrollmentWindow`
+		// closes itself again when there is already a face enrolled.
+		.defaultLaunchBehavior(.presented)
 	}
 
 }
@@ -226,20 +218,6 @@ final class AppServices {
 
 	/// Shows the lock screen panel while unlocked, for inspecting it without locking.
 	///
-	/// A fresh install lands in setup. Nothing else does.
-	///
-	/// The launch-presented window this replaces asked the opposite question — it appeared
-	/// every time and then tried to decide whether it should have, which under a
-	/// `KeepAlive` agent meant a large window on screen at every restart. Asking "is there
-	/// anything enrolled" once, and only opening when the answer is no, has no race to lose.
-	func openSetupIfNothingEnrolled() {
-		// Never from a launchd start. The agent restarts on its own schedule and must not
-		// put a window in front of whatever the user is doing.
-		guard !AppActivation.isBackgroundLaunch else { return }
-		guard !store.isEnrolled else { return }
-		setupNotch.show()
-	}
-
 	/// Registers ⌥⌘G.
 	///
 	/// Deliberately *not* gated on there being a face enrolled, which is how this was
@@ -405,7 +383,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 			ReleaseUpdateChecker.shared.startScheduledChecks()
 			AppServices.shared.runCapsulePreviewIfRequested()
 			AppServices.shared.runLockScreenShootIfRequested()
-			AppServices.shared.openSetupIfNothingEnrolled()
 			startInvisibleWindowSweep()
 		}
 	}
