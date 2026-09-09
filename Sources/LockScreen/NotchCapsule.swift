@@ -309,13 +309,16 @@ struct NotchCapsule: View {
 			endPoint: .bottom)
 	}
 
-	private var shape: UnevenRoundedRectangle {
-		UnevenRoundedRectangle(
-			topLeadingRadius: 0,
-			bottomLeadingRadius: cornerRadius,
-			bottomTrailingRadius: cornerRadius,
-			topTrailingRadius: 0,
-			style: .continuous)
+	/// How far the top corners flare out into the screen edge.
+	///
+	/// Grows with the panel rather than being fixed. Collapsed, the panel is hidden behind
+	/// the physical cutout and a flare there would put two curves on screen that belong to
+	/// nothing; as it drops, the flare opens with it so the join is always the width of the
+	/// thing it is joining.
+	private var flareRadius: CGFloat { min(12, max(0, visibleHeight) / 2.4) }
+
+	private var shape: NotchPanelShape {
+		NotchPanelShape(topRadius: flareRadius, bottomRadius: cornerRadius)
 	}
 
 	/// The visible screen either side of the cutout, in whichever shape is currently drawn.

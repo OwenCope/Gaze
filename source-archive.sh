@@ -41,11 +41,16 @@ while IFS= read -r file; do
 done < <(git -C "$ROOT" ls-files)
 echo "  ✓ $count files"
 
-cat > "$STAGE/src/NOTICE.md" <<'NOTICE'
-# What is not in here
+# The repository's own NOTICE.md is the source of truth for credits, so the archive
+# carries that rather than a second copy that would drift out of step with it.
+cp "$ROOT/NOTICE.md" "$STAGE/src/NOTICE.md"
 
-This archive is the source of Gaze, under the MIT licence in `LICENSE`. Two
-things are deliberately missing, and the app will build without them.
+cat >> "$STAGE/src/NOTICE.md" <<'NOTICE'
+
+# What is not in this archive
+
+Two things above are missing from the archive specifically, and the app will
+build without them.
 
 ## The recognition model
 
