@@ -202,6 +202,10 @@ private struct SetupNotchPanel: View {
 			Color.clear.frame(height: notchInset)
 
 			SetupNotchContent(store: store, model: model, onFinish: onFinish)
+				// Anchored to the top of whatever space the window has, so a window that is
+				// briefly too small clips at the bottom rather than pushing content off the
+				// top where the notch would hide it.
+				.frame(maxHeight: .infinity, alignment: .top)
 				.onPreferenceChange(SetupPanelHeightKey.self) { height in
 					guard height > 0 else { return }
 					onHeight(height)
