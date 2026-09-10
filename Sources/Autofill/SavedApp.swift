@@ -17,12 +17,31 @@ struct SavedApp: Identifiable, Codable, Hashable {
 	/// Optional, and shown under the name. Not required to fill — plenty of prompts ask
 	/// only for a password, and demanding a username to save one would be pedantry.
 	var username: String
+	/// The app's designated requirement, captured when the place was saved.
+	///
+	/// This is the identity check that `bundleID` cannot provide, because a bundle
+	/// identifier is a self-declared string and any app can claim any other app's. Set
+	/// once, from the installed copy on disk, and checked against the live process before
+	/// a password is ever typed.
+	///
+	/// Optional only so that records written before this existed still decode. They are
+	/// *not* trusted on that account — a nil requirement means the place cannot be filled
+	/// until it is saved again. Grandfathering them in would leave exactly the hole this
+	/// closes, silently, for everyone who had already set the app up.
+	var requirement: String?
 
-	init(id: UUID = UUID(), bundleID: String, name: String, username: String = "") {
+	/// Whether this place carries an identity Gaze can verify.
+	var isVerifiable: Bool { requirement?.isEmpty == false }
+
+	init(
+		id: UUID = UUID(), bundleID: String, name: String, username: String = "",
+		requirement: String? = nil
+	) {
 		self.id = id
 		self.bundleID = bundleID
 		self.name = name
 		self.username = username
+		self.requirement = requirement
 	}
 }
 
@@ -101,14 +120,25 @@ final class SavedAppStore {
 	func add(bundleID: String, name: String, username: String, password: String) -> SavedApp? {
 		// One entry per app. Adding an app that is already saved updates it instead of
 		// creating a second row that silently never wins the match.
+		// Re-read on every save, including an update. That is what lets someone repair a
+		// record written before requirements existed, or one whose app has since been
+		// re-signed, simply by saving the place again.
+		let requirement = AppIdentity.designatedRequirement(forBundleID: bundleID)
+		if requirement == nil {
+			Self.logger.notice(
+				"\(bundleID, privacy: .public) has no verifiable signature; it will not autofill.")
+		}
+
 		if var existing = savedApp(forBundleID: bundleID) {
 			existing.username = username
 			existing.name = name
+			existing.requirement = requirement
 			update(existing, password: password)
 			return existing
 		}
 
-		let entry = SavedApp(bundleID: bundleID, name: name, username: username)
+		let entry = SavedApp(
+			bundleID: bundleID, name: name, username: username, requirement: requirement)
 		do {
 			try SecureVault.store(Secret(password: password), as: Self.secretAccount(for: entry.id))
 		} catch {

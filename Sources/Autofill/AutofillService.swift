@@ -32,6 +32,8 @@ enum AutofillService {
 		case notAuthorised
 		case faceRejected
 		case noPassword
+		case unverifiedApp(String)
+		case identityMismatch(String)
 
 		/// Written for somebody looking at Settings wondering why nothing happened, so
 		/// each case says what to do about it rather than naming the branch it took.
@@ -48,6 +50,8 @@ enum AutofillService {
 			case .notAuthorised: "Accessibility access is needed"
 			case .faceRejected: "Didn't recognise you"
 			case .noPassword: "No password stored for that app"
+			case .unverifiedApp(let app): "\(app) has no saved signature — save it again"
+			case .identityMismatch(let app): "\(app) isn't the app this password was saved for"
 			}
 		}
 	}
@@ -102,6 +106,22 @@ enum AutofillService {
 			return .noPlaceForApp(app.localizedName ?? bundleID)
 		}
 
+		// Checked before the password is read, not after.
+		//
+		// A record saved before requirements existed has nothing to check against, and the
+		// safe reading of that is "unknown", not "fine". Filling it would preserve exactly
+		// the weakness this closes for precisely the people who set the app up earliest.
+		guard let requirement = savedApp.requirement, !requirement.isEmpty else {
+			logger.error(
+				"\(savedApp.name, privacy: .public) has no saved signing requirement.")
+			return .unverifiedApp(savedApp.name)
+		}
+		guard AppIdentity.process(app.processIdentifier, matches: requirement) else {
+			logger.error(
+				"\(bundleID, privacy: .public) does not satisfy its saved requirement.")
+			return .identityMismatch(app.localizedName ?? bundleID)
+		}
+
 		guard let field = focusedField() else {
 			logger.notice("Nothing focused that text can be typed into.")
 			return .noFocusedField
@@ -132,7 +152,10 @@ enum AutofillService {
 		// Re-read the frontmost app. The camera check takes a second or two, and typing a
 		// password into whatever happened to come forward in the meantime — a notification,
 		// a colleague's Slack — is the one mistake this must never make.
-		guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID else {
+		guard let current = NSWorkspace.shared.frontmostApplication,
+			current.bundleIdentifier == bundleID,
+			AppIdentity.process(current.processIdentifier, matches: requirement)
+		else {
 			logger.error("The frontmost app changed during the face check; not typing.")
 			return .noFocusedField
 		}

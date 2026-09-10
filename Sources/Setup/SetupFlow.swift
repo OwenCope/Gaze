@@ -324,8 +324,40 @@ struct SetupFlow: View {
 		Task { await camera.start() }
 	}
 
+	/// Whether this Mac is already set up, and so whether adding a face needs permission.
+	///
+	/// Both halves matter. Checking only the face list treats "credentials stored, no
+	/// visible face" as a fresh Mac, which is precisely the state someone reaches by
+	/// deleting the owner's enrolment — and it would let them enrol themselves without
+	/// ever authenticating. Checking either one means the only unauthenticated path is a
+	/// genuinely unconfigured install.
+	private var isAlreadyConfigured: Bool {
+		store.isEnrolled || PasswordVault.hasPassword
+	}
+
 	private func save() {
 		guard let model else { return }
+
+		// Authorised here, at the commit, rather than at the buttons that open setup.
+		//
+		// There are three ways in — the menu, the Settings button, the add-a-face tile —
+		// and gating each one means the guarantee is only as good as the next entry point
+		// somebody adds. This is the single line every enrolment passes through, so it
+		// holds regardless of how the flow was reached.
+		guard isAlreadyConfigured else {
+			commit(model)
+			return
+		}
+		Task {
+			guard await BiometricGate.require(.addEnrollment) else {
+				fail("Gaze couldn't confirm it's you, so this face wasn't added.")
+				return
+			}
+			commit(model)
+		}
+	}
+
+	private func commit(_ model: EnrollmentModel) {
 		// Say so rather than returning quietly. Returning left the capture screen up
 		// with a full ring and nothing happening — the enrollment was finished and
 		// the flow simply stopped, which looks like a hang and loses the work.

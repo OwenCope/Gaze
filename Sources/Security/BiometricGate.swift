@@ -18,6 +18,7 @@ enum BiometricGate {
 		case changeSettings = "change Gaze settings"
 		case disableTamperProtection = "turn off tamper protection"
 		case storePassword = "store your account password"
+		case addEnrollment = "add another face"
 	}
 
 	static var isAvailable: Bool {
@@ -34,7 +35,24 @@ enum BiometricGate {
 	@MainActor
 	static func authorize(_ reason: Reason) async -> Bool {
 		guard Preferences.shared.touchIDFallback else { return true }
+		return await evaluate(reason)
+	}
 
+	/// Authorisation the in-app preference cannot switch off.
+	///
+	/// `authorize` is skippable by design: it guards conveniences, and someone who has
+	/// turned the setting off has said they do not want prompting. Enrolment is not a
+	/// convenience. Adding a face grants a new person the ability to unlock this Mac and
+	/// to release its saved passwords, and a setting reachable from inside the app must
+	/// not be able to disable the check on that — otherwise the weakest state the app can
+	/// be left in is the one that decides who gets in.
+	@MainActor
+	static func require(_ reason: Reason) async -> Bool {
+		await evaluate(reason)
+	}
+
+	@MainActor
+	private static func evaluate(_ reason: Reason) async -> Bool {
 		// The prompt is a system panel attached to this app. From an accessory app that
 		// never activates it can end up behind other windows, where it reads as the
 		// action having silently failed — so come forward first.

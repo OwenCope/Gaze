@@ -82,7 +82,16 @@ if [ -z "$REQUIREMENT" ]; then
 	echo "Could not read the app's designated requirement. Is it signed?" >&2
 	exit 1
 fi
-printf '%s\n' "$REQUIREMENT" > "$PAM_DIR/pam_gaze.requirement"
+# Unlinked first, then created fresh.
+#
+# Redirection follows symlinks and writes through whatever it finds, and an earlier
+# version of this script could hand this file's ownership to the installing user (see the
+# LaunchAgent note below). Reinstalling was therefore the repair step that never
+# repaired: it rewrote the contents and left the bad owner in place. `rm -f` removes the
+# link or the mis-owned file itself rather than following it, so what follows always
+# creates a new root-owned regular file.
+rm -f "$PAM_DIR/pam_gaze.requirement"
+(umask 022; printf '%s\n' "$REQUIREMENT" > "$PAM_DIR/pam_gaze.requirement")
 chown root:wheel "$PAM_DIR/pam_gaze.requirement"
 chmod 644 "$PAM_DIR/pam_gaze.requirement"
 echo "   $REQUIREMENT"
@@ -95,8 +104,16 @@ echo "   $REQUIREMENT"
 
 AGENT_PLIST="$USER_HOME/Library/LaunchAgents/com.gazeunlock.Gaze.agent.plist"
 echo "→ Registering the mach service"
-install -d -o "$USER_NAME" -m 755 "$USER_HOME/Library/LaunchAgents"
-cat > "$AGENT_PLIST" <<PLIST
+# Every file operation under the user's home runs as the user, never as root.
+#
+# Root redirecting into "$AGENT_PLIST" follows symlinks, and so does an unflagged chown.
+# Same-user malware that replaced this path with a link to pam_gaze.requirement could
+# therefore get a legitimate, authorised reinstall to overwrite the PAM trust policy and
+# hand it its own ownership — after which it chooses which binary is allowed to answer a
+# sudo prompt. Dropping to the user first makes that link point somewhere the writer has
+# no permission to touch, so the install fails loudly instead of escalating quietly.
+sudo -u "$USER_NAME" mkdir -p "$USER_HOME/Library/LaunchAgents"
+sudo -u "$USER_NAME" tee "$AGENT_PLIST" >/dev/null <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -120,8 +137,7 @@ cat > "$AGENT_PLIST" <<PLIST
 </dict>
 </plist>
 PLIST
-chown "$USER_NAME" "$AGENT_PLIST"
-chmod 644 "$AGENT_PLIST"
+sudo -u "$USER_NAME" chmod 644 "$AGENT_PLIST"
 
 # Reloaded as the user, not as root: a LaunchAgent belongs to their GUI session, and
 # loading it from root's context registers it in the wrong domain where nothing in the

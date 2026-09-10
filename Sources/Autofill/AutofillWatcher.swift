@@ -94,6 +94,24 @@ final class AutofillWatcher {
 		guard let bundleID = app?.bundleIdentifier else { return }
 		guard savedApps.savedApp(forBundleID: bundleID) != nil else { return }
 
+		// Never automatically, into a browser.
+		//
+		// A password saved against an application is bound to that application, and for a
+		// browser that is not a meaningful boundary: every website shares one process and
+		// one bundle identifier. The trigger here is *activation*, so switching to a
+		// browser that happens to be showing a page with a focused password field is
+		// enough — including a page chosen by whoever wrote it, and the field it receives
+		// belongs to that site rather than to the one the password was saved for.
+		//
+		// Doing this properly needs an origin the browser vouches for, which needs a real
+		// browser integration. Until then the shortcut still works, because pressing it is
+		// the user saying which field they meant.
+		guard !AppIdentity.isBrowser(bundleID: bundleID) else {
+			Self.logger.notice(
+				"\(bundleID, privacy: .public) is a browser; not filling on activation.")
+			return
+		}
+
 		if let last = lastAttempt[bundleID],
 			Date().timeIntervalSince(last) < Self.cooldown
 		{

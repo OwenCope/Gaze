@@ -34,9 +34,12 @@
 #include <dispatch/dispatch.h>
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <xpc/xpc.h>
 
 #include "GazeUnlockProtocol.h"
@@ -56,9 +59,46 @@
 */
 #define kGazeRequirementPath "/usr/local/lib/pam/pam_gaze.requirement"
 
+/// Whether an already-open descriptor is a file root alone could have written.
+///
+/// The path is checked *after* opening, on the descriptor, because checking the path
+/// first and opening it second is a race — the thing examined and the thing read need
+/// not be the same file. O_NOFOLLOW additionally refuses a symlink at the final
+/// component, so a link planted in place of the policy fails to open at all rather than
+/// redirecting the read somewhere an attacker controls.
+///
+/// A regular file, owned by root, writable by nobody else. This file names the only
+/// binary allowed to answer a sudo prompt, so anything that fails these is not policy
+/// this module is entitled to trust.
+static bool descriptor_is_root_owned(int descriptor) {
+	struct stat info;
+	if (fstat(descriptor, &info) != 0) {
+		return false;
+	}
+	if (!S_ISREG(info.st_mode)) {
+		return false;
+	}
+	if (info.st_uid != 0) {
+		return false;
+	}
+	if (info.st_mode & (S_IWGRP | S_IWOTH)) {
+		return false;
+	}
+	return true;
+}
+
 static bool read_requirement(char *buffer, size_t length) {
-	FILE *file = fopen(kGazeRequirementPath, "r");
+	int descriptor = open(kGazeRequirementPath, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+	if (descriptor < 0) {
+		return false;
+	}
+	if (!descriptor_is_root_owned(descriptor)) {
+		close(descriptor);
+		return false;
+	}
+	FILE *file = fdopen(descriptor, "r");
 	if (file == NULL) {
+		close(descriptor);
 		return false;
 	}
 	char *line = fgets(buffer, (int)length, file);
