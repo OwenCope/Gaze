@@ -27,10 +27,24 @@ enum FrameQuality {
 	/// nobody could ever unlock. A reported 0-ish quality is real; an absent one is not.
 	static let minVisionQuality: Float = 0.1
 
-	/// Whether this frame is good enough to base an unlock decision on.
-	static func isUsable(_ sample: FaceSample) -> Bool {
-		guard sample.boundingBox.height >= minFaceHeight else { return false }
-		if sample.quality > 0, sample.quality < minVisionQuality { return false }
-		return true
+	/// Why a frame was not worth grading.
+	///
+	/// Split out from `isUsable` because the two rejections call for opposite fixes and
+	/// were indistinguishable from the logs: a face measured as too small points at the
+	/// bounding box (wrong coordinate space, or a genuinely distant person), while a low
+	/// Vision quality points at the exposure the lock screen leaves us with. Counting them
+	/// together said only that 73 of 74 frames were dropped, which named neither.
+	enum Rejection: String {
+		case tooSmall = "too small"
+		case tooBlurred = "too blurred"
 	}
+
+	static func rejection(_ sample: FaceSample) -> Rejection? {
+		if sample.boundingBox.height < minFaceHeight { return .tooSmall }
+		if sample.quality > 0, sample.quality < minVisionQuality { return .tooBlurred }
+		return nil
+	}
+
+	/// Whether this frame is good enough to base an unlock decision on.
+	static func isUsable(_ sample: FaceSample) -> Bool { rejection(sample) == nil }
 }

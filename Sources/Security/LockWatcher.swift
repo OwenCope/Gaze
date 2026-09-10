@@ -320,6 +320,15 @@ final class LockWatcher {
 		/// that scored silently. "withFace=36" and "withFace=0" then look like the same
 		/// fault when one is a camera problem and the other is a matching problem.
 		var bestScore: Float = 0
+		/// Which of the two quality rejections fired, and how close the frames came.
+		///
+		/// The counts say which gate to move; the extremes say how far. A largest-seen face
+		/// of 0.17 against a 0.18 floor is a threshold that is barely wrong; 0.04 is a
+		/// bounding box being measured in the wrong space.
+		var tooSmall = 0
+		var tooBlurred = 0
+		var largestFace: CGFloat = 0
+		var bestQuality: Float = 0
 
 		Self.logger.notice(
 			"""
@@ -378,8 +387,14 @@ final class LockWatcher {
 			// bad frame is not a rejection, and counting it as one burned attempts on frames
 			// we should never have scored. A held match survives a brief blur this way.
 			framesWithFace += 1
-			guard FrameQuality.isUsable(sample) else {
+			largestFace = max(largestFace, sample.boundingBox.height)
+			bestQuality = max(bestQuality, sample.quality)
+			if let rejection = FrameQuality.rejection(sample) {
 				qualityRejects += 1
+				switch rejection {
+				case .tooSmall: tooSmall += 1
+				case .tooBlurred: tooBlurred += 1
+				}
 				continue
 			}
 
@@ -530,7 +545,8 @@ final class LockWatcher {
 		Self.logger.notice(
 			"""
 			Search ended. ticks=\(ticks) withFace=\(framesWithFace) \
-			qualityRejected=\(qualityRejects) best=\(bestScore) \
+			qualityRejected=\(qualityRejects) (small=\(tooSmall) blurred=\(tooBlurred)) \
+			largestFace=\(largestFace) bestQuality=\(bestQuality) best=\(bestScore) \
 			lastAbsence=\(lastAbsence, privacy: .public)
 			""")
 		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .idle)
