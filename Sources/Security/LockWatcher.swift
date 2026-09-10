@@ -312,6 +312,20 @@ final class LockWatcher {
 		var framesWithFace = 0
 		var qualityRejects = 0
 		var lastAbsence = "none"
+		/// The highest score any frame reached this search.
+		///
+		/// Without it a search can see a face on dozens of frames and report no number at
+		/// all, because a score is only logged once a rejection is *committed* — after
+		/// `rejectAfter` seconds of continuous presence. Frames that came and went before
+		/// that scored silently. "withFace=36" and "withFace=0" then look like the same
+		/// fault when one is a camera problem and the other is a matching problem.
+		var bestScore: Float = 0
+
+		Self.logger.notice(
+			"""
+			Search starting. embedder=\(self.store.embedder.identifier, privacy: .public) \
+			threshold=\(self.store.embedder.matchThreshold) faces=\(self.store.faces.count)
+			""")
 
 		// Keeps looking until the person gives up, not until a stopwatch runs out.
 		//
@@ -370,6 +384,7 @@ final class LockWatcher {
 			}
 
 			let result = store.matches(sample)
+			bestScore = max(bestScore, result.score)
 			guard result.matched else {
 				matchingSince = nil
 
@@ -513,7 +528,11 @@ final class LockWatcher {
 		// over, and neither is a new failure. Counting one here as well meant walking away
 		// cost an attempt.
 		Self.logger.notice(
-			"Search ended. ticks=\(ticks) withFace=\(framesWithFace) qualityRejected=\(qualityRejects) lastAbsence=\(lastAbsence, privacy: .public)")
+			"""
+			Search ended. ticks=\(ticks) withFace=\(framesWithFace) \
+			qualityRejected=\(qualityRejects) best=\(bestScore) \
+			lastAbsence=\(lastAbsence, privacy: .public)
+			""")
 		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .idle)
 
 		// Back to the padlock rather than vanishing — the Mac is still locked, and the
