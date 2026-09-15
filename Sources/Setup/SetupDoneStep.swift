@@ -24,7 +24,7 @@ struct SetupUnfinished: Equatable {
 			return "Gaze recognises you, but it can't type at the lock screen until you turn on "
 				+ "Accessibility access. It's in Settings whenever you want it."
 		case (false, false):
-			return "Lock your screen and look at your Mac. Your password still works whenever you want it."
+			return "Your face and unlock settings are saved.\nYour password and Touch ID remain available as usual."
 		}
 	}
 }
@@ -54,33 +54,57 @@ struct SetupDoneStep: View {
 	/// What is still missing. Ignored when `failure` is set: a flow that never got a
 	/// face has bigger news than a missing password.
 	var unfinished = SetupUnfinished()
+	var isAddingFace = false
 	var onDone: () -> Void
 	var onRetry: () -> Void
+	/// Opens Gaze Settings so a partial setup can be finished there. Nil where there
+	/// is nothing to open (previews, tests): the screen stays a single button.
+	/// Ignored on failure and add-face runs, which keep their existing buttons.
+	var onOpenSettings: (() -> Void)? = nil
 
 	@State private var trigger = 0
 
 	private var didFail: Bool { failure != nil }
 	private var isComplete: Bool { !didFail && unfinished.isComplete }
 
-	private var title: String {
-		if didFail { return "Setup didn't finish" }
-		return isComplete ? "You're all set" : "Your face is saved"
+	/// Whether the Done screen offers the secondary route into Settings.
+	///
+	/// Only a partial first-run setup: the face saved but the password or
+	/// Accessibility skipped. Complete, failed and add-face runs keep their
+	/// existing buttons, and a nil opener means a single Done button.
+	static func showsFinishInSettings(failed: Bool, unfinished: SetupUnfinished, isAddingFace: Bool, canOpenSettings: Bool) -> Bool {
+		canOpenSettings && !failed && !isAddingFace && !unfinished.isComplete
+	}
+
+	private var showsSettingsAction: Bool {
+		Self.showsFinishInSettings(failed: didFail, unfinished: unfinished, isAddingFace: isAddingFace, canOpenSettings: onOpenSettings != nil)
+	}
+
+	static func title(failed: Bool, unfinished: SetupUnfinished, isAddingFace: Bool) -> String {
+		if failed { return "Setup didn’t finish" }
+		if isAddingFace { return "Face added" }
+		return unfinished.isComplete ? "Enjoy a little less typing." : "Your face is saved"
+	}
+
+	private var message: String {
+		if let failure { return failure }
+		if isAddingFace { return "Your new face is saved.\nYour unlock settings haven’t changed." }
+		return isComplete ? "Gaze is ready for your next unlock.\nYour password and Touch ID are still there when you need them." : unfinished.summary
 	}
 
 	var body: some View {
 		SetupScaffold(
-			title: title,
-			message: failure ?? unfinished.summary,
+			title: Self.title(failed: didFail, unfinished: unfinished, isAddingFace: isAddingFace),
+			message: message,
 			figureHeight: 180
 		) {
 			SetupMark(kind: didFail ? .failure : .success, diameter: 180, trigger: trigger)
 		} actions: {
 			SetupButton(title: didFail ? "Try Again" : "Done", action: didFail ? onRetry : onDone)
 			if didFail {
-				Button("Close", action: onDone)
-					.buttonStyle(.plain)
-					.font(Typography.setupBody)
-					.foregroundStyle(Theme.setupTertiary)
+			SetupSecondaryButton(title: "Close", action: onDone)
+			} else if showsSettingsAction {
+			SetupSecondaryButton(title: "Finish in Settings", action: { onOpenSettings?() })
 			}
 		}
 		// Played once the view is actually on screen rather than on appear, so it
@@ -88,7 +112,8 @@ struct SetupDoneStep: View {
 		// Later than the scaffold's own arrival, so the tick lands on a settled screen
 		// instead of bouncing while the words are still moving.
 		.task {
-			try? await Task.sleep(for: .milliseconds(260))
+			do { try await Task.sleep(for: .milliseconds(260)) }
+			catch { return }
 			trigger += 1
 		}
 	}

@@ -193,7 +193,10 @@ struct SetupMeetGazeStep: View {
 			figureHeight: 0, onBack: onBack) {
 			EmptyView()
 		} detail: {
-			GazeExpressionGuide(movementCount: movementCount).padding(.top, 20)
+			// Opens on the scanning lesson: it carries the one/two-movement instruction,
+			// which is the thing this screen is for. Waiting stays one step back via
+			// Previous and the lesson menu, and every other lesson is still reachable.
+			GazeExpressionGuide(lesson: .scanning, movementCount: movementCount).padding(.top, 20)
 		} actions: {
 			SetupButton(title: "Continue Setup", action: onContinue)
 		}

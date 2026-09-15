@@ -16,7 +16,7 @@ enum GazeFaceMotion: Equatable {
 
 	init(phase: NotchCapsuleModel.Phase) {
 		switch phase {
-		case .locked, .unlocked: self = .resting
+		case .locked, .unlocked, .pending: self = .resting
 		case .scanning: self = .scanning
 		case .success: self = .accepted
 		case .notRecognised, .spoofRejected: self = .rejected
@@ -111,10 +111,13 @@ struct GazeFaceMark: View {
 		.accessibilityLabel(accessibilityLabel)
 	}
 
-	private var accessibilityLabel: String {
+	/// The VoiceOver label for the mark. Challenge prompts already carry the movement
+	/// progress suffix ("· 1 of 2"), so the count is announced with the instruction.
+	var accessibilityLabel: String {
 		switch phase {
 		case .challenge(let prompt, _, _, _, _, _): prompt
 		case .scanning: "Looking for your face"
+		case .pending: "Waiting for macOS"
 		case .success: "Face verified"
 		case .notRecognised: "Face not recognised"
 		case .spoofRejected: "Verification failed"

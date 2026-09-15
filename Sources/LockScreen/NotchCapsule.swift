@@ -31,12 +31,22 @@ final class NotchCapsuleModel {
 		/// watcher that picks the action, and a shared observable across that boundary is a
 		/// great deal of machinery for one short string.
 		case challenge(prompt: String, symbol: String, hintX: CGFloat, hintY: CGFloat, pulses: Bool, isReturningToRest: Bool = false)
-		/// Recognised, and the password has gone in. The tick.
+		/// The password has been submitted and macOS has not confirmed the unlock yet.
+		/// Waiting, neutrally: the padlock stays closed and there is no tick.
+		///
+		/// A tick here would read as a completed unlock while the login window is still
+		/// deciding. `.success` is autofill-only; confirmation arrives as `.unlocked`.
+		case pending
+		/// Autofill filled the password into a saved app. The tick.
+		///
+		/// The Mac unlock path never presents this between submission and confirmation —
+		/// that gap is `.pending`. Collapsing the two announced an outcome the Mac had
+		/// not confirmed yet.
 		case success
 		/// The Mac is actually open. The padlock lets go.
 		///
-		/// Separate from `success` because they are separate events, and the gap between them
-		/// is real: the tick is this app saying "that was you, here is your password", and the
+		/// Separate from `pending` because they are separate events, and the gap between them
+		/// is real: pending is this app saying "that was you, here is your password", and the
 		/// padlock opening is the Mac agreeing. Collapsing the two meant the padlock opened
 		/// while the login window was still deciding — announcing an outcome we had not been
 		/// told yet.
@@ -48,14 +58,51 @@ final class NotchCapsuleModel {
 		/// under the notch; one that sits flush and grows when it has something to say is
 		/// a status indicator.
 		///
-		/// Success keeps the panel open to carry the tick. Unlocked is back to resting: the
-		/// panel is already on its way home and the padlock is the only thing left to say.
+		/// Success and pending keep the panel open to carry the tick and the waiting words.
+		/// Unlocked is back to resting: the panel is already on its way home and the
+		/// padlock is the only thing left to say.
 		var isCompact: Bool { self == .locked || self == .unlocked }
+
+		/// The words shown beneath the mark while waiting for macOS to confirm the unlock.
+		static let pendingCaption = "Waiting for macOS"
+		/// Neutral waiting symbol: an hourglass, never a tick or an opening padlock.
+		static let pendingSymbol = "hourglass"
 
 		/// The words the panel shows, where the phase carries its own.
 		var challengePrompt: String? {
 			if case .challenge(let prompt, _, _, _, _, _) = self { return prompt }
 			return nil
+		}
+
+		/// Every caption the panel can show: challenge words, or the neutral pending
+		/// message. The padlock-closed states carry no other caption.
+		var captionText: String? {
+			if let prompt = challengePrompt { return prompt }
+			if case .pending = self { return Self.pendingCaption }
+			return nil
+		}
+
+		/// The symbol beside the caption, if the phase carries one.
+		var captionSymbol: String? {
+			if case .challenge(_, let symbol, _, _, _, _) = self { return symbol }
+			if case .pending = self { return Self.pendingSymbol }
+			return nil
+		}
+
+		/// An outward movement prompt with the gate's progress, in two-movement mode.
+		///
+		/// The first presentation reads "… · 1 of 2" and the second "… · 2 of 2", so a
+		/// fresh prompt after a completed movement reads as progress rather than a reset.
+		/// One-movement mode stays exactly as-is: with nothing to count, a suffix would
+		/// be clutter. Return-to-rest prompts never pass through here — the animated
+		/// return stays captionless by design.
+		///
+		/// Pure presentation: the gate keeps the count, and `reset()` clears it, so a
+		/// reset can never leave a stale "2 of 2" behind — the next presentation is
+		/// recomputed from the cleared gate.
+		static func outwardPrompt(_ prompt: String, completedActions: Int, requiredActions: Int) -> String {
+			guard requiredActions == 2 else { return prompt }
+			return "\(prompt) · \(completedActions + 1) of \(requiredActions)"
 		}
 
 		/// How the mark should move to demonstrate the action, if it should.
@@ -391,8 +438,9 @@ struct NotchCapsule: View {
 			// it said the panel was doing something when it was doing nothing. Notch apps
 			// put a resting indicator in the screen either side of the housing instead, and
 			// that is space this window already covers.
-			// The padlock stays for the unlock, so success shows both: the tick in the drop
-			// and the same padlock opening where it has sat all along.
+		// The padlock stays closed for the wait: pending shows the waiting words in the
+		// drop and the same padlock shut where it has sat all along. Only the confirmed
+		// unlock opens it.
 			if model.phase.showsLockChip {
 				lockChip
 					// Always positioned against the *resting* bar, never the panel.
@@ -420,7 +468,7 @@ struct NotchCapsule: View {
 						.frame(width: glyphSide, height: glyphSide)
 					challengeCaption
 				}
-					.animation(reduceMotion ? nil : NotchAnimation.feedback, value: model.phase.challengePrompt)
+					.animation(reduceMotion ? nil : NotchAnimation.feedback, value: model.phase.captionText)
 					// Centred in the solid band — not the whole window (whose top third is
 					// behind the cutout) and not the whole visible drop (whose lower part
 					// fades to clear, which would dissolve the glyph along with it).
@@ -445,13 +493,13 @@ struct NotchCapsule: View {
 		.frame(width: width, height: height, alignment: .top)
 		.animation(reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract), value: expanded)
 		.animation(reduceMotion ? nil : NotchAnimation.phase, value: model.phase.isCompact)
-		.animation(reduceMotion ? nil : NotchAnimation.feedback, value: model.phase.challengePrompt)
+		.animation(reduceMotion ? nil : NotchAnimation.feedback, value: model.phase.captionText)
 		.opacity(reduceMotion && !model.isExpanded ? 0 : 1)
 		.symbolEffectsRemoved(reduceMotion)
 	}
 
 	private var showsChallengeCaption: Bool {
-		model.phase.challengePrompt != nil
+		model.phase.captionText != nil
 	}
 
 	private var hidesReturnCaption: Bool {
@@ -460,9 +508,9 @@ struct NotchCapsule: View {
 
 	private var challengeCaption: some View {
 		ZStack {
-			if showsChallengeCaption, let prompt = model.phase.challengePrompt {
+			if showsChallengeCaption, let prompt = model.phase.captionText {
 				HStack(spacing: 5) {
-					if let symbol = model.phase.challengeSymbol {
+					if let symbol = model.phase.captionSymbol {
 						Image(systemName: symbol)
 							.font(.system(size: 10, weight: .semibold))
 							.accessibilityHidden(true)
