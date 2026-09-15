@@ -733,14 +733,42 @@ struct SettingsView: View {
 			}
 
 			RowDivider()
-			SettingToggle(
+			SettingRow(
 				title: "Lock when I walk away",
-				// Says what it costs as well as what it does. This is the only setting here
-				// that makes Gaze act on its own, and the camera opening by itself is the
-				// thing somebody would otherwise notice and wonder about.
-				detail: "Checks the camera once you've been idle for 20 seconds",
-				symbol: "figure.walk.departure",
-				isOn: bind(\.walkAwayLock))
+				detail: "Checks for absence after 20 seconds without input",
+				symbol: "figure.walk.departure"
+			) {
+				HStack(spacing: 8) {
+					InfoButton(title: "How walk-away lock checks") {
+						Text(
+							"Opens the camera briefly after 20 seconds without keyboard or pointer input. "
+								+ "Any face found counts as someone there, and the check ends."
+						)
+						Text(
+							"While input stays idle, it checks again no more often than every 30 seconds. "
+								+ "Any input restarts the 20-second wait."
+						)
+						Text(
+							"Locks after four seconds of fresh no-face evidence. "
+								+ "When an app keeps the display awake, checks pause."
+						)
+						Text(
+							"Needs Camera and Accessibility access. If the camera cannot confirm absence, "
+								+ "Gaze leaves the Mac unlocked. You can still lock it yourself."
+						)
+					}
+					Toggle("Lock when I walk away", isOn: walkAwayBinding)
+						.labelsHidden()
+						.accessibilityHint("Checks for absence after 20 seconds without input")
+						.toggleStyle(.switch)
+						.controlSize(.small)
+						.tint(Theme.accent)
+				}
+			}
+			if settings.walkAwayLock && walkAwayNeedsAttention {
+				RowDivider(inset: 0)
+				walkAwayNotice
+			}
 
 			RowDivider()
 			SettingToggle(
@@ -783,6 +811,60 @@ struct SettingsView: View {
 		if !Liveness.isAvailable { notes.append("No anti-spoof model is installed.") }
 		if !BiometricGate.isAvailable { notes.append("This Mac has no Touch ID sensor.") }
 		return notes.isEmpty ? nil : notes.joined(separator: " ")
+	}
+
+	/// Sync only the presence watcher; changing this switch must not restart unlock.
+	private var walkAwayBinding: Binding<Bool> {
+		Binding(
+			get: { settings.walkAwayLock },
+			set: {
+				settings.walkAwayLock = $0
+				AppServices.shared.syncPresenceWatcher()
+			})
+	}
+
+	private var walkAwayNeedsAttention: Bool {
+		!AppServices.executionPolicy.permitsAutomaticLocking || !cameraGranted || !accessibilityGranted
+	}
+
+	@ViewBuilder
+	private var walkAwayNotice: some View {
+		if !AppServices.executionPolicy.permitsAutomaticLocking {
+			StatusLine(
+				kind: .warning,
+				message: "Automatic locking is disabled for this diagnostic session.")
+		} else {
+			VStack(alignment: .leading, spacing: 0) {
+				StatusLine(kind: .warning, message: walkAwayPermissionMessage)
+				HStack(spacing: 6) {
+					if !cameraGranted {
+						Button("Open Camera Settings") { openPrivacySettings("Privacy_Camera") }
+							.gazeButton()
+							.fixedSize()
+					}
+					if !accessibilityGranted {
+						Button("Review Accessibility") { openSetup(at: .permission) }
+							.gazeButton()
+							.fixedSize()
+					}
+				}
+				.padding(.horizontal, Theme.rowInset)
+				.padding(.bottom, 10)
+			}
+		}
+	}
+
+	private var walkAwayPermissionMessage: String {
+		switch (cameraGranted, accessibilityGranted) {
+		case (false, false):
+			return "Camera and Accessibility access are off, so walk-away lock can neither check nor lock."
+		case (false, true):
+			return "Camera access is off, so walk-away lock cannot check."
+		case (true, false):
+			return "Accessibility access is off, so walk-away lock cannot lock the Mac."
+		case (true, true):
+			return ""
+		}
 	}
 
 	private var behaviourFooter: String {

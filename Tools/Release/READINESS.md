@@ -1,6 +1,6 @@
 # Gaze release gates
 
-## Current local candidate — September 15, 2026, 21:31
+## Current local candidate — September 15, 2026, 21:53
 
 **NOT launch-ready.** The Hydra investigation and integration are complete locally;
 owner validation, model/asset permissions, release signing and the deployed update
@@ -8,16 +8,30 @@ flow remain open. The controlling current checkpoint is at the top of
 `CHALLENGE-INVESTIGATION.md`; historical September 14 evidence below is retained.
 
 Local binary SHA-256:
-`23482f6826b1c44662c554ad0dd12bae6d98c1fd5e7e47be607095de39291b1c`.
-Built 21:31:51, strict signature verified, launched as PID 24885. This is an Apple
+`f75675d3f58213ab4128884b7f7274153d008937141b42e8b656dc8904ee289c`.
+Built 21:53:01, strict signature verified, relaunched as PID 46045. This is an Apple
 Development candidate, not a notarized distribution build. Release verification
 fails at the Developer ID requirement.
 
-The latest change adds one/two movement selection for Mac unlock and its scan-only
+The movement-count change adds one/two selection for Mac unlock and its scan-only
 diagnostic. Two remains the default. Attempts capture the choice and reject policy
 changes before accepting further proof or releasing a password; browser approval
 still requires two. 860 unlock/source/gate checks, 34 isolated preference checks,
-production wiring checks and 54 onboarding renders passed on this revision.
+production wiring checks and 54 onboarding renders passed for that change.
+
+Walk-away locking now uses per-analysis sustained absence evidence, checks session,
+permissions/policy and input throughout, stops its camera on cancellation, and
+waits 30 seconds between checks during uninterrupted idle. Its lifecycle is
+independent of password replay. 99 presence/scheduling checks, 9 policy checks,
+lifecycle wiring and a fresh run of all 860 unlock regressions pass. The feature
+remains OFF in the owner's preferences. No unattended camera or lock trial was run.
+See `WALK-AWAY-READINESS-20260915.md` for the lead's corrections and limits.
+
+The current Gaze and protected Gaze Passwords builds both launched. Signed status
+probes reported available services with no approval or credentials requested.
+This verifies local service reachability, not a real browser-to-vault face-approved
+fill. Passwords artifact/test evidence and its separate distribution gates are in
+`../GazePasswords/Release/RELEASE-READINESS.md`.
 
 Earlier integration also passed 54 enrollment checks plus setup lifecycle, 58
 submission checks, 6 product-boundary checks, 43 release-verifier fixture checks,

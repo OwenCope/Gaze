@@ -77,6 +77,9 @@ final class CameraController {
 	/// `uniqueID` of the camera this session is bound to, recorded at enrolment.
 	private(set) var boundDeviceID: String?
 	private(set) var lastFrameCapturedAt: ContinuousClock.Instant?
+	/// Observes every analysis result on the main actor, including rejected frames
+	/// as indeterminate results. Polling only the latest frame can miss a brief face.
+	var onFrameAnalyzed: ((FaceAbsence?, UInt64, ContinuousClock.Instant) -> Void)?
 	private let capture = CameraCaptureDriver()
 	private var lease = CameraFrameLease()
 	private var starting = false
@@ -137,15 +140,20 @@ final class CameraController {
 					self.analyzedFrames &+= 1
 					guard self.lease.accepts(generation, capturedAt: capturedAt, now: .now) else {
 						self.expiredFrames &+= 1
+						self.onFrameAnalyzed?(.detectionFailed, self.analyzedFrames, capturedAt)
 						return
 					}
 					let usable = absence == nil && sample.map { FrameQuality.isUsable($0) } == true
-					guard self.evidenceContinuity.record(usable: usable, capturedAt: capturedAt) else { return }
+					guard self.evidenceContinuity.record(usable: usable, capturedAt: capturedAt) else {
+						self.onFrameAnalyzed?(.detectionFailed, self.analyzedFrames, capturedAt)
+						return
+					}
 					self.sample = sample
 					self.absence = absence
 					self.faceMissing = absence != nil
 					self.lastFrameCapturedAt = capturedAt
 					self.frameID &+= 1
+					self.onFrameAnalyzed?(absence, self.analyzedFrames, capturedAt)
 				}
 			}
 			guard lease.generation == generation, sessionGate.isValid else { return }

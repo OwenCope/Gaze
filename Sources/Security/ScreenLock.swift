@@ -50,6 +50,6 @@ enum ScreenLock {
 		down.post(tap: .cghidEventTap)
 		up.post(tap: .cghidEventTap)
 
-		logger.notice("Locked the screen.")
+		logger.notice("Posted the system Lock Screen shortcut.")
 	}
 }
