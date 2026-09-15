@@ -26,7 +26,6 @@ struct RecognitionTestView: View {
 	@State private var floor: Float = 1
 	@State private var samples = 0
 	@State private var lastDisplayUpdate = Date.distantPast
-	/// Shut by default — see the note on the disclosure in `readout`.
 	@State private var showsDetail = false
 
 	/// Object-detector anti-spoof (`SpoofDetector`): how confidently the Roboflow-trained
@@ -49,18 +48,6 @@ struct RecognitionTestView: View {
 	@State private var eyesShut = false
 	@State private var blinked = false
 
-	/// The head's measured orientation, shown under Details.
-	///
-	/// Which way Vision's yaw runs has been got wrong three times in this app — the turn
-	/// challenge asked for the opposite of what it said, the enrolment ring lit the tick
-	/// across from the one being looked at, and the nod completed on a raised chin. Each
-	/// time it was settled by argument about which way a camera faces, and each time the
-	/// argument lost to the camera.
-	///
-	/// So the figure is on screen, with the word the code derives from it beside it. If the
-	/// word says "left" while the head is turning right, the convention is wrong and it takes
-	/// two seconds rather than a rebuild to find out. It sits under the Details disclosure
-	/// with the other raw numbers, shut by default.
 	@State private var pose: FacePose = .zero
 
 	/// Accumulated between publishes. Deliberately a reference type held in @State so
@@ -76,23 +63,14 @@ struct RecognitionTestView: View {
 		var samples = 0
 	}
 
-	private let circleSize: CGFloat = 210
-
 	var body: some View {
-		VStack(spacing: 20) {
-			header
-			preview
-			readout
+		RecognitionTestPanel(readout: readout, showsDetail: $showsDetail, next: { challenge.next() }, reset: reset) {
+			cameraPreview
+		} companion: {
+			GazeCompanionView(motion: companionMotion)
 		}
-		.padding(26)
-		// Room for the traffic lights: the title bar is transparent and content runs under
-		// it, so the top inset is the window's own chrome now.
 		.padding(.top, 18)
-		.frame(width: 420)
-		// The same glass as the settings window.
 		.background(WindowGlass(keepsTitle: true))
-		// Committed to dark, deliberately, rather than following the system. This window is
-		// mostly camera, and a dark surround keeps the eye on the preview.
 		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
@@ -103,189 +81,106 @@ struct RecognitionTestView: View {
 			AppActivation.returnToBackgroundIfIdle()
 		}
 		.onChange(of: camera.frameID) { _, _ in evaluate() }
-	}
-
-	// MARK: - Sections
-
-	private var header: some View {
-		Text(store.isEnrolled
-			? "Nothing is unlocked here. Look at the camera and watch the score."
-			: "No face is enrolled yet.")
-			.font(Typography.detail)
-			.foregroundStyle(Theme.secondaryLabel)
-			.multilineTextAlignment(.center)
-			.fixedSize(horizontal: false, vertical: true)
-	}
-
-	/// The verdict: a status dot and a word. No pill, no glow — colour only when it means
-	/// something (green = recognised), grey otherwise.
-	private var verdict: some View {
-		HStack(spacing: 8) {
-			Circle()
-				.fill(matched ? Theme.faceID : Theme.tertiaryLabel)
-				.frame(width: 7, height: 7)
-			Text(statusText)
-				.font(.system(.callout, weight: .medium))
-				.foregroundStyle(matched ? Theme.label : Theme.secondaryLabel)
-		}
-		.animation(.easeOut(duration: 0.2), value: matched)
-	}
-
-	@ViewBuilder
-	private var preview: some View {
-		ZStack {
-			if camera.state == .running {
-				CameraPreview(controller: camera)
-					.frame(width: circleSize, height: circleSize)
-					.clipShape(.circle)
-			} else {
-				Circle()
-					.fill(Theme.surface)
-					.frame(width: circleSize, height: circleSize)
-					.overlay { ProgressView() }
-			}
-
-			Circle()
-				.strokeBorder(
-					matched ? Theme.faceID : Theme.separator,
-					lineWidth: matched ? 3 : 1)
-				.frame(width: circleSize + 10, height: circleSize + 10)
-				.animation(.easeOut(duration: 0.18), value: matched)
+		.onChange(of: camera.state) { _, state in
+			guard state != .running else { return }
+			matched = false
+			score = 0
+			pending.matched = false
+			pending.score = 0
+			spoofConf = nil
+			challenge.reset()
 		}
 	}
 
-	private var readout: some View {
-		VStack(spacing: 16) {
-			verdict
+	private var canChallenge: Bool { store.isEnrolled && camera.state == .running && !camera.faceMissing }
 
-			// Scores are only meaningful against the threshold, so the marker is drawn on
-			// the bar rather than quoted as a number beside it.
-			VStack(spacing: 7) {
-				GeometryReader { geometry in
-					ZStack(alignment: .leading) {
-						Capsule().fill(Theme.label.opacity(0.08))
+	private var companionMotion: GazeFaceMotion {
+		guard canChallenge else { return .resting }
+		guard challenge.isBaselineReady else { return .resting }
+		if challenge.isComplete { return .accepted }
+		if challenge.isReturningToRest { return .returnToCenter }
+		switch challenge.action {
+		case .turnLeft: return .turnLeft
+		case .turnRight: return .turnRight
+		case .nod: return .nod
+		case .blink: return .blink
+		case .openMouth: return .openMouth
+		}
+	}
 
-						Capsule()
-							.fill(matched ? Theme.faceID : Theme.secondaryLabel)
-							.frame(width: geometry.size.width * CGFloat(max(0, min(1, score))))
+	private var readout: RecognitionTestReadout {
+		var rows: [(String, String)] = [
+			("Analyzed / expired frames", "\(camera.analyzedFrames) / \(camera.expiredFrames)"),
+			("Requested movement", challenge.guidancePrompt),
+			("Match score", String(format: "%.3f", score)),
+			("Match threshold", String(format: "%.2f", store.embedder.matchThreshold)),
+			("Lowest / highest", String(format: "%.3f / %.3f", floor == 1 ? 0 : floor, peak)),
+			("Samples", "\(samples)"),
+			("Yaw (raw)", canChallenge ? String(format: "%+.2f rad", pose.yaw) : "—"),
+			("Pitch (raw)", canChallenge ? String(format: "%+.2f rad", pose.pitch) : "—"),
+			("Blink observed", blinked ? "Yes" : "Not yet"),
+			("Eye openness", String(format: "%.3f · %@", eyeOpen, eyesShut ? "shut" : "open"))
+		]
+		if canChallenge, let movement = challenge.poseMeasurement(yaw: pose.yaw, pitch: pose.pitch) {
+			rows.append(("Movement from start", String(format: "%+.2f rad", movement.offset)))
+			rows.append(("Requested excursion", String(format: "%+.2f rad", movement.target)))
+			rows.append(("Return to start", String(format: "within ±%.2f rad", movement.returnTolerance)))
+		}
+		if let spoof {
+			rows.append(("Photo / screen detector", spoofConf.map { $0 < spoof.threshold ? "Clear" : "Device seen" } ?? "Not evaluated"))
+			rows.append(("Detector score / threshold", spoofConf.map { String(format: "%.3f / %.2f", $0, spoof.threshold) } ?? "—"))
+		} else {
+			rows.append(("Photo / screen detector", "Model unavailable"))
+		}
+		let instruction: String
+		if !store.isEnrolled {
+			instruction = "Enroll your face to try this."
+		} else if !canChallenge {
+			instruction = "Look at the camera when you're ready."
+		} else if !challenge.isBaselineReady {
+			instruction = "Face the camera and hold still."
+		} else {
+			instruction = challenge.isComplete ? "Nicely done." : challenge.guidancePrompt
+		}
+		return RecognitionTestReadout(status: statusText, matched: matched, score: score,
+			threshold: store.embedder.matchThreshold, instruction: instruction,
+			complete: canChallenge && challenge.isComplete, canChallenge: canChallenge, diagnosticRows: rows,
+			yaw: canChallenge ? pose.yaw : nil, pitch: canChallenge ? pose.pitch : nil)
+	}
 
-						// Where the match threshold sits.
-						Rectangle()
-							.fill(Theme.label.opacity(0.55))
-							.frame(width: 1.5)
-							.offset(x: geometry.size.width * CGFloat(store.embedder.matchThreshold))
+	@ViewBuilder private var cameraPreview: some View {
+		if camera.state == .running {
+			CameraPreview(controller: camera)
+		} else {
+			ZStack {
+				Theme.surface
+				VStack(spacing: 12) {
+					if camera.state == .idle {
+						ProgressView().controlSize(.small)
+						Text("Starting camera…")
+					} else {
+						Image(systemName: "video.slash").font(.title2)
+						Text(statusText).multilineTextAlignment(.center)
+						if camera.state == .denied {
+							Text("Allow camera access in System Settings → Privacy & Security → Camera, then reopen this test.")
+								.font(.caption).multilineTextAlignment(.center)
+						}
 					}
-				}
-				.frame(height: 6)
-				.animation(.easeOut(duration: 0.12), value: score)
-
-				HStack {
-					Text(String(format: "%.3f", score))
-						.foregroundStyle(matched ? Theme.faceID : Theme.secondaryLabel)
-					Spacer()
-					Text("threshold \(String(format: "%.2f", store.embedder.matchThreshold))")
-						.foregroundStyle(Theme.tertiaryLabel)
-				}
-				.font(Typography.mono)
-			}
-
-			// The liveness checks stay in the open: they are the part of this window someone
-			// is asked to *do* something about.
-			antiSpoofSection
-
-			// Everything numeric goes behind a disclosure, shut by default.
-			//
-			// This window is reachable from Settings by anyone, and it opened on `spoof
-			// 0.000`, `threshold 0.50`, `eye openness 0.290` and a run of three-decimal
-			// figures — a panel that answers "is this working" in a language only the person
-			// who wrote it speaks. The question almost everybody has is answered by the word
-			// under the camera and the bar under that; the figures matter to the one person
-			// tuning a threshold, and they are still one click away for them.
-			DisclosureGroup(isExpanded: $showsDetail) {
-				VStack(spacing: 0) {
-					statRow("Lowest", String(format: "%.3f", floor == 1 ? 0 : floor))
-					RowDivider(inset: 0)
-					statRow("Highest", String(format: "%.3f", peak))
-					RowDivider(inset: 0)
-					statRow("Samples", "\(samples)")
-					RowDivider(inset: 0)
-					statRow("Turn", String(format: "%@  %+.2f", turnWord, pose.yaw))
-					RowDivider(inset: 0)
-					statRow("Nod", String(format: "%@  %+.2f", nodWord, pose.pitch))
-				}
-				.glassSurface()
-				.padding(.top, 8)
-
-				Text("If this is you, watch the lowest. If it isn't, watch the highest.")
-					.font(Typography.detail)
-					.foregroundStyle(Theme.tertiaryLabel)
-					.fixedSize(horizontal: false, vertical: true)
-					.frame(maxWidth: .infinity, alignment: .leading)
-					.padding(.top, 8)
-			} label: {
-				Text("Details")
-					.font(Typography.detail)
-					.foregroundStyle(Theme.secondaryLabel)
-			}
-			.animation(Theme.Motion.quick, value: showsDetail)
-
-			VStack(spacing: 10) {
-
-				Button("Reset") {
-					pending.peak = 0
-					pending.floor = 1
-					pending.samples = 0
-					blinked = false
-					eyesShut = false
-					challenge.next()
-					publish()
-				}
-				.gazeButton()
+				}.font(.callout).foregroundStyle(Theme.secondaryLabel).padding(24)
 			}
 		}
 	}
 
-	/// Which way the code currently believes the head is turned. Derived from the one stated
-	/// convention on `FacePose.yaw` — negative is the user's own left — so a disagreement
-	/// between this word and the head in the preview is a bug in that convention, visible.
-	private var turnWord: String {
-		if pose.yaw < -0.15 { return "left " }
-		if pose.yaw > 0.15 { return "right" }
-		return "centre"
+	private func reset() {
+		pending.peak = 0
+		pending.floor = 1
+		pending.samples = 0
+		blinked = false
+		eyesShut = false
+		challenge.next()
+		publish()
 	}
 
-	/// Same, for pitch: Vision reports chin-down as positive. The rest value is not
-	/// necessarily zero, so read this as a direction of travel rather than an absolute.
-	private var nodWord: String {
-		if pose.pitch > 0.15 { return "down " }
-		if pose.pitch < -0.15 { return "up   " }
-		return "level "
-	}
-
-	/// A label-left, mono-value-right row. The whole readout is a spec list, not a grid of
-	/// tiles — no glass, no arrows, no per-figure colour.
-	private func statRow(_ label: String, _ value: String) -> some View {
-		HStack {
-			Text(label)
-				.font(Typography.detail)
-				.foregroundStyle(Theme.secondaryLabel)
-			Spacer()
-			Text(value)
-				.font(Typography.mono)
-				.foregroundStyle(Theme.label)
-				.contentTransition(.numericText())
-		}
-		.padding(.horizontal, 13)
-		.padding(.vertical, 9)
-		.accessibilityElement(children: .combine)
-		.accessibilityLabel(label)
-		.accessibilityValue(value)
-	}
-
-	// MARK: - Anti-spoof
-
-	/// Average eye openness (height/width of the eye landmarks). A photo sits at one value;
-	/// a blink makes it dip and recover.
 	private func eyeOpenness(_ lm: VNFaceLandmarks2D) -> Float? {
 		func openness(_ region: VNFaceLandmarkRegion2D?) -> Float? {
 			guard let p = region?.normalizedPoints, p.count >= 4 else { return nil }
@@ -311,135 +206,11 @@ struct RecognitionTestView: View {
 		}
 	}
 
-	/// The three liveness signals, as one group.
-	///
-	/// These were three blocks separated by a bare `Divider`, floating on the window ground
-	/// under three more floating figures — the window read as a printout because nothing on
-	/// it was ever bounded. On a surface, with rules between the rows, they read as what they
-	/// are: a short list of checks, each with a verdict.
-	private var antiSpoofSection: some View {
-		VStack(spacing: 0) {
-			// Active challenge — a randomly chosen action the user has to perform. This is the
-			// real anti-spoof: a photo can't do it, and because the ask is random a recording
-			// of one action can't answer a demand for another.
-			HStack(spacing: 11) {
-				Image(systemName: challenge.isComplete ? "checkmark.circle.fill" : challenge.action.symbol)
-					.font(.system(size: 19, weight: .semibold))
-					.foregroundStyle(challenge.isComplete ? Theme.faceID : Theme.label)
-					.contentTransition(.symbolEffect(.replace))
-					.frame(width: 24)
-				VStack(alignment: .leading, spacing: 1) {
-					Text("Prove you're really here")
-						.font(Typography.detail).foregroundStyle(Theme.secondaryLabel)
-					Text(challenge.isComplete ? "Passed" : challenge.action.prompt)
-						.font(.system(.callout, weight: .semibold))
-						.foregroundStyle(challenge.isComplete ? Theme.faceID : Theme.label)
-						.contentTransition(.opacity)
-				}
-				Spacer(minLength: 8)
-				Button(challenge.isComplete ? "Again" : "Skip") { challenge.next() }
-					.gazeButton(size: .small)
-			}
-			.padding(.horizontal, 13)
-			.padding(.vertical, 10)
-			.animation(.easeOut(duration: 0.2), value: challenge.isComplete)
-
-			RowDivider(inset: 0)
-
-			// Object detector — looks for a held phone/screen/photo in the whole frame. The
-			// verdict inverts: a high confidence means a device is present, so low is good.
-			if spoof != nil {
-				let conf = spoofConf ?? 0
-				let threshold = spoof?.threshold ?? 0.5
-				signalBar(
-					title: "Photo or screen held up",
-					value: conf,
-					threshold: threshold,
-					pass: conf < threshold,
-					passWord: "Clear", failWord: "Device seen",
-					valueLabel: "spoof",
-					invert: true)
-				RowDivider(inset: 0)
-			}
-
-			// Blink — the one thing a photo can't do, in any light. Openness dips on a blink
-			// and this latches "Live"; a flat image holds one value and never trips.
-			VStack(spacing: 7) {
-				HStack {
-					Text("Blink")
-						.font(Typography.detail).foregroundStyle(Theme.secondaryLabel)
-					Spacer()
-					Text(blinked ? "Live — blinked" : "Blink to prove")
-						.font(.system(.caption, weight: .semibold))
-						.foregroundStyle(blinked ? Theme.faceID : Theme.tertiaryLabel)
-				}
-				if showsDetail {
-					HStack {
-						Text(String(format: "eye openness %.3f", eyeOpen))
-							.foregroundStyle(Theme.secondaryLabel)
-						Spacer()
-						Text(eyesShut ? "shut" : "open")
-							.foregroundStyle(Theme.tertiaryLabel)
-					}
-					.font(Typography.mono)
-				}
-			}
-			.padding(.horizontal, 13)
-			.padding(.vertical, 10)
-		}
-		.glassSurface()
-	}
-
-	/// One anti-spoof signal: a label, a pass/fail word, a bar with the threshold marked, and
-	/// the raw value. `invert` is for a signal where *high* is bad (the object detector).
-	private func signalBar(
-		title: String, value: Float, threshold: Float, pass: Bool,
-		passWord: String, failWord: String, valueLabel: String, invert: Bool = false
-	) -> some View {
-		let barColor = pass ? Theme.faceID : Theme.warning
-		return VStack(spacing: 7) {
-			HStack {
-				Text(title)
-					.font(Typography.detail).foregroundStyle(Theme.secondaryLabel)
-				Spacer()
-				Text(pass ? passWord : failWord)
-					.font(.system(.caption, weight: .semibold))
-					.foregroundStyle(pass ? Theme.faceID : Theme.warning)
-			}
-			GeometryReader { geometry in
-				ZStack(alignment: .leading) {
-					Capsule().fill(.white.opacity(0.07))
-					Capsule()
-						.fill(invert ? Theme.secondaryLabel : barColor)
-						.frame(width: geometry.size.width * CGFloat(max(0, min(1, value))))
-					Rectangle().fill(Theme.label.opacity(0.65)).frame(width: 2)
-						.offset(x: geometry.size.width * CGFloat(threshold))
-				}
-			}
-			.frame(height: 8)
-			.animation(.easeOut(duration: 0.12), value: value)
-			// The figure and its threshold follow the Details disclosure. The bar already
-			// says where this signal sits against the line it has to stay under, which is
-			// the whole content of the number — printing `spoof 0.000 threshold 0.50` under
-			// it as well tells a general reader nothing they can act on.
-			if showsDetail {
-				HStack {
-					Text(String(format: "%@ %.3f", valueLabel, value))
-						.foregroundStyle(pass ? Theme.faceID : Theme.secondaryLabel)
-					Spacer()
-					Text("threshold \(String(format: "%.2f", threshold))")
-						.foregroundStyle(Theme.tertiaryLabel)
-				}
-				.font(Typography.mono)
-			}
-		}
-		.padding(.horizontal, 13)
-		.padding(.vertical, 10)
-	}
-
 	private var statusText: String {
 		if case .failed(let reason) = camera.state { return reason }
 		if camera.state == .denied { return "Camera access is off" }
+		if camera.state == .idle { return "Starting camera…" }
+		if camera.lastFrameCapturedAt == nil { return "Waiting for camera frames…" }
 		if !store.isEnrolled { return "Not enrolled" }
 		// The reason, not just the fact. This window exists to explain why recognition is or
 		// is not happening, and "No face" over a picture of your own face — which is what a
