@@ -424,8 +424,14 @@ final class LockWatcher {
 		// Still bounded, and by the thing that should bound it: six rejections and the
 		// lockout takes over.
 		let attemptDeadline = ContinuousClock.now.advanced(by: .seconds(60))
+		var previousPoll = ContinuousClock.now
 		while requestIsCurrent(), ContinuousClock.now < attemptDeadline {
-			try? await Task.sleep(for: .milliseconds(60))
+			let delay = RecognitionScanPacing.delay(since: previousPoll, now: .now)
+			if delay > .zero {
+				do { try await Task.sleep(for: delay) }
+				catch { return }
+			}
+			previousPoll = .now
 			guard requestIsCurrent(), camera.state == .running,
 				camera.boundDeviceID == pinnedCamera else { return }
 			switch freshFrames.observe(id: camera.frameID, capturedAt: camera.lastFrameCapturedAt, now: .now) {
@@ -537,7 +543,8 @@ final class LockWatcher {
 			guard result.matched, let face = result.face else {
 				matchingHold.reset()
 				if challengeGate.isPresented, let challenge {
-					let pose = challenge.poseMeasurement(yaw: sample.pose.yaw, pitch: sample.pose.pitch)
+					let pose = challenge.poseMeasurement(yaw: sample.pose.yaw, pitch: sample.pose.pitch,
+						yawSource: sample.pose.yawSource, pitchSource: sample.pose.pitchSource)
 					LockScanDiagnostics.shared.recordMovementFailure(.init(action: challenge.action.prompt,
 						returning: challenge.isReturningToRest, comparedIdentity: result.comparedIdentity,
 						score: result.score, threshold: store.embedder.matchThreshold,
@@ -638,7 +645,13 @@ final class LockWatcher {
 				guard challengeGate.admits(frameID: sampleFrameID, capturedAt: sampleCapturedAt, now: .now)
 				else { continue }
 				let wasReturningToRest = challenge.isReturningToRest
-				challenge.consume(sample)
+				let consumption = challenge.consume(sample)
+				if consumption.poseSourceInvalidated {
+					matchingHold.reset()
+					rejectionHold.reset()
+					resetMovementGuidance(reason: "pose source changed")
+					continue
+				}
 				if challenge.isReturningToRest && !wasReturningToRest {
 					let hint = challenge.guidanceHint
 					capsule.update(phase: .challenge(prompt: challenge.guidancePrompt,

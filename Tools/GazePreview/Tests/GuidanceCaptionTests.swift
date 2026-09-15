@@ -8,7 +8,7 @@ enum GuidanceCaptionTests {
 		let phases: [(String, String, CGFloat)] = [
 			("Turn slightly left", "arrowshape.left.fill", -1),
 			("Turn slightly right", "arrowshape.right.fill", 1),
-			("Face the camera again", "viewfinder", 0)
+			("Return to your starting position", "viewfinder", 0)
 		]
 		var guidanceSizes: [String: CGSize] = [:]
 		for reduced in [false, true] {
@@ -63,6 +63,15 @@ enum GuidanceCaptionTests {
 		request.usesLanguageCorrection = false
 		try VNImageRequestHandler(url: url).perform([request])
 		let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
-		precondition(text.contains(prompt), "Missing visible instruction in \(url.lastPathComponent): \(text)")
+		// OCR can place the adjacent SF Symbol between the two text lines.
+		// Require every instruction word in order, allowing that extra symbol token.
+		let words = text.split(whereSeparator: \.isWhitespace)
+		var remaining = words[...]
+		for word in prompt.split(whereSeparator: \.isWhitespace) {
+			guard let index = remaining.firstIndex(of: word) else {
+				preconditionFailure("Missing visible instruction in \(url.lastPathComponent): \(text)")
+			}
+			remaining = remaining[remaining.index(after: index)...]
+		}
 	}
 }

@@ -7,15 +7,41 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=toolchain.sh
 . "$ROOT/toolchain.sh"
+. "$ROOT/Tools/MainAppSources.sh"
+. "$ROOT/Tools/Release/Signing.sh"
+IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null)" || {
+	echo "Unable to inspect valid signing identities. The existing app was not replaced." >&2
+	exit 1
+}
+IDENTITY="$(gaze_signing_identity "${DIST:-0}" "${GAZE_SIGNING_IDENTITY:-}" "$IDENTITIES")" || exit 1
+DEFAULT_OUTPUT="$ROOT/build/Gaze.app"
+SIGNING_FLAGS=(--options runtime)
+if [ "${DIST:-}" = "1" ]; then
+	DEFAULT_OUTPUT="$ROOT/build/release/Gaze.app"
+	SIGNING_FLAGS+=(--timestamp)
+fi
+collect_gaze_main_sources "$ROOT"
 require_toolchain
-APP="$ROOT/build/Gaze.app"
+APP="${GAZE_BUILD_OUTPUT:-$DEFAULT_OUTPUT}"
+SIGNING_REFERENCE="${GAZE_SIGNING_REFERENCE:-$ROOT/build/Gaze.app}"
+REFERENCE_REQUIREMENT=""
+if [ "${DIST:-}" != "1" ] && [ -d "$SIGNING_REFERENCE" ]; then
+	REFERENCE_TEAM="$(codesign -dv "$SIGNING_REFERENCE" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+	if [ -n "$REFERENCE_TEAM" ] && [ "$REFERENCE_TEAM" != "not set" ]; then
+		REFERENCE_REQUIREMENT="$(codesign -d -r- "$SIGNING_REFERENCE" 2>&1 | sed -n 's/^designated => //p')"
+		[ -n "$REFERENCE_REQUIREMENT" ] || { echo "Could not read the existing Gaze signing requirement." >&2; exit 1; }
+	fi
+fi
 
 # Built aside and swapped in at the end, rather than deleted and rebuilt in place.
 #
 # In-place rebuilds leave a window where the bundle exists but its executable does not,
 # and the Dock draws a prohibitory sign over the icon for as long as that lasts —
 # intermittently, depending on when you happen to look.
-STAGE="$ROOT/build/.staging-Gaze.app"
+mkdir -p "$(dirname "$APP")"
+STAGE_ROOT="$(mktemp -d "$(dirname "$APP")/.staging-Gaze.XXXXXX")"
+trap 'rm -rf "$STAGE_ROOT"' EXIT
+STAGE="$STAGE_ROOT/Gaze.app"
 BIN="$STAGE/Contents/MacOS/Gaze"
 
 echo "→ Cleaning"
@@ -71,15 +97,9 @@ else
 	echo "  ! no FaceEmbedding model — using landmark-geometry fallback"
 fi
 
-# The anti-spoof model, if one has been dropped in.
-#
-# `LivenessDetector` looks for `Liveness.mlmodelc` in the bundle and disables the
-# whole feature when it is missing — which it always was, because nothing here
-# compiled it. The setting sat permanently greyed out reading "No anti-spoof
-# model is installed", and there was no way to install one.
-#
-# Optional for the same reason the embedder is: the weights are somebody else's
-# and their licence decides whether they can ship.
+# Optional legacy texture model. LockWatcher uses Spoof.mlmodelc through
+# AntiSpoofGate; the presence of Liveness.mlmodelc does not enable that gate.
+# Redistribution still depends on the rights to these weights.
 if [ -d "$ROOT/Resources/Liveness.mlmodelc" ]; then
 	echo "→ Using prebuilt anti-spoof model"
 	cp -R "$ROOT/Resources/Liveness.mlmodelc" "$STAGE/Contents/Resources/"
@@ -89,12 +109,12 @@ elif [ -d "$ROOT/Resources/Liveness.mlpackage" ]; then
 	xcrun coremlc compile "$ROOT/Resources/Liveness.mlpackage" "$STAGE/Contents/Resources" >/dev/null
 	echo "  ✓ Liveness.mlmodelc"
 else
-	echo "  ! no Liveness model — a photograph of you will pass"
+	echo "  – no optional legacy Liveness model; lock-screen photo checks use Spoof"
 fi
 
 # The face-spoof OBJECT detector (Roboflow, trained by scripts/train_spoof.swift). Spots a
 # held phone/screen/printed photo in frame — a different signal from the passive texture
-# model. Optional; `SpoofDetector` disables itself when it's absent.
+# model. Missing weights block unlock when photo rejection is enabled.
 if [ -d "$ROOT/Resources/Spoof.mlmodelc" ]; then
 	echo "→ Using prebuilt spoof detector"
 	cp -R "$ROOT/Resources/Spoof.mlmodelc" "$STAGE/Contents/Resources/"
@@ -159,7 +179,7 @@ if [ "${DIST:-}" = "1" ] && read -r dist_sdk dist_version <<<"$(oldest_usable_sd
 	SDK="$dist_sdk"
 	SDK_FLAGS=(-Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_SDK_MAJOR.0" -Xlinker "$dist_version")
 else
-	SDK="$(xcrun --show-sdk-path --sdk macosx)"
+	SDK="${SDKROOT:-$(xcrun --show-sdk-path --sdk macosx)}"
 fi
 
 echo "→ Compiling (SDK: $(basename "$SDK"), $(host_target))"
@@ -177,42 +197,36 @@ xcrun swiftc \
 	-framework CryptoKit \
 	-framework LocalAuthentication \
 	-framework OpenDirectory \
-	"$ROOT"/Sources/*/*.swift \
+	"${GAZE_MAIN_SOURCES[@]}" \
 	-o "$BIN"
 
-# Prefer a real signing identity over ad-hoc.
-#
-# Not cosmetic: the Keychain ACL protecting the vault key is bound to the app's code
-# identity, and an ad-hoc signature is regenerated on every build. That makes the app a
-# *different* application each time, so macOS challenges it for the keychain password on
-# every single rebuild. A stable identity keeps the ACL matching.
-#
-# All of which is true only on the machine that owns the certificate. An "Apple
-# Development" signature is not a distribution signature: on any other Mac amfid
-# has no provisioning profile naming that machine, so it refuses the binary and
-# the kernel kills it at exec. No dialog, no crash report, no bounce — the app
-# simply never starts, which is indistinguishable from a broken build.
-#
-# So: DIST=1 for anything anyone else will run. The keychain-prompt problem it
-# reintroduces belongs to iterative rebuilds, and a release is signed once.
 if [ "${DIST:-}" = "1" ]; then
-	echo "→ Signing ad-hoc for distribution"
-	IDENTITY="-"
+	echo "→ Signing release with Developer ID"
 else
-	IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
-		| awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')"
-
-	if [ -n "$IDENTITY" ]; then
-		echo "→ Signing as $IDENTITY (this Mac only — use DIST=1 to hand out)"
-	else
-		echo "→ Signing (ad-hoc — expect a keychain prompt after each rebuild)"
-		IDENTITY="-"
-	fi
+	echo "→ Signing with a stable local identity"
 fi
 
-codesign --force --sign "$IDENTITY" \
+codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" \
 	--entitlements "$ROOT/Resources/Gaze.entitlements" \
 	--identifier com.gazeunlock.Gaze "$STAGE"
+
+codesign --verify --strict "$STAGE"
+if [ "${DIST:-}" = "1" ]; then
+	SIGNATURE="$(codesign -dv --verbose=4 "$STAGE" 2>&1)"
+	printf '%s\n' "$SIGNATURE" | grep -q '^Authority=Developer ID Application: ' || {
+		echo "Release signature is not Developer ID Application. Output was not replaced." >&2; exit 1;
+	}
+	printf '%s\n' "$SIGNATURE" | grep -q '^Timestamp=' || {
+		echo "Release signature has no secure timestamp. Output was not replaced." >&2; exit 1;
+	}
+fi
+if [ -n "$REFERENCE_REQUIREMENT" ]; then
+	codesign --verify --strict -R "=$REFERENCE_REQUIREMENT" "$STAGE" || {
+		echo "Signing identity differs from the existing Gaze app. The existing bundle was not replaced." >&2
+		exit 1
+	}
+	echo "  ✓ Matches the existing Gaze signing requirement"
+fi
 
 echo "→ Swapping in"
 # Atomic-ish: the finished bundle replaces the old one in a single rename, so the app is
