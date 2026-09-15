@@ -1,5 +1,7 @@
+import AppKit
 import Observation
 import SwiftUI
+import Vision
 
 /// Live recognition, with the numbers shown.
 ///
@@ -7,6 +9,10 @@ import SwiftUI
 /// recognition actually good enough to unlock with? Enrolling a face proves nothing on
 /// its own — what matters is the margin between your score and a stranger's, and the only
 /// way to see that is to watch it run.
+///
+/// The anti-spoof read-out mirrors what the lock screen actually checks (`AntiSpoofGate`):
+/// the passive texture model and the object detector, the two signals that gate a real
+/// unlock. Blink is shown alongside as the plainest demonstration that a photo can't pass.
 ///
 /// Nothing here changes any setting or unlocks anything. It is safe to leave open.
 struct RecognitionTestView: View {
@@ -20,6 +26,29 @@ struct RecognitionTestView: View {
 	@State private var floor: Float = 1
 	@State private var samples = 0
 	@State private var lastDisplayUpdate = Date.distantPast
+	@State private var showsDetail = false
+
+	/// Object-detector anti-spoof (`SpoofDetector`): how confidently the Roboflow-trained
+	/// detector sees a held phone/screen/photo in the frame. nil when no model is installed.
+	/// This is the signal that catches the held-photo attack — it looks for the device, not
+	/// the face's texture.
+	@State private var spoofConf: Float?
+	private let spoof = SpoofDetector()
+
+	/// Active challenge–response liveness: a randomly chosen action the user has to perform.
+	/// The one anti-spoof signal a webcam can do well — a photo can't turn its head or blink
+	/// on demand, and the demand is random.
+	@State private var challenge = LivenessChallenge()
+
+	// ── Blink liveness ────────────────────────────────────────────────
+	/// Eye openness (height/width of the eye landmarks), ~0.30 open, <0.15 shut. A photo
+	/// holds one value forever; a live person's dips when they blink. That dip-then-recover
+	/// is the thing a flat image can't fake, in any light.
+	@State private var eyeOpen: Float = 0
+	@State private var eyesShut = false
+	@State private var blinked = false
+
+	@State private var pose: FacePose = .zero
 
 	/// Accumulated between publishes. Deliberately a reference type held in @State so
 	/// mutating it does not invalidate the view.
@@ -34,229 +63,165 @@ struct RecognitionTestView: View {
 		var samples = 0
 	}
 
-	private let circleSize: CGFloat = 210
-
 	var body: some View {
-		VStack(spacing: 20) {
-			header
-			preview
-			readout
+		RecognitionTestPanel(readout: readout, showsDetail: $showsDetail, next: { challenge.next() }, reset: reset) {
+			cameraPreview
+		} companion: {
+			GazeCompanionView(motion: companionMotion)
 		}
-		.padding(26)
-		// Room for the traffic lights: the title bar is transparent and content runs under
-		// it, so the top inset is the window's own chrome now.
 		.padding(.top, 18)
-		// No trailing `Spacer`. It existed to fill a fixed 620pt frame, and once the frame
-		// went content-sized it did nothing but manufacture dead air under the Reset button.
-		.frame(width: 420)
-		// The same glass as the settings window. This was the one surface still painted
-		// opaque, and next to the glazed settings window it read as a prop from a different
-		// app. The camera disc and score bar sit on glass just as legibly.
 		.background(WindowGlass(keepsTitle: true))
-		// Committed to dark, deliberately, rather than following the system.
-		//
-		// This window is mostly camera. A black surround is what keeps the eye on the preview
-		// rather than on the wall behind it — the same reason Photo Booth and QuickTime's
-		// recorder stay dark whatever the system is set to. Its readouts are tuned against a
-		// dark ground too, so following the appearance leaves them washed out on light.
 		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
-			await camera.start(pinnedDeviceID: store.enrollment?.cameraID)
+			await camera.start(pinnedDeviceID: store.pinnedCameraID)
 		}
 		.onDisappear {
 			camera.stop()
 			AppActivation.returnToBackgroundIfIdle()
 		}
 		.onChange(of: camera.frameID) { _, _ in evaluate() }
-	}
-
-	// MARK: - Sections
-
-	/// No title.
-	///
-	/// The window's own title bar already says "Test Recognition" an inch above this, and it
-	/// said it in a different size and weight — two headings for one window, disagreeing
-	/// about how to draw the same six words. What is left is the line that says something
-	/// the title bar cannot.
-	private var header: some View {
-		Text(store.isEnrolled
-			? "Nothing is unlocked here. Look at the camera and watch the score."
-			: "No face is enrolled yet.")
-			.font(Typography.detail)
-			.foregroundStyle(Theme.secondaryLabel)
-			.multilineTextAlignment(.center)
-			.fixedSize(horizontal: false, vertical: true)
-	}
-
-	/// The verdict, as a pill rather than bare text.
-	private var verdict: some View {
-		HStack(spacing: 7) {
-			Image(systemName: matched ? "checkmark.circle.fill" : verdictSymbol)
-				.font(.system(.body, weight: .semibold))
-			Text(statusText)
-				.font(.system(.body, weight: .medium))
-		}
-		.foregroundStyle(matched ? Theme.faceID : Theme.secondaryLabel)
-		.padding(.horizontal, 14)
-		.padding(.vertical, 7)
-		.background(
-			Capsule().fill((matched ? Theme.faceID : Color.white).opacity(matched ? 0.14 : 0.06)))
-		.animation(.easeOut(duration: 0.2), value: matched)
-	}
-
-	private var verdictSymbol: String {
-		if camera.state == .denied { return "video.slash.fill" }
-		if !store.isEnrolled { return "person.crop.circle.badge.questionmark" }
-		if camera.faceMissing { return "viewfinder" }
-		return "xmark.circle.fill"
-	}
-
-	@ViewBuilder
-	private var preview: some View {
-		ZStack {
-			if camera.state == .running {
-				CameraPreview(controller: camera)
-					.frame(width: circleSize, height: circleSize)
-					.clipShape(.circle)
-			} else {
-				Circle()
-					.fill(Theme.surface)
-					.frame(width: circleSize, height: circleSize)
-					.overlay { ProgressView() }
-			}
-
-			Circle()
-				.strokeBorder(
-					matched ? Theme.faceID : Theme.separator,
-					lineWidth: matched ? 3 : 1)
-				.frame(width: circleSize + 10, height: circleSize + 10)
-				.animation(.easeOut(duration: 0.18), value: matched)
+		.onChange(of: camera.state) { _, state in
+			guard state != .running else { return }
+			matched = false
+			score = 0
+			pending.matched = false
+			pending.score = 0
+			spoofConf = nil
+			challenge.reset()
 		}
 	}
 
-	private var readout: some View {
-		VStack(spacing: 16) {
-			verdict
+	private var canChallenge: Bool { store.isEnrolled && camera.state == .running && !camera.faceMissing }
 
-			// Scores are only meaningful against the threshold, so the marker is drawn on
-			// the bar rather than quoted as a number beside it.
-			VStack(spacing: 7) {
-				GeometryReader { geometry in
-					ZStack(alignment: .leading) {
-						Capsule().fill(.white.opacity(0.07))
+	private var companionMotion: GazeFaceMotion {
+		guard canChallenge else { return .resting }
+		guard challenge.isBaselineReady else { return .resting }
+		if challenge.isComplete { return .accepted }
+		if challenge.isReturningToRest { return .returnToCenter }
+		switch challenge.action {
+		case .turnLeft: return .turnLeft
+		case .turnRight: return .turnRight
+		case .nod: return .nod
+		case .blink: return .blink
+		case .openMouth: return .openMouth
+		}
+	}
 
-						Capsule()
-							.fill(
-								LinearGradient(
-									colors: matched
-										? [Theme.faceID.opacity(0.7), Theme.faceID]
-										: [Theme.warning.opacity(0.6), Theme.warning],
-									startPoint: .leading, endPoint: .trailing)
-							)
-							.frame(width: geometry.size.width * CGFloat(max(0, min(1, score))))
+	private var readout: RecognitionTestReadout {
+		var rows: [(String, String)] = [
+			("Analyzed / expired frames", "\(camera.analyzedFrames) / \(camera.expiredFrames)"),
+			("Requested movement", challenge.guidancePrompt),
+			("Match score", String(format: "%.3f", score)),
+			("Match threshold", String(format: "%.2f", store.embedder.matchThreshold)),
+			("Lowest / highest", String(format: "%.3f / %.3f", floor == 1 ? 0 : floor, peak)),
+			("Samples", "\(samples)"),
+			("Yaw (raw)", canChallenge ? String(format: "%+.2f rad", pose.yaw) : "—"),
+			("Pitch (raw)", canChallenge ? String(format: "%+.2f rad", pose.pitch) : "—"),
+			("Blink observed", blinked ? "Yes" : "Not yet"),
+			("Eye openness", String(format: "%.3f · %@", eyeOpen, eyesShut ? "shut" : "open"))
+		]
+		if canChallenge, let movement = challenge.poseMeasurement(yaw: pose.yaw, pitch: pose.pitch) {
+			rows.append(("Movement from start", String(format: "%+.2f rad", movement.offset)))
+			rows.append(("Requested excursion", String(format: "%+.2f rad", movement.target)))
+			rows.append(("Return to start", String(format: "within ±%.2f rad", movement.returnTolerance)))
+		}
+		if let spoof {
+			rows.append(("Photo / screen detector", spoofConf.map { $0 < spoof.threshold ? "Clear" : "Device seen" } ?? "Not evaluated"))
+			rows.append(("Detector score / threshold", spoofConf.map { String(format: "%.3f / %.2f", $0, spoof.threshold) } ?? "—"))
+		} else {
+			rows.append(("Photo / screen detector", "Model unavailable"))
+		}
+		let instruction: String
+		if !store.isEnrolled {
+			instruction = "Enroll your face to try this."
+		} else if !canChallenge {
+			instruction = "Look at the camera when you're ready."
+		} else if !challenge.isBaselineReady {
+			instruction = "Face the camera and hold still."
+		} else {
+			instruction = challenge.isComplete ? "Nicely done." : challenge.guidancePrompt
+		}
+		return RecognitionTestReadout(status: statusText, matched: matched, score: score,
+			threshold: store.embedder.matchThreshold, instruction: instruction,
+			complete: canChallenge && challenge.isComplete, canChallenge: canChallenge, diagnosticRows: rows,
+			yaw: canChallenge ? pose.yaw : nil, pitch: canChallenge ? pose.pitch : nil)
+	}
 
-						// Where the match threshold sits.
-						Rectangle()
-							.fill(Theme.label.opacity(0.65))
-							.frame(width: 2)
-							.offset(x: geometry.size.width * CGFloat(store.embedder.matchThreshold))
+	@ViewBuilder private var cameraPreview: some View {
+		if camera.state == .running {
+			CameraPreview(controller: camera)
+		} else {
+			ZStack {
+				Theme.surface
+				VStack(spacing: 12) {
+					if camera.state == .idle {
+						ProgressView().controlSize(.small)
+						Text("Starting camera…")
+					} else {
+						Image(systemName: "video.slash").font(.title2)
+						Text(statusText).multilineTextAlignment(.center)
+						if camera.state == .denied {
+							Text("Allow camera access in System Settings → Privacy & Security → Camera, then reopen this test.")
+								.font(.caption).multilineTextAlignment(.center)
+						}
 					}
-				}
-				.frame(height: 8)
-				.animation(.easeOut(duration: 0.12), value: score)
-
-				HStack {
-					Text(String(format: "%.3f", score))
-						.foregroundStyle(matched ? Theme.faceID : Theme.secondaryLabel)
-					Spacer()
-					Text("threshold \(String(format: "%.2f", store.embedder.matchThreshold))")
-						.foregroundStyle(Theme.tertiaryLabel)
-				}
-				.font(Typography.mono)
-			}
-
-			// The two numbers that actually decide whether a threshold is usable: how low
-			// the enrolled face drops, and how high anyone else reaches.
-			//
-			// The sample count belongs to the run, not to either figure. Printing it under
-			// both tiles put the same number on screen twice, side by side, reading as two
-			// measurements that happened to agree.
-			VStack(spacing: 8) {
-				HStack(spacing: 10) {
-					statTile(
-						label: "Lowest", value: floor == 1 ? 0 : floor,
-						tint: Theme.warning, symbol: "arrow.down")
-					statTile(
-						label: "Highest", value: peak,
-						tint: Theme.faceID, symbol: "arrow.up")
-				}
-
-				Text("\(samples) \(samples == 1 ? "sample" : "samples")")
-					.font(Typography.caption)
-					.foregroundStyle(Theme.tertiaryLabel)
-					.contentTransition(.numericText())
-			}
-
-			VStack(spacing: 10) {
-				Text("If this is you, watch the lowest. If it isn't, watch the highest.")
-					.font(Typography.detail)
-					.foregroundStyle(Theme.tertiaryLabel)
-					.multilineTextAlignment(.center)
-					.fixedSize(horizontal: false, vertical: true)
-
-				Button("Reset") {
-					pending.peak = 0
-					pending.floor = 1
-					pending.samples = 0
-					publish()
-				}
-				.buttonStyle(.accent)
+				}.font(.callout).foregroundStyle(Theme.secondaryLabel).padding(24)
 			}
 		}
 	}
 
-	private func statTile(label: String, value: Float, tint: Color, symbol: String) -> some View {
-		VStack(spacing: 4) {
-			HStack(spacing: 4) {
-				Image(systemName: symbol)
-					.font(.system(.caption2, weight: .bold))
-				Text(label)
-					.font(Typography.metricLabel)
-			}
-			// Sentence case. `LOWEST` letterspaced is an iOS group header, and this is a
-			// caption on a figure, not a header at all.
-			.foregroundStyle(tint)
+	private func reset() {
+		pending.peak = 0
+		pending.floor = 1
+		pending.samples = 0
+		blinked = false
+		eyesShut = false
+		challenge.next()
+		publish()
+	}
 
-			Text(String(format: "%.3f", value))
-				.font(Typography.metric)
-				.foregroundStyle(Theme.label)
-				.monospacedDigit()
-				.contentTransition(.numericText())
+	private func eyeOpenness(_ lm: VNFaceLandmarks2D) -> Float? {
+		func openness(_ region: VNFaceLandmarkRegion2D?) -> Float? {
+			guard let p = region?.normalizedPoints, p.count >= 4 else { return nil }
+			let xs = p.map { $0.x }, ys = p.map { $0.y }
+			guard let minX = xs.min(), let maxX = xs.max(),
+				let minY = ys.min(), let maxY = ys.max(), maxX - minX > 0.0001
+			else { return nil }
+			return Float((maxY - minY) / (maxX - minX))
 		}
-		.frame(maxWidth: .infinity)
-		.padding(.vertical, 12)
-		.glassSurface()
-		.accessibilityElement(children: .combine)
-		.accessibilityLabel("\(label) score")
-		.accessibilityValue(String(format: "%.3f", value))
+		let vals = [openness(lm.leftEye), openness(lm.rightEye)].compactMap { $0 }
+		guard !vals.isEmpty else { return nil }
+		return vals.reduce(0, +) / Float(vals.count)
+	}
+
+	private func updateBlink(_ sample: FaceSample) {
+		guard let o = eyeOpenness(sample.landmarks) else { return }
+		eyeOpen = o
+		if o < 0.15 {
+			eyesShut = true
+		} else if eyesShut && o > 0.22 {
+			blinked = true
+			eyesShut = false
+		}
 	}
 
 	private var statusText: String {
 		if case .failed(let reason) = camera.state { return reason }
 		if camera.state == .denied { return "Camera access is off" }
+		if camera.state == .idle { return "Starting camera…" }
+		if camera.lastFrameCapturedAt == nil { return "Waiting for camera frames…" }
 		if !store.isEnrolled { return "Not enrolled" }
-		if camera.faceMissing { return "No face" }
+		// The reason, not just the fact. This window exists to explain why recognition is or
+		// is not happening, and "No face" over a picture of your own face — which is what a
+		// second face in the background produced — is the least useful thing it could say.
+		if camera.faceMissing { return camera.absence?.summary ?? "No face" }
 		return matched ? "Recognised" : "Not recognised"
 	}
 
-	/// Throttles the visible score to ~10Hz.
-	///
-	/// Embedding still runs on every frame — the peak and floor need every sample to be
-	/// meaningful — but publishing `score` to the view on all of them rebuilt this whole
-	/// screen 30 times a second. That is exactly the loop that had the app sitting at 79%
-	/// CPU, and here the bar, tiles and gradients make each rebuild more expensive still.
-	/// A score that updates ten times a second is indistinguishable to the eye.
+	/// Throttles the visible score to ~10Hz. Embedding still runs on every frame — the peak
+	/// and floor need every sample — but publishing to the view on all of them rebuilt this
+	/// whole screen 30 times a second.
 	private static let displayInterval: TimeInterval = 0.1
 
 	private func evaluate() {
@@ -270,13 +235,6 @@ struct RecognitionTestView: View {
 
 		let result = store.matches(sample)
 
-		// Accumulate outside SwiftUI's observation.
-		//
-		// `peak`, `floor` and `samples` were @State, so writing them on every frame
-		// invalidated the view 30 times a second no matter what the throttle below did —
-		// the early return skipped the score but the extremes had already dirtied it.
-		// Plain instance storage accumulates silently and is published on the same tick as
-		// the score.
 		pending.peak = max(pending.peak, result.score)
 		pending.floor = min(pending.floor, result.score)
 		pending.samples += 1
@@ -286,6 +244,12 @@ struct RecognitionTestView: View {
 		let now = Date()
 		guard now.timeIntervalSince(lastDisplayUpdate) >= Self.displayInterval else { return }
 		lastDisplayUpdate = now
+		// Score the anti-spoof signal on the throttled tick only — it's a Core ML pass, too
+		// heavy to run on all 30 frames a second.
+		spoofConf = spoof?.spoofConfidence(sample)
+		pose = sample.pose
+		updateBlink(sample)
+		challenge.consume(sample)
 		publish()
 	}
 

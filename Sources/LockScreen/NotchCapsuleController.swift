@@ -13,6 +13,15 @@ final class NotchCapsuleController {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "NotchCapsule")
 
+	/// Asked of the window server rather than remembered, for the diagnostic line below.
+	private static func screenIsLocked() -> Bool {
+		guard
+			let session = CGSessionCopyCurrentDictionary() as? [String: Any],
+			let locked = session["CGSSessionScreenIsLocked"] as? Bool
+		else { return false }
+		return locked
+	}
+
 	private var window: NSWindow?
 	private var host: NSHostingView<AnyView>?
 	private var contentSize: CGSize = .zero
@@ -50,6 +59,9 @@ final class NotchCapsuleController {
 		guard let window else { return }
 		window.alphaValue = 1
 		window.orderFrontRegardless()
+		Self.logger.notice(
+			"show: window \(window.windowNumber) level \(window.level.rawValue) visible \(window.isVisible) locked \(Self.screenIsLocked())"
+		)
 		// After ordering in, never before: the window number does not exist until then.
 		LockScreenSpace.shared.adopt(window)
 
@@ -139,8 +151,18 @@ final class NotchCapsuleController {
 		// island taller.
 		let isIsland = Preferences.shared.panelShape == .island
 		let cutout = NotchMetrics.width(on: screen) ?? 180
+		// Room for the challenge's caption line, and only when there can be one.
+		//
+		// The window is sized once, when the screen locks, and cannot grow later — so the
+		// line has to be paid for up front or it is clipped against the bottom edge. Paid
+		// for unconditionally it would hang 30pt of empty panel under the mark for everybody
+		// who never turns the setting on, which is most people. The setting is known here,
+		// which is the one place both facts are available at the same time.
+		let challengeRoom: CGFloat =
+			Preferences.shared.requireChallenge && !isIsland ? 30 : 0
 		let dropHeight =
 			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout) : 66)
+			+ challengeRoom
 			+ Preferences.shared.notchHeightAdjust
 		let size = CGSize(width: notchWidth, height: notchHeight + dropHeight)
 

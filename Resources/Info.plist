@@ -22,6 +22,11 @@
 	<true/>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<!-- CFBundleIconName points at the compiled Assets.car icon (light/dark/tinted from the
+	     Icon Composer .icon). CFBundleIconFile above is the flat .icns fallback for anything
+	     that can't read the asset catalog. build.sh compiles both from Resources/AppIcon.icon. -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 
 	<!-- Gaze's own UI is dark on every Apple platform, so the app doesn't follow
 	     the system appearance. -->

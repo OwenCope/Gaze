@@ -36,7 +36,17 @@ enum Keychain {
 			kSecValueData as String: data,
 			// The lock screen runs while the device is unlocked-since-boot at most, and
 			// the helper needs to read this without a user present.
-			kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+			//
+			// `ThisDeviceOnly` rather than the plain variant: it also keeps the item out of
+			// encrypted backups and off any restore to another Mac. The app tells people
+			// their password is "never synced, never sent anywhere", and that sentence
+			// should be enforced by the flag rather than by a promise.
+			kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+			// Stated rather than assumed. An unset `kSecAttrSynchronizable` already defaults
+			// to non-syncing, so this changes nothing today — but "we never sync your
+			// password" resting on an unwritten default is a claim one careless edit away
+			// from being false, and the edit would be silent.
+			kSecAttrSynchronizable as String: false,
 		]
 
 		let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)

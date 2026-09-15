@@ -129,10 +129,93 @@ final class Preferences {
 		static let touchIDFallback = "touchIDFallback"
 		static let tamperProtection = "tamperProtection"
 		static let requireBuiltInCamera = "requireBuiltInCamera"
+		static let requireChallenge = "requireChallenge"
 		static let unlockBackend = "unlockBackend"
+		static let pausedUntil = "pausedUntil"
+		static let walkAwayLock = "walkAwayLock"
+		static let autofillOnActivation = "autofillOnActivation"
 	}
 
 	private let defaults = UserDefaults.standard
+
+	/// How long "pause" can mean.
+	///
+	/// Deliberately short options and no "until I turn it back on". A pause you can forget
+	/// about is a security feature that quietly stopped running, and the whole reason this
+	/// exists is the five minutes where you are screen-sharing or handing the Mac to
+	/// somebody — not a way to disable Gaze without admitting it. Turning it off properly
+	/// is a setting, and it should look like one.
+	enum PauseSpan: String, CaseIterable, Identifiable {
+		case fifteen
+		case thirty
+		case hour
+
+		var id: String { rawValue }
+
+		var seconds: TimeInterval {
+			switch self {
+			case .fifteen: 15 * 60
+			case .thirty: 30 * 60
+			case .hour: 60 * 60
+			}
+		}
+
+		var title: String {
+			switch self {
+			case .fifteen: "For 15 Minutes"
+			case .thirty: "For 30 Minutes"
+			case .hour: "For 1 Hour"
+			}
+		}
+	}
+
+	/// Fill a saved app's password when it comes forward asking for one.
+	///
+	/// On by default, unlike walk-away lock, and the difference is worth stating. This can
+	/// only ever act on an app the user deliberately saved a password for, and only when
+	/// that app is showing a focused *secure* field — it cannot fire anywhere the user did
+	/// not already opt in twice over. Walk-away lock, by contrast, acts on the whole Mac.
+	var autofillOnActivation: Bool {
+		didSet { defaults.set(autofillOnActivation, forKey: Key.autofillOnActivation) }
+	}
+
+	/// Lock the Mac when nobody is in front of it.
+	///
+	/// Off by default. It is the one setting here that can act on its own — everything else
+	/// Gaze does happens because the user locked the screen or the Mac woke up, and this
+	/// takes an action unprompted. Something like that should be opted into.
+	var walkAwayLock: Bool {
+		didSet { defaults.set(walkAwayLock, forKey: Key.walkAwayLock) }
+	}
+
+	/// When a temporary pause runs out, or nil when Gaze is armed.
+	///
+	/// Persisted rather than held in memory, so quitting and relaunching does not silently
+	/// re-arm something the user deliberately switched off. Storing the *end time* rather
+	/// than a countdown is what makes that work: a pause set before a reboot is either
+	/// still in the future or it has expired, and both answers are correct without anyone
+	/// having to keep a timer alive.
+	var pausedUntil: Date? {
+		didSet { defaults.set(pausedUntil, forKey: Key.pausedUntil) }
+	}
+
+	/// Whether Gaze should stay out of the way right now.
+	///
+	/// Reads through `pausedUntil` rather than caching, because the answer changes with
+	/// the clock and nothing posts a notification when a deadline passes.
+	var isPaused: Bool {
+		guard let pausedUntil else { return false }
+		return pausedUntil > Date()
+	}
+
+	/// Ends a pause early.
+	func resume() { pausedUntil = nil }
+
+	/// Pauses for a while. Pausing again replaces the deadline rather than extending it,
+	/// which is what "pause for 15 minutes" says on the tin.
+	func pause(for duration: TimeInterval) {
+		pausedUntil = Date().addingTimeInterval(duration)
+	}
 
 	/// Anti-spoof checking on captured frames.
 	///
@@ -160,6 +243,26 @@ final class Preferences {
 	/// only so the failure is diagnosable when someone's camera reports oddly.
 	var requireBuiltInCamera: Bool {
 		didSet { defaults.set(requireBuiltInCamera, forKey: Key.requireBuiltInCamera) }
+	}
+
+	/// Ask for a movement — a blink, a turn, a nod — after recognising the face and before
+	/// typing the password.
+	///
+	/// **Off by default, and that is a deliberate security trade rather than caution about
+	/// the feature.** It closes the one hole the object detector cannot: a photograph filling
+	/// the frame with no bezel, no hand and no screen edge for the detector to find. A photo
+	/// cannot blink.
+	///
+	/// The cost is paid by the owner, every single unlock. Gaze's whole proposition is that
+	/// the Mac opens while you are already looking at it; a challenge turns that into a
+	/// small task, and a challenge the camera misreads turns it into a task you have to do
+	/// twice. `AntiSpoofGate` already argues that a false reject is worse here than a missed
+	/// spoof, and that argument applies with more force to something the user must perform.
+	///
+	/// So it is offered rather than imposed: on for somebody who wants it, invisible to
+	/// everybody else.
+	var requireChallenge: Bool {
+		didSet { defaults.set(requireChallenge, forKey: Key.requireChallenge) }
 	}
 
 	var unlockBackend: UnlockBackendKind {
@@ -200,10 +303,16 @@ final class Preferences {
 	}
 
 	private init() {
+		pausedUntil = defaults.object(forKey: Key.pausedUntil) as? Date
+		walkAwayLock = defaults.bool(forKey: Key.walkAwayLock)
+		// Defaults to on when nothing has been written yet, which `bool(forKey:)` cannot
+		// express — it returns false for "absent" and for "off" alike.
+		autofillOnActivation = defaults.object(forKey: Key.autofillOnActivation) as? Bool ?? true
 		livenessEnabled = defaults.bool(forKey: Key.liveness)
 		touchIDFallback = defaults.object(forKey: Key.touchIDFallback) as? Bool ?? true
 		tamperProtection = defaults.bool(forKey: Key.tamperProtection)
 		requireBuiltInCamera = defaults.object(forKey: Key.requireBuiltInCamera) as? Bool ?? true
+		requireChallenge = defaults.bool(forKey: Key.requireChallenge)
 		unlockBackend =
 			defaults.string(forKey: Key.unlockBackend)
 			.flatMap(UnlockBackendKind.init(rawValue:)) ?? .none

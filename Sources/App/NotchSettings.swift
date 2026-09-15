@@ -22,7 +22,11 @@ struct NotchSettingsSection: View {
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-			SettingsSection(title: "Notch", footer: styleFooter) {
+			// No group title. It said "Notch" inside a pane called Notch, directly under a
+			// toolbar segment reading Notch — the third time in two inches of screen, and the
+			// only one of the three the eye has to read to learn anything is the row labels
+			// underneath it.
+			SettingsSection(footer: styleFooter) {
 				// Shape before style: it decides what the style is even applied to.
 				//
 				// Shown as thumbnails rather than a pop-up menu. "Attached" and "Island" are
@@ -124,14 +128,25 @@ struct NotchSettingsSection: View {
 		// An icon column earns its place on a list of switches, where it gives each row a
 		// shape to scan by. Above a row of thumbnails it is a second picture competing with
 		// three real ones, and the thumbnails already say what the setting is.
-		VStack(alignment: .leading, spacing: 12) {
+		// Label at the leading edge, choices at the trailing edge — one row, not two.
+		//
+		// This stacked the heading *above* the thumbnails, which cost a line of text plus a
+		// 12pt gap for every choice on the pane. Three choices meant three headings and
+		// three gaps of pure furniture, and the pane needed scrolling to reach the sliders
+		// under them.
+		//
+		// Sideways is also how System Settings lays out exactly this control — Appearance
+		// puts "Appearance" on the left and Light/Dark/Auto on the right — and it makes the
+		// three rows read as one list of decisions rather than three stacked sections.
+		HStack(alignment: .center, spacing: 16) {
 			Text(title)
 				.font(Typography.row)
 				.foregroundStyle(Theme.label)
+				// A shared column, so the three labels line up and the thumbnails all start
+				// at the same x. Ragged label widths would put every row's options in a
+				// different place.
+				.frame(width: 78, alignment: .leading)
 
-			// Leading, not centred. A row of two tiles was centring itself under a heading
-			// pinned to the left, so the two rows with two options each sat off-axis from
-			// everything above and below them.
 			HStack(spacing: 10) {
 				ForEach(values, id: \.self) { value in
 					PreviewTile(
@@ -143,18 +158,19 @@ struct NotchSettingsSection: View {
 						sketch(value)
 					}
 				}
-				Spacer(minLength: 0)
 			}
 		}
+		.frame(maxWidth: .infinity, alignment: .leading)
 		.padding(.horizontal, Theme.rowInset)
 		.padding(.vertical, 11)
 	}
 
 	private var styleRow: some View {
-		VStack(alignment: .leading, spacing: 12) {
+		HStack(alignment: .center, spacing: 16) {
 			Text("Style")
 				.font(Typography.row)
 				.foregroundStyle(Theme.label)
+				.frame(width: 78, alignment: .leading)
 
 			HStack(spacing: 10) {
 				ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
@@ -166,9 +182,9 @@ struct NotchSettingsSection: View {
 						wallpaper: wallpaper,
 						wallpaperIsLight: wallpaperIsLight)
 				}
-				Spacer(minLength: 0)
 			}
 		}
+		.frame(maxWidth: .infinity, alignment: .leading)
 		.padding(.horizontal, Theme.rowInset)
 		.padding(.vertical, 11)
 	}
@@ -189,39 +205,49 @@ private struct StylePreview: View {
 	var body: some View {
 		Button(action: select) {
 			VStack(spacing: 5) {
-				ZStack(alignment: .top) {
-					// The user's actual wallpaper, cropped to the strip under the notch.
-					// An invented gradient made all three styles look identical.
-					if let wallpaper {
-						Image(nsImage: wallpaper)
-							.resizable()
-							.aspectRatio(contentMode: .fill)
-					} else {
-						LinearGradient(
-							colors: [
-								Color(red: 0.42, green: 0.52, blue: 0.66),
-								Color(red: 0.78, green: 0.62, blue: 0.48),
-							],
-							startPoint: .topLeading, endPoint: .bottomTrailing)
-					}
-
-					// A centred drop with wallpaper either side, not a full-width band.
-					//
-					// Spanning the whole thumbnail was the reason all three looked alike:
-					// with nothing but panel across the top there was no unobscured
-					// wallpaper to judge it against, so "darker" and "clearer" landed the
-					// same. Bordered by the picture it sits on, the differences read.
-					panel
-						.frame(width: 60, height: 32)
-						.overlay {
-							Image(systemName: "faceid")
-								.font(.system(size: 12))
-								.foregroundStyle(.white)
-								.padding(.top, 3)
+				GeometryReader { geo in
+					ZStack(alignment: .top) {
+						// The user's actual wallpaper, cropped to the strip under the notch.
+						// An invented gradient made all three styles look identical.
+						if let wallpaper {
+							Image(nsImage: wallpaper)
+								.resizable()
+								.aspectRatio(contentMode: .fill)
+						} else {
+							LinearGradient(
+								colors: [
+									Color(red: 0.42, green: 0.52, blue: 0.66),
+									Color(red: 0.78, green: 0.62, blue: 0.48),
+								],
+								startPoint: .topLeading, endPoint: .bottomTrailing)
 						}
+
+						// A centred drop with wallpaper either side, not a full-width band.
+						//
+						// Spanning the whole thumbnail was the reason all three looked alike:
+						// with nothing but panel across the top there was no unobscured
+						// wallpaper to judge it against, so "darker" and "clearer" landed the
+						// same. Bordered by the picture it sits on, the differences read.
+						panel
+							.frame(width: 60, height: 32)
+							.overlay {
+								Image(systemName: "faceid")
+									.font(.system(size: 12))
+									.foregroundStyle(.white)
+									.padding(.top, 3)
+							}
+					}
+					// Scaled from the design size, as in `PreviewTile` — and this row needs
+					// it most. Three styles that differ only in how much wallpaper shows
+					// through a 60pt drop were being judged at a third of a card's width;
+					// giving them the whole width is what makes "Semi" and "Liquid" actually
+					// distinguishable rather than three near-identical grey stamps.
+					.frame(width: PreviewMetrics.width, height: PreviewMetrics.height)
+					.scaleEffect(geo.size.width / PreviewMetrics.width, anchor: .topLeading)
 				}
-				.frame(width: 112, height: 62)
-				.clipShape(.rect(cornerRadius: 7, style: .continuous))
+				.aspectRatio(PreviewMetrics.aspect, contentMode: .fit)
+				.frame(maxWidth: PreviewMetrics.maxTileWidth)
+				.clipShape(.rect(cornerRadius: 10, style: .continuous))
 				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
 
 				// No `minimumScaleFactor`. It let "Semi Liquid Glass" shrink to 8pt — under
@@ -322,6 +348,31 @@ private struct SelectionRing: View {
 ///
 /// Extracted because there are three rows of these now. What differs between them is the
 /// sketch drawn on the wallpaper, and nothing else.
+/// The size the notch sketches are drawn at, before being scaled to the row's width.
+///
+/// Shared so `PreviewTile` and `StylePreview` cannot drift apart — they sit in the same
+/// card, one above the other, and a few points of difference between them would read as a
+/// misalignment rather than as two sizes.
+enum PreviewMetrics {
+	static let width: CGFloat = 112
+	static let height: CGFloat = 62
+	static var aspect: CGFloat { width / height }
+
+	/// How wide one tile is allowed to get.
+	///
+	/// Letting them divide the row equally with no ceiling fixed the empty right half and
+	/// created a worse problem: two options meant two 300pt thumbnails, three stacked rows
+	/// of them filled the pane, and "Notch size" ended up below the fold on a window that
+	/// opens at 613pt tall. A picture of a notch does not become more informative past a
+	/// certain size — it just takes the room the rest of the pane needed.
+	///
+	/// So they grow to share the row and stop here. System Settings' Appearance pane does
+	/// exactly this: three thumbnails at a fixed size, left-aligned, with whatever space is
+	/// left over simply left over. Trailing space on a two-item row is normal on macOS; a
+	/// thumbnail the size of a playing card is not.
+	static let maxTileWidth: CGFloat = 132
+}
+
 private struct PreviewTile<Content: View>: View {
 
 	let title: String
@@ -335,23 +386,39 @@ private struct PreviewTile<Content: View>: View {
 	var body: some View {
 		Button(action: select) {
 			VStack(spacing: 5) {
-				ZStack(alignment: .top) {
-					if let wallpaper {
-						Image(nsImage: wallpaper)
-							.resizable()
-							.aspectRatio(contentMode: .fill)
-					} else {
-						LinearGradient(
-							colors: [
-								Color(red: 0.42, green: 0.52, blue: 0.66),
-								Color(red: 0.78, green: 0.62, blue: 0.48),
-							],
-							startPoint: .topLeading, endPoint: .bottomTrailing)
+				GeometryReader { geo in
+					ZStack(alignment: .top) {
+						if let wallpaper {
+							Image(nsImage: wallpaper)
+								.resizable()
+								.aspectRatio(contentMode: .fill)
+						} else {
+							LinearGradient(
+								colors: [
+									Color(red: 0.42, green: 0.52, blue: 0.66),
+									Color(red: 0.78, green: 0.62, blue: 0.48),
+								],
+								startPoint: .topLeading, endPoint: .bottomTrailing)
+						}
+						content
 					}
-					content
+					// Drawn at the size the sketches were designed for, then scaled to
+					// whatever width the row hands out.
+					//
+					// The tile used to *be* 112×62, which left two tiles occupying a third
+					// of a 620pt card and the rest of it empty. Simply stretching the frame
+					// was not an option: `ShapeSketch` and `StylePreview` position their
+					// parts with absolute numbers against those 112×62 bounds, so a wider
+					// frame would have left a correctly-sized drawing marooned in the corner
+					// of an oversized picture. Scaling the whole thing keeps every
+					// proportion the sketches were tuned for, and they are vector, so it
+					// gets sharper rather than blurrier.
+					.frame(width: PreviewMetrics.width, height: PreviewMetrics.height)
+					.scaleEffect(geo.size.width / PreviewMetrics.width, anchor: .topLeading)
 				}
-				.frame(width: 112, height: 62)
-				.clipShape(.rect(cornerRadius: 7, style: .continuous))
+				.aspectRatio(PreviewMetrics.aspect, contentMode: .fit)
+				.frame(maxWidth: PreviewMetrics.maxTileWidth)
+				.clipShape(.rect(cornerRadius: 10, style: .continuous))
 				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
 
 				Text(title)

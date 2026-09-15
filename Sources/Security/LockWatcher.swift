@@ -21,6 +21,8 @@ final class LockWatcher {
 	private let lockout: LockoutManager
 
 	private var attempt: Task<Void, Never>?
+	private var attemptID: UUID?
+	private var diagnosticID: UUID?
 	/// Whether this lock produced a recognised face and a submitted password.
 	///
 	/// The unlock animation must only play when *we* did it. The screen unlocking is not by
@@ -28,6 +30,13 @@ final class LockWatcher {
 	/// same notification, and playing "Gaze opened this" over someone else's unlock is a
 	/// claim the app has no basis for.
 	private var didSubmitPassword = false
+	private var submissionID: UUID?
+	private static var submissionBudget = LockScreenSubmissionBudget()
+	private static var manualInputObserved = false
+	/// When the last wake trigger was honoured, so the pair of them counts as one.
+	private var lastWakeTrigger: Date?
+	/// Block-observer tokens, so `stop()` can actually unregister them.
+	private var observers: [NSObjectProtocol] = []
 	private(set) var isWatching = false
 	private(set) var isLocked = false
 
@@ -56,6 +65,14 @@ final class LockWatcher {
 	/// without a login window in front of it.
 	private static let unlockAnimationDuration: TimeInterval = 3.0
 
+	/// Waking posts a system wake and a displays wake, moments apart. Both mean "look
+	/// now", and honouring both would tear the camera down and rebuild it mid-attempt.
+	private static let wakeDebounce: TimeInterval = 3.0
+	/// A beat for the camera to actually be awake before the first frame is asked for.
+	/// Opening it immediately after a wake returns a device that reports running and then
+	/// delivers black frames, which reads to the recogniser as "nobody there".
+	private static let wakeSettle = Duration.milliseconds(700)
+
 	/// How long to wait for the Mac to actually unlock before giving up on it.
 	private static let unlockGracePeriod: TimeInterval = 3.0
 
@@ -75,43 +92,128 @@ final class LockWatcher {
 
 	func start() {
 		guard !isWatching else { return }
+		if AutofillConsoleSession.current() != nil {
+			Self.submissionBudget.resetAfterVerifiedUnlock()
+			Self.manualInputObserved = false
+		}
 		isWatching = true
 
+		// Tokens are kept because these are block observers.
+		//
+		// `removeObserver(self)` was never removing them: the block API registers an
+		// opaque token as the observer, not `self`, so `stop()` left both observers live
+		// and a later `start()` added a second pair. Two observers means `screenLocked()`
+		// runs twice, and the second run cancels the attempt the first one started.
 		let centre = DistributedNotificationCenter.default()
-		centre.addObserver(
-			forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main
-		) { [weak self] _ in
-			MainActor.assumeIsolated { self?.screenLocked() }
-		}
-		centre.addObserver(
-			forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
-		) { [weak self] _ in
-			MainActor.assumeIsolated { self?.screenUnlocked() }
+		observers.append(
+			centre.addObserver(
+				forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main
+			) { [weak self] _ in
+				MainActor.assumeIsolated { self?.screenLocked() }
+			})
+		observers.append(
+			centre.addObserver(
+				forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main
+			) { [weak self] _ in
+				MainActor.assumeIsolated { self?.screenUnlocked() }
+			})
+
+		// Wake is a workspace notification, not a distributed one, so it needs its own
+		// centre. Both are observed: `didWake` is the machine, `screensDidWake` is the
+		// displays, and which arrives first depends on how the Mac was woken — a lid, a
+		// key press, or a Bluetooth mouse are not the same sequence.
+		let workspace = NSWorkspace.shared.notificationCenter
+		for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+			observers.append(
+				workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+					MainActor.assumeIsolated { self?.wokeUp() }
+				})
 		}
 
-		Self.logger.notice("Watching for screen lock.")
+		Self.logger.notice("Watching for screen lock and wake.")
 	}
 
 	func stop() {
+		if let diagnosticID { LockScanDiagnostics.shared.cancel(for: diagnosticID) }
+		submissionID = nil
+		didSubmitPassword = false
 		attempt?.cancel()
 		attempt = nil
+		attemptID = nil
+		capsule.hide()
 		isWatching = false
-		DistributedNotificationCenter.default().removeObserver(self)
+		lastWakeTrigger = nil
+		for token in observers {
+			DistributedNotificationCenter.default().removeObserver(token)
+			NSWorkspace.shared.notificationCenter.removeObserver(token)
+		}
+		observers.removeAll()
 	}
 
 	// MARK: - Events
 
 	private func screenLocked() {
+		guard Self.screenIsLocked() else { return }
 		isLocked = true
-		guard Preferences.shared.unlockBackend == .keystroke else { return }
+		beginAttempt(trigger: "Screen locked")
+	}
+
+	/// The Mac woke up. If it woke to a locked screen, look for a face.
+	///
+	/// This is the common case the app used to miss entirely. `com.apple.screenIsLocked`
+	/// fires when the screen *becomes* locked — which, for a Mac that was closed and
+	/// carried somewhere, happened before it went to sleep. Waking it posts no such
+	/// notification, because nothing changed: it was locked then and it is locked now. So
+	/// the most ordinary way anyone meets their lock screen — open the lid — was the one
+	/// way Gaze never ran.
+	private func wokeUp() {
+		// The notification says the machine woke, not that the screen is locked. Ask the
+		// window server rather than assuming, for the same reason the replay path does:
+		// the failure to avoid is typing a password at a screen that is already open.
+		guard Self.screenIsLocked() else { return }
+
+		// Waking posts more than one notification — the system wakes, then the displays
+		// do — and both mean the same thing here. Without this, the second one cancels
+		// the attempt the first one started and the camera is torn down and rebuilt.
+		if let last = lastWakeTrigger, Date().timeIntervalSince(last) < Self.wakeDebounce {
+			return
+		}
+		lastWakeTrigger = Date()
+
+		isLocked = true
+		beginAttempt(trigger: "Woke to a locked screen", settle: Self.wakeSettle)
+	}
+
+	/// Everything both triggers do. Shared so the two cannot drift apart.
+	///
+	/// - Parameter settle: how long to wait before opening the camera. Zero when the
+	///   screen locks in front of us, because the hardware is already awake; a beat after
+	///   a wake, because it is not — asking too early returns a camera that reports
+	///   running and delivers black frames for the first second.
+	private func beginAttempt(trigger: String, settle: Duration = .zero) {
+		guard UnlockExecutionPolicy.current.permitsScanning(passwordReplayEnabled: PasswordReplaySafety.isEnabled,
+			keystrokeSelected: Preferences.shared.unlockBackend == .keystroke) else { return }
+		guard submissionID == nil, Self.submissionBudget.maySubmit, !Self.manualInputObserved else { return }
+		guard attempt == nil else { return }
 		guard store.isEnrolled else { return }
+		// Paused means paused: no camera, no panel, no indicator light. Checked here
+		// rather than inside the attempt so a pause costs nothing at all — the point of
+		// the switch is that Gaze is not looking, and a green camera light that turns
+		// itself off again would say otherwise.
+		guard !Preferences.shared.isPaused else {
+			Self.logger.notice("\(trigger, privacy: .public) while paused; not looking.")
+			return
+		}
 		guard lockout.mayAttempt() else {
-			Self.logger.notice("Screen locked while locked out; not looking.")
+			Self.logger.notice("\(trigger, privacy: .public) while locked out; not looking.")
 			StateBroadcast.post(.lockedOut)
 			return
 		}
+		if UnlockExecutionPolicy.current == .scanOnly {
+			Self.logger.notice("Scan-only diagnostic started. No credential will be read or typed.")
+		}
 
-		Self.logger.notice("Screen locked — looking for a face.")
+		Self.logger.notice("\(trigger, privacy: .public) — looking for a face.")
 
 		// A padlock, immediately. It is a statement about the Mac's state, not a claim
 		// that the camera is looking at anyone — that distinction is why the compact
@@ -123,17 +225,43 @@ final class LockWatcher {
 		StateBroadcast.reset()
 		StateBroadcast.post(.locked)
 
-		attempt?.cancel()
-		attempt = Task { await self.attemptUnlock() }
+		let inputSnapshot = LockScreenInputSnapshot.current()
+		let identifier = UUID()
+		attemptID = identifier
+		diagnosticID = identifier
+		LockScanDiagnostics.shared.begin(identifier)
+		attempt = Task {
+			defer {
+				LockScanDiagnostics.shared.finishScanning(for: identifier)
+				if self.attemptID == identifier {
+					self.attempt = nil
+					self.attemptID = nil
+				}
+			}
+			if settle > .zero {
+				try? await Task.sleep(for: settle)
+				guard !Task.isCancelled else { return }
+			}
+			await self.attemptUnlock(inputSnapshot: inputSnapshot, identifier: identifier)
+		}
 	}
 
 	private func screenUnlocked() {
+		guard AutofillConsoleSession.current() != nil else { return }
+		if let diagnosticID {
+			if didSubmitPassword { LockScanDiagnostics.shared.record(.unlocked, for: diagnosticID) }
+			else { LockScanDiagnostics.shared.finishScanning(for: diagnosticID) }
+		}
+		Self.submissionBudget.resetAfterVerifiedUnlock()
+		Self.manualInputObserved = false
+		submissionID = nil
 		isLocked = false
 		StateBroadcast.post(.idle)
 		// Whatever unlocked the Mac, we are done. Cancelling releases the camera promptly
 		// rather than leaving the indicator lit after the user has typed their password.
 		attempt?.cancel()
 		attempt = nil
+		attemptID = nil
 
 		guard didSubmitPassword else {
 			// Unlocked by other means. Nothing to celebrate — just get out of the way.
@@ -141,6 +269,8 @@ final class LockWatcher {
 			return
 		}
 		didSubmitPassword = false
+		lockout.recordSuccess()
+		StateBroadcast.post(.succeeded)
 
 		// The Mac agreed. Retract to the resting bar and let the padlock open there, which
 		// is the last beat of the sequence and the only one the user is still looking at.
@@ -167,28 +297,120 @@ final class LockWatcher {
 
 	// MARK: - Attempt
 
-	private func attemptUnlock() async {
-		let camera = CameraController()
-		await camera.start(
-			pinnedDeviceID: Preferences.shared.requireBuiltInCamera
-				? store.enrollment?.cameraID : nil)
+	private func attemptUnlock(inputSnapshot: LockScreenInputSnapshot, identifier: UUID) async {
+		func report(_ outcome: LockScanDiagnostics.Outcome) {
+			LockScanDiagnostics.shared.record(outcome, for: identifier)
+		}
+		guard UnlockGuard.embedderBlocker() == nil, store.isEnrolled, !store.isCorrupted,
+			let lockedSession = LockedConsoleSession.current() else { report(.verificationUnavailable); return }
+		let enrolledFaces = store.faces.map(\.id)
+		guard let pinnedCamera = store.pinnedCameraID, !pinnedCamera.isEmpty else { report(.cameraUnavailable); return }
+		let antiSpoofEnabled = Preferences.shared.livenessEnabled
+		var inputGuard = LockScreenInputGuard(initial: inputSnapshot)
+		func contextIsCurrent() -> Bool {
+			guard !Task.isCancelled, isLocked, !Self.manualInputObserved,
+				LockedConsoleSession.current() == lockedSession,
+				lockout.mayAttempt(), !Preferences.shared.isPaused,
+				UnlockExecutionPolicy.current.permitsScanning(passwordReplayEnabled: PasswordReplaySafety.isEnabled,
+					keystrokeSelected: Preferences.shared.unlockBackend == .keystroke),
+				Preferences.shared.livenessEnabled == antiSpoofEnabled,
+				!store.isCorrupted, store.faces.map(\.id) == enrolledFaces,
+				store.pinnedCameraID == pinnedCamera else { return false }
+			return true
+		}
+		func requestIsCurrent() -> Bool {
+			guard contextIsCurrent() else { return false }
+			guard inputGuard.permits(.current()) else {
+				if !Self.manualInputObserved {
+					Self.logger.notice("Manual input observed; yielding to macOS authentication until the next unlock.")
+				}
+				Self.manualInputObserved = true
+				report(.manualInput)
+				capsule.hide()
+				return false
+			}
+			return true
+		}
+		guard requestIsCurrent() else { capsule.hide(); return }
+		let antiSpoof: AntiSpoofGate? = {
+			guard antiSpoofEnabled else { return nil }
+			return AntiSpoofGate(spoof: SpoofDetector())
+		}()
+		if let antiSpoof, !antiSpoof.isActive {
+			report(.verificationUnavailable)
+			Self.logger.error("Anti-spoof protection was requested but its model is unavailable. Refusing password submission.")
+			capsule.update(phase: .notRecognised)
+			return
+		}
+		guard requestIsCurrent() else { capsule.hide(); return }
+		let camera = CameraController(accessScope: .lockScreen)
+		let cameraRequestedAt = ContinuousClock.now
+		await camera.start(pinnedDeviceID: pinnedCamera)
 		defer { camera.stop() }
 
-		guard camera.state == .running else {
+		guard camera.state == .running, camera.boundDeviceID == pinnedCamera, requestIsCurrent() else {
+			if contextIsCurrent() { report(.cameraUnavailable) }
 			Self.logger.error("Camera unavailable: \(String(describing: camera.state))")
 			return
 		}
+		var freshFrames = RecognitionFrameGate()
+		var evaluatedContinuity: UInt64?
+		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces, antiSpoof: antiSpoof)
+		let challenge: LivenessChallenge? = LivenessChallenge()
+		var challengeGate = UnlockChallengeGate()
+		func resetMovementGuidance(reason: String) {
+			challenge?.reset()
+			guard challengeGate.reset() else { return }
+			report(.scanning)
+			capsule.update(phase: .challenge(prompt: "Face the camera to retry", symbol: "viewfinder",
+				hintX: 0, hintY: 0, pulses: false))
+			StateBroadcast.post(.detecting)
+			Self.logger.notice("Movement guidance withdrawn; reacquiring face. reason=\(reason, privacy: .public)")
+		}
 
-		let liveness = Preferences.shared.livenessEnabled ? Liveness.detector() : nil
 		var shownAt: Date?
 		/// When the current unbroken run of matching frames began.
-		var matchingSince: Date?
-		/// When the face currently in frame arrived, for deciding it has been rejected.
-		var faceSince: Date?
+		var matchingHold = RecognitionMatchHold()
+		var rejectionHold = RecognitionRejectionHold()
 		/// The last moment anybody was in front of the camera.
 		var lastFaceAt = Date()
 		/// Set after a rejection, so the next try starts from a clean slate.
 		var cooldownUntil: Date?
+
+		// Counters, so "nobody in front of the camera" can say what it actually saw.
+		//
+		// That message was the only thing this loop reported on failure, and it is a
+		// conclusion rather than an observation — it reads as "you walked away" when the
+		// truth might be a camera delivering black frames, a face found and discarded by
+		// the quality gate every time, or two faces in shot. Those need different fixes
+		// and looked identical from outside.
+		var ticks = 0
+		var framesWithFace = 0
+		var qualityRejects = 0
+		var lastAbsence = "none"
+		/// The highest score any frame reached this search.
+		///
+		/// Without it a search can see a face on dozens of frames and report no number at
+		/// all, because a score is only logged once a rejection is *committed* — after
+		/// `rejectAfter` seconds of continuous presence. Frames that came and went before
+		/// that scored silently. "withFace=36" and "withFace=0" then look like the same
+		/// fault when one is a camera problem and the other is a matching problem.
+		var bestScore: Float = 0
+		/// Which of the two quality rejections fired, and how close the frames came.
+		///
+		/// The counts say which gate to move; the extremes say how far. A largest-seen face
+		/// of 0.17 against a 0.18 floor is a threshold that is barely wrong; 0.04 is a
+		/// bounding box being measured in the wrong space.
+		var tooSmall = 0
+		var tooBlurred = 0
+		var largestFace: CGFloat = 0
+		var bestQuality: Float = 0
+
+		Self.logger.notice(
+			"""
+			Search starting. embedder=\(self.store.embedder.identifier, privacy: .public) \
+			threshold=\(self.store.embedder.matchThreshold) faces=\(self.store.faces.count)
+			""")
 
 		// Keeps looking until the person gives up, not until a stopwatch runs out.
 		//
@@ -201,13 +423,58 @@ final class LockWatcher {
 		//
 		// Still bounded, and by the thing that should bound it: six rejections and the
 		// lockout takes over.
-		while !Task.isCancelled, isLocked, lockout.mayAttempt() {
+		let attemptDeadline = ContinuousClock.now.advanced(by: .seconds(60))
+		while requestIsCurrent(), ContinuousClock.now < attemptDeadline {
 			try? await Task.sleep(for: .milliseconds(60))
+			guard requestIsCurrent(), camera.state == .running,
+				camera.boundDeviceID == pinnedCamera else { return }
+			switch freshFrames.observe(id: camera.frameID, capturedAt: camera.lastFrameCapturedAt, now: .now) {
+			case .stalled:
+				report(freshFrames.hasReceivedFrame ? .cameraStalled : .firstFrameTimeout)
+				let stage = freshFrames.hasReceivedFrame ? "running stream" : "first frame"
+				Self.logger.error("Camera timed out at \(stage, privacy: .public); analyzed=\(camera.analyzedFrames) expired=\(camera.expiredFrames). No password submitted.")
+				capsule.update(phase: .notRecognised)
+				return
+			case .waiting:
+				continue
+			case .fresh(let continuous):
+				if shownAt == nil {
+					report(.scanning)
+					let elapsed = cameraRequestedAt.duration(to: .now).components
+					let milliseconds = elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
+					Self.logger.notice("First fresh camera frame ready after \(milliseconds)ms; analyzed=\(camera.analyzedFrames) expired=\(camera.expiredFrames).")
+					capsule.update(phase: .scanning)
+					StateBroadcast.post(.detecting)
+					shownAt = Date()
+				}
+				if !continuous {
+					matchingHold.reset()
+					rejectionHold.reset()
+					resetMovementGuidance(reason: "frame gap")
+				}
+			}
 
+			if challengeGate.expired(at: .now) {
+				report(.notRecognized)
+				Self.logger.notice("Challenge not answered in time; treating as a rejection.")
+				lockout.recordFailure()
+				StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
+				capsule.update(phase: .notRecognised)
+				challenge?.next()
+				challengeGate.reset()
+				matchingHold.reset()
+				rejectionHold.reset()
+				cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
+				continue
+			}
+
+			ticks += 1
 			guard !camera.faceMissing, let sample = camera.sample else {
+				lastAbsence = camera.absence?.summary ?? "no sample"
 				// Face left the frame — both runs are broken and start again from zero.
-				matchingSince = nil
-				faceSince = nil
+				matchingHold.reset()
+				rejectionHold.reset()
+				resetMovementGuidance(reason: "face unavailable")
 				if Date().timeIntervalSince(lastFaceAt) >= searchWindow { break }
 				continue
 			}
@@ -218,116 +485,244 @@ final class LockWatcher {
 			if let until = cooldownUntil {
 				guard Date() >= until else { continue }
 				cooldownUntil = nil
+				report(.scanning)
 				capsule.update(phase: .scanning)
 				StateBroadcast.post(.detecting)
 			}
 
-			// Shown on the very first frame containing a face. Waiting for a run of
-			// frames sounded more robust, but recognition regularly completes in under
-			// 200ms — the panel lost the race every time and never appeared at all.
-			// Grows out of the padlock the moment there is a face to look at.
-			if shownAt == nil {
-				capsule.update(phase: .scanning)
-				StateBroadcast.post(.detecting)
-				shownAt = Date()
+			framesWithFace += 1
+			largestFace = max(largestFace, sample.boundingBox.height)
+			bestQuality = max(bestQuality, sample.quality)
+			if let rejection = FrameQuality.rejection(sample) {
+				matchingHold.reset()
+				rejectionHold.reset()
+				resetMovementGuidance(reason: "frame quality")
+				qualityRejects += 1
+				switch rejection {
+				case .invalidMeasurements: break
+				case .tooSmall: tooSmall += 1
+				case .tooBlurred: tooBlurred += 1
+				}
+				continue
 			}
 
-			let presentSince = faceSince ?? Date()
-			faceSince = presentSince
-
-			let result = store.matches(sample)
-			guard result.matched else {
-				matchingSince = nil
+			let sampleFrameID = camera.frameID
+			let sampleContinuity = camera.evidenceContinuity.revision
+			if evaluatedContinuity != sampleContinuity {
+				matchingHold.reset()
+				rejectionHold.reset()
+				resetMovementGuidance(reason: "camera continuity")
+				evaluatedContinuity = sampleContinuity
+			}
+			guard let sampleCapturedAt = camera.lastFrameCapturedAt else { continue }
+			let inferenceStarted = ContinuousClock.now
+			let result = await evaluator.evaluate(sample)
+			guard requestIsCurrent(), camera.state == .running,
+				camera.boundDeviceID == pinnedCamera else { return }
+			let evaluatedAt = ContinuousClock.now
+			let age = sampleCapturedAt.duration(to: evaluatedAt)
+			let continuityIntact = camera.evidenceContinuity.permits(sampleContinuity, at: evaluatedAt)
+			guard continuityIntact, age <= CameraFrameLease.maximumAge else {
+				if challengeGate.isPresented {
+					let duration = inferenceStarted.duration(to: evaluatedAt).components
+					let milliseconds = duration.seconds * 1_000 + duration.attoseconds / 1_000_000_000_000_000
+					Self.logger.notice("Movement evidence invalidated: continuityIntact=\(continuityIntact) expired=\(age > CameraFrameLease.maximumAge) inferenceMs=\(milliseconds).")
+				}
+				matchingHold.reset()
+				rejectionHold.reset()
+				resetMovementGuidance(reason: "stale inference")
+				continue
+			}
+			bestScore = max(bestScore, result.score)
+			guard result.matched, let face = result.face else {
+				matchingHold.reset()
+				if challengeGate.isPresented, let challenge {
+					let pose = challenge.poseMeasurement(yaw: sample.pose.yaw, pitch: sample.pose.pitch)
+					LockScanDiagnostics.shared.recordMovementFailure(.init(action: challenge.action.prompt,
+						returning: challenge.isReturningToRest, comparedIdentity: result.comparedIdentity,
+						score: result.score, threshold: store.embedder.matchThreshold,
+						poseOffset: pose?.offset, poseTarget: pose?.target, returnTolerance: pose?.returnTolerance),
+						for: identifier)
+					let failure = result.failure?.rawValue ?? "belowThreshold"
+					Self.logger.notice("Movement identity check failed; action=\(challenge.action.prompt, privacy: .public) compared=\(result.comparedIdentity) failure=\(failure, privacy: .public) score=\(result.score) returning=\(challenge.isReturningToRest). No movement proof retained.")
+				}
+				resetMovementGuidance(reason: "identity mismatch")
 
 				// Long enough looking at a face that is not yours to call it a rejection.
 				// Comfortably longer than the match has to hold, or a real face would be
 				// turned away before it had the chance to succeed.
-				if Date().timeIntervalSince(presentSince) >= Self.rejectAfter {
+				if rejectionHold.consume(capturedAt: sampleCapturedAt, required: .seconds(Self.rejectAfter)) {
+					report(.notRecognized)
 					lockout.recordFailure()
 					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
 					capsule.update(phase: .notRecognised)
 					Self.logger.notice("Not recognised (score \(result.score)); will try again.")
-					faceSince = nil
+					challenge?.next()
+					challengeGate.reset()
+					rejectionHold.reset()
 					cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
 				}
 				continue
 			}
+			rejectionHold.reset()
 
-			// Hold the match for the full duration. A single good frame is not enough:
-			// it has to keep being you.
-			let since = matchingSince ?? Date()
-			matchingSince = since
-			guard Date().timeIntervalSince(since) >= Self.requiredMatchDuration else {
-				continue
-			}
-
-			if let liveness {
-				guard let score = liveness.score(sample), score >= liveness.threshold else {
-					Self.logger.notice("Match rejected by liveness.")
+			if let decision = result.spoofDecision {
+				if case .unavailable = decision {
+					report(.verificationUnavailable)
+					Self.logger.error("Anti-spoof inference failed; refusing password submission.")
+					capsule.update(phase: .notRecognised)
+					return
+				}
+				if case .spoof(let reason, let score) = decision {
+					report(.spoofRejected)
+					// A spoof (matches the face but fails anti-spoof) is a rejection like any
+					// other: shake the panel, count it toward lockout, and cool down before
+					// the next look — otherwise it silently retried and nothing on screen
+					// ever said no.
+					Self.logger.notice("Match rejected by anti-spoof: \(reason, privacy: .public) (\(String(format: "%.3f", score), privacy: .public)).")
+					lockout.recordFailure()
+					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed, score: Double(score))
+					capsule.update(phase: .spoofRejected)
+					challenge?.next()
+					challengeGate.reset()
+					matchingHold.reset()
+					rejectionHold.reset()
+					cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
 					continue
 				}
 			}
+			guard result.permitsMatchHold(requiresAntiSpoof: antiSpoofEnabled) else {
+				report(.verificationUnavailable)
+				matchingHold.reset()
+				challenge?.reset()
+				challengeGate.reset()
+				capsule.update(phase: .notRecognised)
+				return
+			}
+			if matchingHold.faceID != face.id {
+				resetMovementGuidance(reason: "identity changed")
+			}
+			let heldMatch = matchingHold.consume(faceID: face.id, now: sampleCapturedAt,
+				required: .seconds(Self.requiredMatchDuration))
+			if !challengeGate.isPresented && !challengeGate.isVerified {
+				challenge?.prepareBaseline(sample)
+			}
+			guard heldMatch || challengeGate.isPresented else { continue }
 
-			// Re-check cancellation before typing. The user may have entered their
-			// password while we were deciding, and replaying it afterwards would type
-			// the password into whatever is now focused.
-			guard !Task.isCancelled, isLocked else { return }
-
-			lockout.recordSuccess()
-			Self.logger.notice("Recognised (score \(result.score)) — unlocking.")
-
-			// Let the checkmark actually draw before the password goes in.
-			capsule.update(phase: .success)
-			StateBroadcast.post(.succeeded, score: Double(result.score))
-			try? await Task.sleep(for: .milliseconds(480))
-
-			// Re-check *here*, immediately before posting keystrokes, and against the
-			// window server rather than our own cached flag.
+			// The movement challenge, if one was asked for.
 			//
-			// This is the last line of defence against the worst thing this app can do.
-			// Checking before the animation delay was not enough: the user can unlock with
-			// Touch ID during it, and then the keystrokes land in whatever application is
-			// now focused — typing their account password into a terminal, a chat window,
-			// anything. `try?` on the sleep above also swallows cancellation, so a
-			// cancelled task reaches this point too.
-			//
-			// Never trust `isLocked` alone for this; it depends on a notification arriving
-			// in time, and this decision cannot afford to be a step behind.
-			guard !Task.isCancelled, isLocked, Self.screenIsLocked() else {
-				Self.logger.notice("Unlocked by other means during the animation; not typing.")
+			// After the match and after anti-spoof, because there is no point asking a
+			// stranger to blink — the demand is only meaningful once the face is already
+			// accepted, and putting it earlier would show a prompt to anybody who walked
+			// past. It is the last thing between recognition and the password.
+			if let challenge, !challengeGate.isVerified {
+				if !challengeGate.isPresented {
+					guard challenge.isBaselineReady else { continue }
+					guard capsule.canPresentGuidance else {
+						report(.verificationUnavailable)
+						Self.logger.error("Guidance panel is unavailable; refusing a hidden movement challenge.")
+						capsule.hide()
+						return
+					}
+					challengeGate.present(at: .now, frameID: sampleFrameID)
+					report(.movement)
+					let hint = challenge.guidanceHint
+					capsule.update(
+						phase: .challenge(
+							prompt: challenge.guidancePrompt,
+							symbol: challenge.guidanceSymbol,
+							hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
+					Self.logger.notice("Movement prompt presented; action=\(challenge.action.prompt, privacy: .public); requiring fresh response \(challengeGate.completedActions + 1) of \(UnlockChallengeGate.requiredActions).")
+					continue
+				}
+				guard challengeGate.admits(frameID: sampleFrameID, capturedAt: sampleCapturedAt, now: .now)
+				else { continue }
+				let wasReturningToRest = challenge.isReturningToRest
+				challenge.consume(sample)
+				if challenge.isReturningToRest && !wasReturningToRest {
+					let hint = challenge.guidanceHint
+					capsule.update(phase: .challenge(prompt: challenge.guidancePrompt,
+						symbol: challenge.guidanceSymbol, hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
+					Self.logger.notice("Requested movement observed; waiting for return to rest. action=\(challenge.action.prompt, privacy: .public)")
+				}
+				guard challenge.isComplete else { continue }
+				challengeGate.completeAction()
+				if !challengeGate.isVerified {
+					challenge.next()
+					continue
+				}
+			}
+			guard heldMatch, challengeGate.isVerified else { continue }
+
+			func evidenceIsCurrent() -> Bool {
+				let now = ContinuousClock.now
+				return contextIsCurrent() && challengeGate.isVerified && camera.state == .running
+					&& camera.evidenceContinuity.permits(sampleContinuity, at: now)
+					&& camera.boundDeviceID == pinnedCamera && capsule.canPresentGuidance
+					&& sampleCapturedAt <= now && sampleCapturedAt.duration(to: now) <= CameraFrameLease.maximumAge
+			}
+			func proofStillCurrent() -> Bool {
+				requestIsCurrent() && evidenceIsCurrent()
+			}
+			guard proofStillCurrent() else {
 				capsule.hide()
 				return
 			}
-
-			do {
-				try await KeystrokeUnlockBackend().unlock()
-			} catch {
-				Self.logger.error("Unlock failed: \(error.localizedDescription)")
+			guard UnlockExecutionPolicy.current.permitsPasswordSubmission else {
+				report(.scanOnlyPassed)
+				Self.logger.notice("Scan-only diagnostic passed: identity, configured anti-spoof and both movements verified. No credential was read or typed; unlock manually.")
+				capsule.hide(after: 0.8)
+				return
 			}
-			// The panel stays up on the tick. `screenUnlocked` drives what happens next,
-			// because the padlock should open when the Mac actually opens — not when we
-			// finish typing at it.
+
+			guard Self.submissionBudget.reserve() else { return }
+			do {
+				try KeystrokeUnlockBackend().submitPassword(if: proofStillCurrent, evidenceIsCurrent: evidenceIsCurrent)
+			} catch {
+				report(.submissionStopped)
+				didSubmitPassword = false
+				lockout.recordFailure()
+				StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
+				capsule.update(phase: .notRecognised)
+				Self.logger.error("Unlock failed: \(error.localizedDescription)")
+				return
+			}
 			didSubmitPassword = true
+			report(.submissionPending)
+			let receiptID = UUID()
+			submissionID = receiptID
+			capsule.update(phase: .locked)
 
 			// Unless nothing happens. A password can be refused, and a panel left showing a
 			// tick over a lock screen that never opened is the app insisting it succeeded.
 			DispatchQueue.main.asyncAfter(deadline: .now() + Self.unlockGracePeriod) {
 				[weak self] in
-				guard let self, self.isLocked else { return }
+				guard let self, self.isLocked, self.submissionID == receiptID else { return }
+				LockScanDiagnostics.shared.record(.submissionUnconfirmed, for: identifier)
 				Self.logger.notice("Screen did not unlock after submitting; withdrawing.")
+				self.submissionID = nil
 				self.didSubmitPassword = false
+				self.lockout.recordFailure()
+				StateBroadcast.post(self.lockout.isLockedOut ? .lockedOut : .failed)
 				self.capsule.hide()
 			}
 			return
 		}
 
 		guard !Task.isCancelled else { return }
+		if LockScanDiagnostics.shared.outcome?.isScanning == true { report(.ended) }
 
 		// Rejections are counted where they happen, one per attempt, so there is nothing to
 		// record here — the loop ended because the person left or because the lockout took
 		// over, and neither is a new failure. Counting one here as well meant walking away
 		// cost an attempt.
-		Self.logger.notice("Search ended; nobody in front of the camera.")
+		Self.logger.notice(
+			"""
+			Search ended. ticks=\(ticks) withFace=\(framesWithFace) \
+			qualityRejected=\(qualityRejects) (small=\(tooSmall) blurred=\(tooBlurred)) \
+			largestFace=\(largestFace) bestQuality=\(bestQuality) best=\(bestScore) \
+			lastAbsence=\(lastAbsence, privacy: .public)
+			""")
 		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .idle)
 
 		// Back to the padlock rather than vanishing — the Mac is still locked, and the

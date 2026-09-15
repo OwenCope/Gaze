@@ -116,8 +116,17 @@ fi
 # root with no window server connection and cannot display anything; ours has to show the
 # capsule, so it runs in SecurityAgent. Marking it privileged fails the whole evaluation
 # with errAuthorizationInternal before any of our code runs.
+# Piped straight in rather than staged through a file.
+#
+# This used to write /tmp/gaze-screensaver-rule.plist and then read it back. The path is
+# fixed and predictable, and /tmp is world-writable, so any local process could create
+# that name first — as a FIFO, which needs no race at all: the open blocks until the
+# installer writes, the attacker drains that write, then serves different policy bytes to
+# the reader. Root would import whatever it was handed, and this file decides who may
+# unlock the screen. A heredoc into the importer's stdin never names a path, so there is
+# nothing to pre-create.
 echo "→ Switching the lock screen to the plugin"
-cat > /tmp/gaze-screensaver-rule.plist <<'PLIST'
+security authorizationdb write system.login.screensaver <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -135,7 +144,6 @@ cat > /tmp/gaze-screensaver-rule.plist <<'PLIST'
 </dict>
 </plist>
 PLIST
-security authorizationdb write system.login.screensaver < /tmp/gaze-screensaver-rule.plist
 
 echo
 echo "✓ Installed."

@@ -20,7 +20,7 @@ struct EnrollmentRing: View {
 	/// screen used a third value again. Three greens all meaning "recognised", none of them
 	/// matching, in an app whose design system exists to prevent exactly that.
 	private let filled = Theme.faceID
-	private let empty = Color(red: 0.34, green: 0.34, blue: 0.36)
+	private let empty = Theme.tickEmpty
 
 	private let tickWidth: CGFloat = 3.5
 	private let tickLength: CGFloat = 22
@@ -50,10 +50,11 @@ struct EnrollmentRing: View {
 
 		return Capsule()
 			.fill(isFilled ? filled : empty)
-			// The ticks nearest the head lengthen and glow, tying the ring to where the
-			// user is actually looking.
+			// The ticks nearest the head lengthen and brighten slightly, tying the ring to
+			// where the user is looking. It used to also cast a green glow (a 7pt shadow that
+			// swelled with proximity), which is the decorative bloom the app avoids everywhere
+			// else — the length and opacity change carry the cue on their own.
 			.frame(width: tickWidth, height: tickLength + 8 * proximity)
-			.shadow(color: filled.opacity(isFilled ? 0.7 * proximity : 0), radius: 7)
 			.offset(y: -radius)
 			.rotationEffect(.radians(angle))
 			.opacity(isFilled ? 1 : 0.55 + 0.45 * proximity)

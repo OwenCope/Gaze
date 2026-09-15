@@ -173,6 +173,12 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 	private let inputName: String
 	private let side: Int
 
+	/// Bump whenever the bundled model file changes. It becomes part of the print's
+	/// `source`, and prints with different sources never compare (similarity returns 0).
+	/// So swapping models can't silently mis-match faceprints from the old embedding
+	/// space against the new one — it invalidates old enrolments and forces a re-enrol.
+	static let modelTag = "arcface-2.73"
+
 	init?() {
 		guard
 			let url = Bundle.main.url(forResource: "FaceEmbedding", withExtension: "mlmodelc"),
@@ -193,7 +199,7 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 		self.side = constraint.shape[3].intValue
 		// Version the identifier so swapping models invalidates old enrolments rather
 		// than silently comparing prints from different feature spaces.
-		self.identifier = "coreml:\(self.side)x\(self.side)"
+		self.identifier = "coreml:\(self.side)x\(self.side):\(Self.modelTag)"
 	}
 
 	func embed(_ sample: FaceSample) -> Faceprint? {
@@ -255,9 +261,9 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 				let px = row + x * 4  // BGRA
 				let b = Float32(px[0]), g = Float32(px[1]), r = Float32(px[2])
 				let i = y * side + x
-				out[i] = (r - 127.5) / 127.5
-				out[plane + i] = (g - 127.5) / 127.5
-				out[2 * plane + i] = (b - 127.5) / 127.5
+				out[i] = (r - 127.5) / 128.0
+				out[plane + i] = (g - 127.5) / 128.0
+				out[2 * plane + i] = (b - 127.5) / 128.0
 			}
 		}
 
