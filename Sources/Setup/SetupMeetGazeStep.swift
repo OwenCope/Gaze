@@ -16,10 +16,10 @@ enum GazeExpressionLesson: String, CaseIterable, Identifiable {
 		case .retry: "Not verified"
 		}
 	}
-	var explanation: String {
+	func explanation(movementCount: Int = 2) -> String {
 		switch self {
 		case .waiting: "Gaze is ready. Its eyes may wander—you don’t need to follow them."
-		case .scanning: "Look toward the camera and hold still. Before unlocking, Gaze asks for two short movements. Follow each one, then return to your starting position."
+		case .scanning: "Look toward the camera and hold still. Before unlocking, Gaze asks for \(movementCount == 1 ? "one short movement" : "two short movements"). Follow along, then return to your starting position."
 		case .turnLeft: "Make a small turn toward your own left, then return to your starting position."
 		case .turnRight: "Make a small turn toward your own right, then return to your starting position."
 		case .nod: "Lower your chin a little, then return to your starting position. You don’t need to look up."
@@ -56,6 +56,7 @@ enum GazeExpressionLesson: String, CaseIterable, Identifiable {
 
 struct GazeExpressionGuide: View {
 	var compact = false
+	var movementCount: Int
 	@State private var lesson = GazeExpressionLesson.waiting
 	@State private var paused = false
 	@State private var showsInfo = false
@@ -63,8 +64,9 @@ struct GazeExpressionGuide: View {
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 	@Environment(\.notchReduceMotion) private var previewReduceMotion
 
-	init(compact: Bool = false, lesson: GazeExpressionLesson = .waiting) {
+	init(compact: Bool = false, lesson: GazeExpressionLesson = .waiting, movementCount: Int = 2) {
 		self.compact = compact
+		self.movementCount = movementCount
 		_lesson = State(initialValue: lesson)
 	}
 
@@ -85,7 +87,7 @@ struct GazeExpressionGuide: View {
 					Text(lesson.title)
 						.font(.system(size: compact ? 20 : 23, weight: .semibold))
 						.accessibilityAddTraits(.isHeader)
-					Text(lesson.explanation)
+					Text(lesson.explanation(movementCount: movementCount))
 						.font(.system(size: compact ? 13 : 14))
 						.foregroundStyle(.secondary)
 						.lineSpacing(3)
@@ -183,14 +185,15 @@ struct SetupMeetGazeStep: View {
 	var position: SetupPosition?
 	var onContinue: () -> Void
 	var onBack: (() -> Void)?
+	var movementCount = 2
 
 	var body: some View {
 		SetupScaffold(position: position, title: "Meet Gaze",
-			message: "Gaze asks for two small movements.\nWhen it turns back, return your head to where you started.",
+			message: "Gaze asks for \(movementCount == 1 ? "one small movement" : "two small movements").\nWhen it turns back, return your head to where you started.",
 			figureHeight: 0, onBack: onBack) {
 			EmptyView()
 		} detail: {
-			GazeExpressionGuide().padding(.top, 20)
+			GazeExpressionGuide(movementCount: movementCount).padding(.top, 20)
 		} actions: {
 			SetupButton(title: "Continue Setup", action: onContinue)
 		}

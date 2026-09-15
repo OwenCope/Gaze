@@ -17,12 +17,13 @@ struct SetupHowStep: View {
 	var position: SetupPosition?
 	var onContinue: () -> Void
 	var onBack: (() -> Void)?
+	var movementCount = 2
 
 	var body: some View {
 		SetupScaffold(
 			position: position,
 			title: "How Gaze unlocks your Mac",
-			message: "Look at the camera, then follow two small movements.\nGaze enters your saved login password after verification.",
+			message: "Look at the camera, then follow \(movementCount == 1 ? "one small movement" : "two small movements").\nGaze enters your saved login password after verification.",
 			figureHeight: 0,
 			onBack: onBack
 		) {

@@ -12,6 +12,7 @@ import os
 final class NotchCapsuleController {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "NotchCapsule")
+	private static let horizontalInset: CGFloat = 20
 
 	/// Asked of the window server rather than remembered, for the diagnostic line below.
 	private static func screenIsLocked() -> Bool {
@@ -24,6 +25,8 @@ final class NotchCapsuleController {
 
 	private var window: NSWindow?
 	private var host: NSHostingView<AnyView>?
+	private var expansionTask: Task<Void, Never>?
+	private var dismissalTask: Task<Void, Never>?
 	private var contentSize: CGSize = .zero
 	/// Height of the region hidden behind the physical cutout, so the glyph can be
 	/// centred in the visible part rather than in the whole window.
@@ -42,6 +45,7 @@ final class NotchCapsuleController {
 	// MARK: - Presentation
 
 	func show(phase: NotchCapsuleModel.Phase = .scanning) {
+		dismissalTask?.cancel()
 		model.phase = phase
 
 		if let screen = NSScreen.main {
@@ -52,7 +56,9 @@ final class NotchCapsuleController {
 		model.glyphPlacement = Preferences.shared.glyphPlacement
 		model.transparency = Preferences.shared.notchTransparency
 
-		if window == nil {
+		let needsMount = window == nil
+		if needsMount {
+			model.isExpanded = false
 			build()
 		}
 
@@ -73,9 +79,17 @@ final class NotchCapsuleController {
 		// `DispatchQueue.main.async` fired before the hosting view had mounted, so the
 		// change landed with nothing observing it and the panel stayed collapsed. The view
 		// needs to exist and be on screen first; a frame or two is enough.
-		model.isExpanded = false
-		DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
-			self?.model.isExpanded = true
+		if needsMount {
+			expansionTask = Task { [weak self, weak window] in
+				do {
+					try await Task.sleep(for: .milliseconds(60))
+				} catch { return }
+				guard let self, let window, self.window === window else { return }
+				self.model.isExpanded = true
+				self.expansionTask = nil
+			}
+		} else if expansionTask == nil {
+			model.isExpanded = true
 		}
 	}
 
@@ -84,30 +98,34 @@ final class NotchCapsuleController {
 		model.phase = phase
 	}
 
-	func hide(after delay: TimeInterval = 0) {
-		guard let window else { return }
-		DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-			guard let self else { return }
+	var canPresentGuidance: Bool {
+		window?.isVisible == true && model.isExpanded && LockScreenSpace.shared.isAvailable
+	}
 
-			// Retract into the notch, then tear the window down once it is out of sight.
-			// The delay matches the spring in `NotchCapsule`; closing sooner would clip
-			// the animation and the panel would vanish mid-retract.
+	func hide(after delay: TimeInterval = 0) {
+		dismissalTask?.cancel()
+		guard let window else { return }
+		dismissalTask = Task { [weak self, weak window] in
+			do {
+				try await Task.sleep(for: .seconds(max(0, delay)))
+			} catch { return }
+			guard let self, let window, self.window === window else { return }
+
+			self.expansionTask?.cancel()
+			self.expansionTask = nil
 			self.model.isExpanded = false
 
-			// No alpha fade.
-			//
-			// It was here to soften the ending, and it did the opposite: a panel that fades
-			// has *left*, while a panel that shrinks has gone *home*. The shape retracting
-			// into the cutout is the whole animation, and dimming it while it does that only
-			// hides the part worth seeing.
-
-			DispatchQueue.main.asyncAfter(deadline: .now() + NotchAnimation.teardownDelay) {
-				[weak self] in
-				LockScreenSpace.shared.release(window)
-				window.orderOut(nil)
-				self?.window = nil
-				self?.host = nil
-			}
+			let teardownDelay = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+				? NotchAnimation.reducedDuration + 0.06 : NotchAnimation.teardownDelay
+			do {
+				try await Task.sleep(for: .seconds(teardownDelay))
+			} catch { return }
+			guard self.window === window else { return }
+			LockScreenSpace.shared.release(window)
+			window.orderOut(nil)
+			self.window = nil
+			self.host = nil
+			self.dismissalTask = nil
 		}
 	}
 
@@ -151,26 +169,20 @@ final class NotchCapsuleController {
 		// island taller.
 		let isIsland = Preferences.shared.panelShape == .island
 		let cutout = NotchMetrics.width(on: screen) ?? 180
-		// Room for the challenge's caption line, and only when there can be one.
-		//
-		// The window is sized once, when the screen locks, and cannot grow later — so the
-		// line has to be paid for up front or it is clipped against the bottom edge. Paid
-		// for unconditionally it would hang 30pt of empty panel under the mark for everybody
-		// who never turns the setting on, which is most people. The setting is known here,
-		// which is the one place both facts are available at the same time.
-		let challengeRoom: CGFloat =
-			Preferences.shared.requireChallenge && !isIsland ? 30 : 0
+		// Every lock-screen scan requires movement guidance. Reserve its caption space
+		// when the window is created so prompts and retries cannot clip later.
+		let challengeRoom: CGFloat = isIsland ? 0 : 30
 		let dropHeight =
 			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout) : 66)
 			+ challengeRoom
 			+ Preferences.shared.notchHeightAdjust
-		let size = CGSize(width: notchWidth, height: notchHeight + dropHeight)
-
-		let frame = NSRect(
-			x: screen.frame.midX - size.width / 2,
-			y: screen.frame.maxY - size.height,
-			width: size.width,
-			height: size.height)
+		let panelFrame = NotchMetrics.panelFrame(
+			size: CGSize(width: notchWidth, height: notchHeight + dropHeight),
+			screenFrame: screen.frame,
+			scale: screen.backingScaleFactor)
+		let size = panelFrame.size
+		let frame = panelFrame.insetBy(dx: -Self.horizontalInset, dy: 0)
+		let windowSize = frame.size
 		self.contentSize = size
 		self.notchInset = notchHeight
 
@@ -200,8 +212,9 @@ final class NotchCapsuleController {
 				NotchCapsule(
 					model: model, width: size.width, height: size.height,
 					notchInset: notchHeight,
-					cutoutWidth: NotchMetrics.width(on: screen) ?? 180)))
-		host.frame = NSRect(origin: .zero, size: size)
+					cutoutWidth: NotchMetrics.width(on: screen) ?? 180)
+					.frame(width: windowSize.width, height: windowSize.height, alignment: .top)))
+		host.frame = NSRect(origin: .zero, size: windowSize)
 		window.contentView = host
 
 		self.window = window

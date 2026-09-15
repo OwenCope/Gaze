@@ -54,3 +54,10 @@ xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
 	"$ROOT/Tools/UnlockFlowRegression/PoseSourceTests.swift" -o "$BUILD/pose-source-tests"
 "$BUILD/pose-source-tests"
+xcrun swiftc -parse-as-library -warnings-as-errors \
+	"$ROOT/Sources/Camera/CameraFrameLease.swift" \
+	"$ROOT/Sources/Camera/FacePose.swift" \
+	"$ROOT/Sources/Security/UnlockChallengeGate.swift" \
+	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
+	"$ROOT/Tools/UnlockFlowRegression/UnlockChallengeGateCountTests.swift" -o "$BUILD/unlock-challenge-gate-count-tests"
+"$BUILD/unlock-challenge-gate-count-tests"

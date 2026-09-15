@@ -42,7 +42,7 @@ enum PoseSourceTests {
 	}
 
 	static func main() {
-		check(UnlockChallengeGate.requiredActions == 2, "two prompted movements stay required")
+		check(UnlockChallengeGate.defaultRequiredActions == 2, "two prompted movements remain the default")
 		resolvedSelection()
 		missingLandmarkMeasurements()
 		unchangedSourceSuccess()

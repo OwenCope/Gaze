@@ -306,6 +306,7 @@ final class LockWatcher {
 		let enrolledFaces = store.faces.map(\.id)
 		guard let pinnedCamera = store.pinnedCameraID, !pinnedCamera.isEmpty else { report(.cameraUnavailable); return }
 		let antiSpoofEnabled = Preferences.shared.livenessEnabled
+		let movementCount = Preferences.shared.unlockMovementCount
 		var inputGuard = LockScreenInputGuard(initial: inputSnapshot)
 		func contextIsCurrent() -> Bool {
 			guard !Task.isCancelled, isLocked, !Self.manualInputObserved,
@@ -314,6 +315,7 @@ final class LockWatcher {
 				UnlockExecutionPolicy.current.permitsScanning(passwordReplayEnabled: PasswordReplaySafety.isEnabled,
 					keystrokeSelected: Preferences.shared.unlockBackend == .keystroke),
 				Preferences.shared.livenessEnabled == antiSpoofEnabled,
+				Preferences.shared.unlockMovementCount == movementCount,
 				!store.isCorrupted, store.faces.map(\.id) == enrolledFaces,
 				store.pinnedCameraID == pinnedCamera else { return false }
 			return true
@@ -357,7 +359,7 @@ final class LockWatcher {
 		var evaluatedContinuity: UInt64?
 		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces, antiSpoof: antiSpoof)
 		let challenge: LivenessChallenge? = LivenessChallenge()
-		var challengeGate = UnlockChallengeGate()
+		var challengeGate = UnlockChallengeGate(requiredActions: movementCount.rawValue)
 		func resetMovementGuidance(reason: String) {
 			challenge?.reset()
 			guard challengeGate.reset() else { return }
@@ -639,7 +641,7 @@ final class LockWatcher {
 							prompt: challenge.guidancePrompt,
 							symbol: challenge.guidanceSymbol,
 							hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
-					Self.logger.notice("Movement prompt presented; action=\(challenge.action.prompt, privacy: .public); requiring fresh response \(challengeGate.completedActions + 1) of \(UnlockChallengeGate.requiredActions).")
+					Self.logger.notice("Movement prompt presented; action=\(challenge.action.prompt, privacy: .public); requiring fresh response \(challengeGate.completedActions + 1) of \(challengeGate.requiredActions).")
 					continue
 				}
 				guard challengeGate.admits(frameID: sampleFrameID, capturedAt: sampleCapturedAt, now: .now)
@@ -684,7 +686,7 @@ final class LockWatcher {
 			}
 			guard UnlockExecutionPolicy.current.permitsPasswordSubmission else {
 				report(.scanOnlyPassed)
-				Self.logger.notice("Scan-only diagnostic passed: identity, configured anti-spoof and both movements verified. No credential was read or typed; unlock manually.")
+				Self.logger.notice("Scan-only diagnostic passed: identity, configured anti-spoof and \(challengeGate.requiredActions) movement response(s) verified. No credential was read or typed; unlock manually.")
 				capsule.hide(after: 0.8)
 				return
 			}
