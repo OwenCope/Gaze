@@ -17,6 +17,11 @@ working alongside it.
 
 ## On the lock screen
 
+Choose one or two movement challenges in Settings under “Movements to unlock this
+Mac.” Two is the default. Follow each prompt and return to your starting position;
+onboarding shows how. The normal return animation keeps its text caption hidden,
+while Reduce Motion retains the written cue.
+
 A panel in the notch: a padlock while it's resting, the Gaze mark while it's looking, a
 green tick when it's you, a shake when it isn't. Three styles and size sliders, because
 notches and taste both vary.

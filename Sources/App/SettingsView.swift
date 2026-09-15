@@ -3,28 +3,10 @@ import AppKit
 import ApplicationServices
 import SwiftUI
 
-/// The panes in the sidebar.
-///
-/// Three, not six. Six meant a sidebar where most panes held a single group — clicking
-/// around to find one switch, with the window mostly empty whichever one you landed on.
 enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
-	case general
-	/// The notch panel's own pane.
-	///
-	/// It used to be two groups at the top of General, and it is the largest thing in the
-	/// window by some distance — three rows of thumbnails and two sliders, all of it about
-	/// one object. Underneath it General also carried permissions, hardening, login items,
-	/// updates and the theme: seven groups on one pane, so the things people actually go
-	/// looking for sat below a fold created entirely by the notch previews.
-	case notch
-	case face
-	/// Saved apps Gaze can type a password into.
-	///
-	/// Its own pane rather than a group under Gaze: it is a list that grows, and a list
-	/// with an Add button at the bottom of a pane of switches reads as an afterthought.
-	case autofill
-	case credits
-	case about
+	case face, notch, general, about, credits
+
+	static let toolbarPanes: [Self] = [.face, .notch, .general, .about]
 
 	var id: String { rawValue }
 
@@ -32,8 +14,7 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		switch self {
 		case .general: return "General"
 		case .notch: return "Notch"
-		case .face: return "Gaze"
-		case .autofill: return "Autofill"
+		case .face: return "Unlock"
 		case .credits: return "Credits"
 		case .about: return "About"
 		}
@@ -41,12 +22,11 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 
 	var symbol: String {
 		switch self {
-		case .general: return "gearshape.fill"
+		case .general: return "gearshape"
 		case .notch: return "macbook"
 		case .face: return "faceid"
-		case .autofill: return "key.fill"
 		case .credits: return "heart.fill"
-		case .about: return "info"
+		case .about: return "info.circle"
 		}
 	}
 
@@ -77,8 +57,6 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 			return "How the panel under the notch looks"
 		case .face:
 			return "Unlock your Mac by looking at it — and what that's allowed to do"
-		case .autofill:
-			return "Apps Gaze can unlock for you by recognising your face"
 		case .credits:
 			return "The people whose work this is built on"
 		case .about:
@@ -126,6 +104,8 @@ struct SettingsView: View {
 	/// is already stored.
 	@State private var hasStoredPassword = PasswordVault.hasPassword
 	@State private var lockoutPassword = ""
+	@State private var accessibilityGranted = AXIsProcessTrusted()
+	@State private var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
 
 	@Environment(\.openWindow) private var openWindow
 
@@ -137,7 +117,8 @@ struct SettingsView: View {
 			// use — and AppKit owns the glass, the height and the scroll-edge behaviour.
 			.toolbar {
 				ToolbarItem(placement: .principal) {
-					paneSegments
+					GazeSettingsPicker(selection: $pane)
+						.fixedSize()
 				}
 			}
 		// A floor, not a fixed size.
@@ -211,67 +192,6 @@ struct SettingsView: View {
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
 	}
 
-	// MARK: - Sidebar
-
-	/// The real macOS segmented control, not a drawing of one.
-	///
-	/// This was a hand-built row of pills in a capsule, and it read as a fake menu bar —
-	/// a floating bar of words across the top of a window is the shape of the *system* menu
-	/// bar, and putting a second one inside an app window is the single most reliable way to
-	/// look like a web page pretending to be a Mac app.
-	///
-	/// `Picker` with `.segmented` is AppKit's `NSSegmentedControl`. It comes with the right
-	/// metrics, the right selected fill, the right focus ring, keyboard traversal and
-	/// VoiceOver for free — and, more to the point, it is the control macOS actually uses
-	/// for a handful of tabs. The pill had to reimplement all of that and still only
-	/// resembled it.
-	///
-	/// The badge dots could not survive the move: a segment holds a label and an image, not
-	/// an arbitrary view. They are shown as a symbol on the segment instead, which is the
-	/// same information in the vocabulary the control has.
-	private var paneSegments: some View {
-		Picker("", selection: $pane) {
-			ForEach(SettingsPane.allCases) { item in
-				// `.titleAndIcon`, stated rather than left to the default.
-				//
-				// A `Label` in a segment collapses to icon-only when the control is not
-				// given room to state otherwise, and in the toolbar it is not: four
-				// unlabelled glyphs, one of which is a gear and one a heart, is a guessing
-				// game. The words are the thing being chosen between; the symbol only helps
-				// find the word.
-				Label(
-					item.title,
-					systemImage: badge(for: item) == nil ? item.symbol : "circle.fill"
-				)
-				.labelStyle(.titleAndIcon)
-				.tag(item)
-			}
-		}
-		.pickerStyle(.segmented)
-		.labelsHidden()
-		// No `.frame(width: 420)` and no `.controlSize(.large)`.
-		//
-		// Both were sized for a control floating in the content area. In the toolbar the
-		// segmented control takes the toolbar's own metrics, and a hardcoded 420pt width
-		// fought the centring — the item is laid out by AppKit against the traffic lights
-		// and the trailing edge, so it needs to be free to be its natural size.
-		.accessibilityLabel("Settings panes")
-	}
-
-	/// A dot on the panes that want attention, so a problem is visible from any pane.
-	private func badge(for pane: SettingsPane) -> Color? {
-		switch pane {
-		case .face:
-			if lockout.isLockedOut { return Theme.danger }
-			return store.isEnrolled ? nil : Theme.warning
-		case .general:
-			if case .available = updates.state { return Theme.faceID }
-			return nil
-		case .notch, .autofill, .credits, .about:
-			return nil
-		}
-	}
-
 	// MARK: - Detail
 
 	private var detail: some View {
@@ -307,10 +227,9 @@ struct SettingsView: View {
 					permissionsSection
 					securitySection
 					if store.isEnrolled { manageSection }
-				case .autofill:
-					AutofillSection(savedApps: AppServices.shared.savedApps, store: store)
 				case .general:
 					behaviourSection
+					onboardingSection
 					updatesSection
 					appearanceSection
 				case .notch:
@@ -319,6 +238,7 @@ struct SettingsView: View {
 					creditsSection
 				case .about:
 					aboutSection
+					DisclosureGroup("Credits & Acknowledgements") { creditsSection }
 				}
 
 				Spacer(minLength: 0)
@@ -338,13 +258,7 @@ struct SettingsView: View {
 			.padding(.top, 18)
 			.padding(.bottom, 26)
 		}
-		// Not `.never`.
-		//
-		// Hiding the indicator on a pane that scrolls removes the only thing telling the
-		// user there is more below the fold — on the General pane there are two groups under
-		// it. `.automatic` keeps it out of the way until the content actually moves, which
-		// is the behaviour it was presumably reaching for.
-		.scrollIndicators(.automatic)
+		.scrollIndicators(.never)
 	}
 
 	// MARK: - Overview
@@ -358,32 +272,14 @@ struct SettingsView: View {
 			// side and the pane opened on a mostly blank box. A status row reads as part of
 			// the settings rather than as a splash screen.
 			HStack(spacing: 14) {
-				// The system symbol when it is set up, a question when it is not.
-				//
-				// This is `faceid` rather than the icon's own mark, and the two being
-				// different is deliberate. The trademark worry is narrow: it is about an app
-				// wearing Apple's glyph as *its own identity*, which means the Dock and the
-				// disk. Inside the interface, system symbols are what system symbols are
-				// for, and `faceid` is the one glyph on macOS that means exactly "a face,
-				// being recognised". Matching the Dock icon here would cost that and buy
-				// nothing — the icon's keyhole says what the app is *for*, not what this row
-				// is reporting on.
-				Group {
-					if store.isEnrolled {
-						Image(systemName: "faceid")
-							.font(Typography.glyph)
-							.foregroundStyle(heroTint)
-					} else {
-						Image(systemName: "person.crop.circle.badge.questionmark")
-							.font(Typography.glyph)
-							.foregroundStyle(heroTint)
-					}
-				}
-				.frame(width: 42)
-				.animation(.easeOut(duration: 0.25), value: store.isEnrolled)
+				Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+					.resizable()
+					.interpolation(.high)
+					.frame(width: 42, height: 42)
+					.accessibilityHidden(true)
 
 				VStack(alignment: .leading, spacing: 3) {
-					Text(store.isEnrolled ? "Gaze is set up" : "Gaze isn't set up")
+					Text(heroTitle)
 						.font(Typography.heroTitle)
 						.foregroundStyle(Theme.label)
 					Text(heroDetail)
@@ -401,7 +297,7 @@ struct SettingsView: View {
 				// their widths is what makes them read as a pair.
 				VStack(alignment: .trailing, spacing: 6) {
 					Button {
-						SetupRequest.begin()
+						if store.isEnrolled { SetupRequest.begin() } else { SetupRequest.beginOnboarding() }
 						AppActivation.bringToFront()
 						openWindow(id: "enrollment")
 					} label: {
@@ -427,22 +323,40 @@ struct SettingsView: View {
 		}
 	}
 
-	/// Red while locked out, grey when unenrolled, green when ready — so the glyph itself
-	/// carries the state rather than relying on the text below it.
-	private var heroTint: Color {
-		if lockout.isLockedOut { return Theme.danger }
-		return store.isEnrolled ? Theme.faceID : Theme.tertiaryLabel
+	private var onboardingSection: some View {
+		SettingsSection(title: "Getting Started") {
+			SettingRow(title: "Welcome to Gaze", detail: "Review setup and learn what Gaze’s expressions mean.") {
+				Button("Open Onboarding") {
+					SetupRequest.beginOnboarding()
+					AppActivation.bringToFront(userInitiated: true)
+					openWindow(id: "enrollment")
+				}
+				.gazeButton()
+			}
+		}
+	}
+
+	private var heroTitle: String {
+		if lockout.isLockedOut { return "Gaze is locked out" }
+		if !store.isEnrolled { return "Set up Gaze" }
+		if settings.isPaused { return "Gaze is paused" }
+		if !cameraGranted { return "Camera access needed" }
+		if !PasswordReplaySafety.isEnabled { return "Mac unlocking is off" }
+		if settings.unlockBackend == .none { return "Recognition only" }
+		if readinessProblem != nil { return "Unlock needs attention" }
+		return "Gaze is ready"
 	}
 
 	private var heroDetail: String {
-		if store.isCorrupted {
-			return "Your enrolled face couldn't be read and has been ignored"
-		}
-		switch store.faces.count {
-		case 0: return "Enroll your face to unlock this Mac by looking at it"
-		case 1: return "One face can open this Mac"
-		default: return "\(store.faces.count) faces can open this Mac"
-		}
+		if lockout.isLockedOut { return "Enter your account password below to enable Gaze again." }
+		if store.isCorrupted { return "Your enrolled face couldn’t be read. Enroll it again." }
+		if !store.isEnrolled { return "Add your face to get started." }
+		if settings.isPaused { return "Face recognition is temporarily paused." }
+		if !cameraGranted { return "Allow the camera so Gaze can recognise you." }
+		if !PasswordReplaySafety.isEnabled { return "Enable Unlock my Mac to use face verification. Your password and Touch ID remain available." }
+		if settings.unlockBackend == .none { return "Recognise your face without entering a password." }
+		if let problem = readinessProblem { return problem.message }
+		return store.faces.count == 1 ? "Your face can unlock this Mac." : "Your enrolled faces can unlock this Mac."
 	}
 
 	/// The enrolled faces, one row each.
@@ -558,36 +472,30 @@ struct SettingsView: View {
 	/// Re-reads the state this window shows but does not own.
 	private func refreshExternalState() {
 		hasStoredPassword = PasswordVault.hasPassword
+		cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+		accessibilityGranted = AXIsProcessTrusted()
 	}
 
 	// MARK: - Unlocking
 
 	private var unlockSection: some View {
-		SettingsSection(title: "Use Gaze for", footer: unlockFooter) {
-			// A pop-up menu, not three cards with icons and checkmarks.
-			//
-			// The cards spent a third of the window explaining options the user picks once
-			// and never revisits. A menu states the current choice in one line and explains
-			// only that one, underneath.
-			SettingRow(title: "When your face is recognised", symbol: "faceid", symbolTint: Theme.faceID) {
-				Picker("", selection: unlockBinding) {
-					ForEach(UnlockBackendKind.selectableCases, id: \.self) { kind in
-						Text(kind.title).tag(kind)
-					}
-				}
-				.labelsHidden()
-				.pickerStyle(.menu)
-				.controlSize(.small)
-				.tint(Theme.label)
-				.fixedSize()
-			}
+		SettingsSection(title: "Unlocking",
+			footer: settings.unlockBackend == .authPlugin ? unlockFooter : nil, info: unlockInfo) {
+			SettingToggle(title: "Unlock my Mac",
+				detail: !PasswordReplaySafety.isEnabled ? "Off — your Mac stays locked" : settings.unlockBackend == .keystroke
+					? "Use face recognition on the lock screen"
+					: "Off — your Mac stays locked",
+				symbol: "faceid", symbolTint: Theme.faceID,
+				isOn: Binding(get: { PasswordReplaySafety.isEnabled && settings.unlockBackend == .keystroke },
+					set: { unlockBinding.wrappedValue = $0 ? .keystroke : .none }))
+				.disabled(AppServices.isUIReview)
 
 			if settings.unlockBackend == .keystroke {
 				RowDivider()
 				passwordRow
 			}
 
-			if let problem = readinessProblem {
+			if let problem = readinessProblem, PasswordReplaySafety.isEnabled || settings.unlockBackend == .authPlugin {
 				RowDivider(inset: 0)
 				StatusLine(kind: problem.kind, message: problem.message)
 			}
@@ -598,18 +506,26 @@ struct SettingsView: View {
 		Binding(
 			get: { settings.unlockBackend },
 			set: {
+				guard !AppServices.isUIReview else { return }
+				PasswordReplaySafety.setEnabled($0 == .keystroke)
 				settings.unlockBackend = $0
 				// Apply immediately rather than at next launch.
 				AppServices.shared.startUnlockTrigger()
 			})
 	}
 
+	private var unlockInfo: String {
+		"When enabled, Gaze enters your stored account password after verification. Password and Touch ID remain available. "
+			+ "The password is stored on this Mac in recoverable form so Gaze can type it. Turning this off does not delete the stored password; use Revoke to remove it. "
+			+ "Use Test Recognition to practice without unlocking anything."
+			+ "\n\nLast lock-screen attempt: " + LockScanDiagnostics.shared.summary
+	}
+
 	/// Explains the selected option, and the plugin's removal when that is what is selected.
 	private var unlockFooter: String? {
 		if settings.unlockBackend == .authPlugin {
-			return "The authorization plugin was removed because it can lock you out. "
-				+ "Restore Apple's lock screen before selecting another option: run "
-				+ "Plugin/uninstall.sh as an administrator."
+			return "Legacy authorization is disabled in this source, but existing installations are unchanged. "
+				+ "Have an administrator review the installed components and Apple's lock-screen configuration separately."
 		}
 		return UnlockBackendKind.selectableCases
 			.first { $0 == settings.unlockBackend }?.detail
@@ -694,8 +610,9 @@ struct SettingsView: View {
 								+ "encryption."
 						)
 						Text(
-							"Choose \"Just recognise me\" instead and no password is asked for "
-								+ "or stored at all."
+							"\"Just recognise me\" does not use an account password to unlock your Mac. "
+								+ "Switching modes does not delete an existing password. Use Revoke and "
+								+ "check that removal succeeds; saved autofill passwords are separate."
 						)
 					}
 				}
@@ -728,7 +645,7 @@ struct SettingsView: View {
 	private var permissionsSection: some View {
 		SettingsSection(
 			title: "Permissions",
-			footer: "Gaze needs the camera to see you and Accessibility to type your password."
+			info: "Gaze needs the camera to see you and Accessibility to type your password."
 		) {
 			SettingRow(
 				title: "Camera",
@@ -761,7 +678,7 @@ struct SettingsView: View {
 
 	/// Whether the camera has been granted, asked fresh each time this is drawn.
 	private var cameraAccessGranted: Bool {
-		AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+		cameraGranted
 	}
 
 	private func openPrivacySettings(_ anchor: String) {
@@ -773,11 +690,15 @@ struct SettingsView: View {
 	}
 
 	private var securitySection: some View {
-		SettingsSection(title: "Hardening", footer: securityFooter) {
+		SettingsSection(title: "Hardening", footer: securityFooter,
+			info: "Choose which checks Gaze requires before unlocking. Movement verification asks for a random action each time. Password and Touch ID remain available on the lock screen.") {
 			SettingToggle(
 				title: "Only trust the built-in camera",
+				detail: "Required for password release; the enrolled camera stays pinned",
 				symbol: "camera.fill",
-				isOn: bind(\.requireBuiltInCamera))
+				isEnabled: settings.unlockBackend != .keystroke,
+				isOn: Binding(get: { settings.unlockBackend == .keystroke || settings.requireBuiltInCamera },
+					set: { settings.requireBuiltInCamera = $0 }))
 
 			RowDivider()
 			SettingToggle(
@@ -787,11 +708,29 @@ struct SettingsView: View {
 				isOn: bind(\.livenessEnabled))
 
 			RowDivider()
-			SettingToggle(
-				title: "Ask me to move before unlocking",
-				detail: "A blink, a turn or a nod, chosen at random each time",
-				symbol: "figure.walk.motion",
-				isOn: bind(\.requireChallenge))
+			SettingRow(
+				title: "Movements to unlock this Mac",
+				detail: "One is quicker; two asks for another completed response",
+				symbol: "figure.walk.motion"
+			) {
+				Menu {
+					Picker("Movements to unlock this Mac", selection: $settings.unlockMovementCount) {
+						ForEach(Preferences.UnlockMovementCount.allCases, id: \.self) { count in
+							Text(count.title).tag(count)
+						}
+					}
+					.pickerStyle(.inline)
+				} label: {
+					Text(settings.unlockMovementCount.title).lineLimit(1)
+				}
+				.menuStyle(.button)
+				.buttonStyle(.glass)
+				.buttonBorderShape(.capsule)
+				.controlSize(.large)
+				.accessibilityLabel("Movements to unlock this Mac")
+				.accessibilityValue(settings.unlockMovementCount.title)
+				.fixedSize()
+			}
 
 			RowDivider()
 			SettingToggle(
@@ -816,7 +755,8 @@ struct SettingsView: View {
 	}
 
 	private var behaviourSection: some View {
-		SettingsSection(title: "This Mac", footer: behaviourFooter) {
+		SettingsSection(title: "This Mac", footer: LoginItem.needsApproval ? behaviourFooter : nil,
+			info: behaviourFooter) {
 			SettingToggle(
 				title: "Open at login",
 				// Grey, like Login Items in System Settings — and because `Theme.faceID` is
@@ -864,23 +804,28 @@ struct SettingsView: View {
 	private var appearanceSection: some View {
 		SettingsSection(
 			title: "Appearance",
-			footer: settings.appTheme == .glass
-				? "The same material as the notch panel: dark at the top, thinning to clear at "
-					+ "the bottom. Always dark, since the gradient is."
-				: "Applies to this window. Setup and the recognition test stay dark so the "
-					+ "camera preview has a neutral surround, and the lock screen panel has "
-					+ "its own Style above."
+			info: settings.appTheme == .glass
+				? "Semi Liquid Glass uses a dark, translucent surface. Onboarding follows "
+					+ "this appearance too. The notch has its own style in Notch settings."
+				: "Applies to Settings and onboarding. The recognition test keeps a neutral "
+					+ "camera surround. The notch has its own style in Notch settings."
 		) {
 			SettingRow(title: "Theme", symbol: "circle.lefthalf.filled") {
-				Picker("", selection: $settings.appTheme) {
-					ForEach(Preferences.AppTheme.allCases, id: \.self) { theme in
-						Text(theme.title).tag(theme)
+				Menu {
+					Picker("Theme", selection: $settings.appTheme) {
+						ForEach(Preferences.AppTheme.allCases, id: \.self) { theme in
+							Text(theme.title).tag(theme)
+						}
 					}
+					.pickerStyle(.inline)
+				} label: {
+					Text(settings.appTheme.title).lineLimit(1)
 				}
-				.labelsHidden()
-				.pickerStyle(.menu)
-				.controlSize(.small)
-				.tint(Theme.label)
+				.buttonStyle(.glass)
+				.buttonBorderShape(.capsule)
+				.controlSize(.large)
+				.accessibilityLabel("Theme")
+				.accessibilityValue(settings.appTheme.title)
 				.fixedSize()
 			}
 		}
@@ -891,25 +836,17 @@ struct SettingsView: View {
 	private var updatesSection: some View {
 		SettingsSection(
 			title: "Updates",
-			footer: "\(updateDetail) Your settings and enrolled face survive a rebuild."
+			footer: "Source updates are manual. Review and rebuild in your trusted checkout; Gaze never runs Git or installs downloaded code."
 		) {
 			SettingRow(
 				title: "Version \(updates.currentVersion)",
 				symbol: "arrow.trianglehead.2.clockwise"
 			) {
-				Button(updateButtonTitle) { updateAction() }
+				Button("Open Source Folder") { updates.revealRepository() }
 					.gazeButton()
-					.disabled(updates.state == .checking || updates.state == .pulling)
+					.disabled(updates.repositoryURL == nil)
 			}
 
-			// The released version, from the site.
-			//
-			// Shown alongside the commit row rather than instead of it, because the two
-			// answer different questions and a given copy of Gaze can only answer one of
-			// them. A checkout knows how far behind `main` it is and nothing about what has
-			// been released; a downloaded copy in `/Applications` has no repository above it,
-			// so the row above it is permanently silent — which is how everybody who
-			// installed Gaze rather than cloning it had no way to hear about a new version.
 			RowDivider(inset: 0)
 			SettingRow(
 				title: releaseRowTitle,
@@ -921,12 +858,6 @@ struct SettingsView: View {
 					.disabled(releases.state == .checking)
 			}
 
-			if case .pulled = updates.state {
-				RowDivider(inset: 0)
-				StatusLine(
-					kind: .warning,
-					message: "Run ./build.sh in the repository to apply the update.")
-			}
 		}
 	}
 
@@ -963,43 +894,6 @@ struct SettingsView: View {
 			releases.openDownload()
 		} else {
 			Task { await releases.check() }
-		}
-	}
-
-	private var updateDetail: String {
-		switch updates.state {
-		case .idle: return "Check whether there are new commits."
-		case .checking: return "Checking…"
-		case .upToDate: return "You're on the latest commit."
-		case .available(let behind, let latest):
-			let plural = behind == 1 ? "commit" : "commits"
-			return latest.isEmpty
-				? "\(behind) new \(plural)."
-				: "\(behind) new \(plural) — latest: \(latest)"
-		case .pulling: return "Pulling…"
-		case .pulled(let count):
-			return "Pulled \(count) \(count == 1 ? "commit" : "commits")."
-		case .failed(let message): return message
-		}
-	}
-
-	private var updateButtonTitle: String {
-		switch updates.state {
-		case .available: return "Pull"
-		case .pulling: return "Pulling…"
-		case .pulled: return "Open Folder"
-		default: return "Check"
-		}
-	}
-
-	private func updateAction() {
-		switch updates.state {
-		case .available:
-			Task { await updates.pull() }
-		case .pulled:
-			updates.revealRepository()
-		default:
-			Task { await updates.check() }
 		}
 	}
 
@@ -1430,10 +1324,14 @@ struct SettingsView: View {
 	private func revokePassword() {
 		Task {
 			guard await BiometricGate.authorize(.storePassword) else { return }
-			PasswordVault.remove()
-			passwordEntry = ""
-			passwordError = nil
-			hasStoredPassword = false
+			do {
+				try PasswordVault.remove()
+				passwordEntry = ""
+				passwordError = nil
+				hasStoredPassword = false
+			} catch {
+				passwordError = error.localizedDescription
+			}
 		}
 	}
 
@@ -1444,55 +1342,6 @@ struct SettingsView: View {
 		} else {
 			lockoutPassword = ""
 		}
-	}
-}
-
-// MARK: - Sidebar row
-
-/// One tab in the floating top-bar. A plain symbol + label in a capsule — no coloured
-/// icon tile, which was part of the "settings mockup" look; the selected tab is marked by
-/// a fill, the way a segmented control marks its selection.
-private struct TopBarItem: View {
-
-	let pane: SettingsPane
-	let isSelected: Bool
-	let badge: Color?
-	let select: () -> Void
-
-	@State private var isHovering = false
-
-	var body: some View {
-		Button(action: select) {
-			HStack(spacing: 6) {
-				Image(systemName: pane.symbol)
-					.font(.system(size: 12, weight: .medium))
-				Text(pane.title)
-					.font(Typography.row)
-					.lineLimit(1)
-				if let badge {
-					Circle()
-						.fill(badge)
-						.frame(width: 5, height: 5)
-				}
-			}
-			.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
-			.padding(.horizontal, 12)
-			.padding(.vertical, 6)
-			.background {
-				Capsule(style: .continuous)
-					.fill(
-						isSelected
-							? Theme.selection
-							: (isHovering ? Theme.hoverFill : .clear))
-			}
-			.contentShape(.capsule)
-		}
-		.buttonStyle(.plain)
-		.focusEffectDisabled()
-		.onHover { isHovering = $0 }
-		.accessibilityLabel(pane.title)
-		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-		.accessibilityValue(badge == nil ? "" : "Needs attention")
 	}
 }
 

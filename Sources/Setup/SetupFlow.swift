@@ -19,15 +19,6 @@ import SwiftUI
 /// set" was how someone got a success screen having done nothing. The password
 /// and permission steps are the exception: they are the only two that can already
 /// be satisfied, and there is nothing to ask when the answer is already stored.
-enum SetupStep: Int, CaseIterable {
-	case welcome
-	case how
-	case capture
-	case password
-	case permission
-	case done
-}
-
 /// Setup, start to finish.
 ///
 /// The flow owns the camera and the enrollment model rather than the steps owning
@@ -59,12 +50,16 @@ struct SetupFlow: View {
 	@State private var model: EnrollmentModel?
 	@State private var step: SetupStep = .welcome
 	@State private var failure: String?
+	@State private var isPresented = false
+	@State private var purpose = SetupPurpose.onboarding
+	@State private var captureSession = 0
+	@State private var work = SetupSessionWork()
 	/// The steps this run will actually show, fixed when the flow starts.
 	///
 	/// Snapshotted rather than recomputed, because the password step satisfies itself the
 	/// moment it succeeds — a live count would drop from four to three underneath the
 	/// progress row while someone was looking at it.
-	@State private var plan: [SetupStep] = []
+	@State private var plan = SetupPlan(hasPassword: false, hasPermission: false)
 	/// Which way the last move went, so the screens slide with it.
 	@State private var isReturning = false
 
@@ -79,16 +74,21 @@ struct SetupFlow: View {
 				SetupHowStep(
 					position: position(of: .how),
 					onContinue: advance,
-					onBack: back
+					onBack: back,
+					movementCount: Preferences.shared.unlockMovementCount.rawValue
 				)
+			case .meetGaze:
+				SetupMeetGazeStep(position: position(of: .meetGaze), onContinue: advance, onBack: back,
+					movementCount: Preferences.shared.unlockMovementCount.rawValue)
 			case .capture:
 				SetupCaptureStep(
 					position: position(of: .capture),
 					camera: camera,
 					model: model,
 					onAuthorized: startCamera,
-					onBack: back
+					onBack: purpose == .addFace ? nil : back
 				)
+				.id(captureSession)
 			case .password:
 				SetupPasswordStep(
 					position: position(of: .password),
@@ -100,40 +100,39 @@ struct SetupFlow: View {
 					position: position(of: .permission),
 					onContinue: advance,
 					onSkip: advance,
-					onBack: plan.contains(.password) ? back : nil
+					onBack: plan.steps.contains(.password) ? back : nil
 				)
 			case .done:
 				SetupDoneStep(
 					failure: failure,
 					unfinished: unfinished,
+					isAddingFace: purpose == .addFace,
 					onDone: onFinish,
 					onRetry: retry
 				)
 			}
 		}
-		// Content moves with the direction of travel while the chrome stays put, which is
-		// what makes six screens read as one window rather than six windows. Short: the
-		// distance says "next", and anything longer says "page".
-		//
-		// Under "Reduce Motion" it becomes a plain cross-fade. A screen sliding in from the
-		// side is the other large movement in setup — the one the setting most directly
-		// asks about — and a fade still says "this replaced that" without moving anything
-		// across the display.
 		.transition(
 			reduceMotion
-				? .opacity
+				? .identity
 				: .asymmetric(
-					insertion: .offset(x: isReturning ? -26 : 26).combined(with: .opacity),
-					removal: .offset(x: isReturning ? 26 : -26).combined(with: .opacity)
+					insertion: .offset(x: isReturning ? -12 : 12).combined(with: .opacity),
+					removal: .opacity
 				)
 		)
 		.id(step)
-		.frame(width: 880, height: 660)
+		.frame(minWidth: 880, idealWidth: 880, maxWidth: .infinity,
+			minHeight: 660, idealHeight: 660, maxHeight: .infinity)
+		.overlay {
+			if purpose == .addFace && step == .capture {
+				GazePeekingCompanion(isActive: model == nil || model?.phase == .positioning)
+			}
+		}
 		// The user's own wallpaper, blurred and darkened — the same ground the rest of the
 		// app now uses. Setup used to be flat black, which made it the one window in Gaze
 		// that did not belong to the machine it was running on.
-		.background(WallpaperBackdrop(style: .setup))
-		.preferredColorScheme(.dark)
+		.background(SetupBackdrop())
+		.preferredColorScheme(Preferences.shared.appTheme.colorScheme)
 		// Back to the beginning every time the window is shown.
 		//
 		// A SwiftUI `Window` scene keeps its state when it is closed and reopened,
@@ -141,8 +140,17 @@ struct SetupFlow: View {
 		// left on last time. Closing it on the finish screen and opening it again
 		// meant being told "You're all set" without having done anything — while
 		// Settings, reading the store rather than this view, still said the opposite.
-		.onAppear { restart() }
-		.onDisappear { camera.stop() }
+		.onAppear {
+			isPresented = true
+			restart()
+		}
+		.onDisappear {
+			isPresented = false
+			cancelCaptureWork()
+		}
+		.onChange(of: SetupRequest.presentation.revision) { _, _ in
+			if isPresented { restart() }
+		}
 		// Driven by the frame counter rather than the pose: two identical
 		// consecutive poses are normal and must still advance the state machine.
 		.onChange(of: camera.frameID) { _, _ in
@@ -162,14 +170,17 @@ struct SetupFlow: View {
 
 	/// Put the flow back to its opening state.
 	private func restart() {
-		camera.stop()
+		cancelCaptureWork()
 		model = nil
+		captureSession += 1
 		failure = nil
 		isReturning = false
 		// A screen Settings asked for wins over the launch flag, which wins over the start.
-		let requested = SetupRequest.consumePendingStep()
+		let requested = SetupRequest.consumePendingStep() ?? Self.consumeLaunchStep()
+		purpose = SetupRequest.presentation.purpose
 		plan = makePlan(including: requested)
-		step = requested ?? Self.consumeLaunchStep() ?? .welcome
+		step = requested ?? (purpose == .addFace ? .capture : .welcome)
+		if step == .welcome && purpose == .onboarding { OnboardingHistory.markPresented() }
 	}
 
 	/// Whether the launch flag has already been honoured.
@@ -200,6 +211,7 @@ struct SetupFlow: View {
 		switch name {
 		case "welcome": return .welcome
 		case "how": return .how
+		case "meetGaze": return .meetGaze
 		case "capture": return .capture
 		case "password": return .password
 		case "permission": return .permission
@@ -218,35 +230,23 @@ struct SetupFlow: View {
 	///   not it is already satisfied. Without this the plan would drop the very screen the
 	///   flow is about to show — a step on screen but absent from the progress row, and a
 	///   `nextStep` that skips straight past it the moment anything advances.
-	private func makePlan(including forced: SetupStep? = nil) -> [SetupStep] {
-		// Enrolment first, explanation last.
-		//
-		// `.how` used to come before `.capture`, which put several screens of video
-		// between opening the app and doing anything with it. Nobody reads how a thing
-		// works before they have seen it work — they are there to set it up, and an
-		// explainer in front of that is a toll. Afterwards it lands differently: Gaze has
-		// just recognised your face, and now is exactly when "here is what this does and
-		// does not protect you from" is worth reading.
-		//
-		// It also means the shortest possible path — a Mac with the password already
-		// stored and Accessibility already granted — is one screen: capture.
-		var steps: [SetupStep] = [.capture]
-		if !PasswordVault.hasPassword || forced == .password { steps.append(.password) }
-		if !AXIsProcessTrusted() || forced == .permission { steps.append(.permission) }
-		steps.append(.how)
-		return steps
+	private func makePlan(including forced: SetupStep? = nil) -> SetupPlan {
+		if purpose == .addFace { return SetupPlan(hasPassword: false, hasPermission: false, purpose: .addFace) }
+		return SetupPlan(hasPassword: PasswordVault.hasPassword,
+			hasPermission: SetupPermissionStatus.current.isReady, including: forced)
 	}
 
 	/// Where a step sits in the progress row, or nil for the two ends of the flow.
 	private func position(of step: SetupStep) -> SetupPosition? {
-		guard let index = plan.firstIndex(of: step) else { return nil }
-		return SetupPosition(index: index, count: plan.count)
+		guard purpose == .onboarding else { return nil }
+		guard let index = plan.steps.firstIndex(of: step) else { return nil }
+		return SetupPosition(index: index, count: plan.steps.count)
 	}
 
 	private func advance() {
 		guard let next = nextStep(after: step) else { return }
 		isReturning = false
-		withAnimation(Theme.Motion.standard) { step = next }
+		withAnimation(stepAnimation) { step = next }
 	}
 
 	/// One screen back.
@@ -256,23 +256,14 @@ struct SetupFlow: View {
 	/// re-ran enrolment would be destroying work to look consistent. Leaving the capture
 	/// forwards is the only way out of it.
 	private func back() {
-		let previous: SetupStep?
-		switch step {
-		case .how:
-			// The last step, shown after enrolment succeeded. Going back from here would
-			// walk into a permission screen that has already been answered.
-			previous = nil
-		case .capture:
-			// The first step now, so there is nowhere behind it.
-			previous = nil
-		case .permission:
-			previous = plan.contains(.password) ? .password : nil
-		default:
-			previous = nil
+		guard let previous = plan.previous(before: step) else { return }
+		if step == .capture {
+			guard model?.phase != .complete else { return }
+			cancelCaptureWork()
+			model = nil
 		}
-		guard let previous else { return }
 		isReturning = true
-		withAnimation(Theme.Motion.standard) { step = previous }
+		withAnimation(stepAnimation) { step = previous }
 	}
 
 	/// The next screen worth showing.
@@ -282,24 +273,11 @@ struct SetupFlow: View {
 	/// that is already stored is asking someone to prove something the app knows, and
 	/// the Accessibility screen has nothing to do once the toggle is on.
 	private func nextStep(after current: SetupStep) -> SetupStep? {
-		var candidate = SetupStep(rawValue: current.rawValue + 1)
-		while let next = candidate, isSatisfied(next) {
-			candidate = SetupStep(rawValue: next.rawValue + 1)
-		}
-		return candidate
+		plan.next(after: current)
 	}
 
-	/// A step is "satisfied" — and so skippable — only if it is not part of this run's plan.
-	///
-	/// The plan already encodes the decision, including the case where Settings asked for a
-	/// screen that is technically satisfied. Re-deriving skippability from `PasswordVault`
-	/// here as well meant the two disagreed: the plan said "show the password screen", and
-	/// the first `advance()` read the vault, saw a stored password and stepped over it.
-	private func isSatisfied(_ candidate: SetupStep) -> Bool {
-		switch candidate {
-		case .password, .permission: return !plan.contains(candidate)
-		default: return false
-		}
+	private var stepAnimation: Animation? {
+		reduceMotion ? nil : .easeInOut(duration: 0.2)
 	}
 
 	/// What is still missing once the flow reaches the end.
@@ -308,9 +286,10 @@ struct SetupFlow: View {
 	/// the password screen and then granting it in another window still reports the
 	/// truth. `done` uses this to avoid claiming a success it cannot back up.
 	private var unfinished: SetupUnfinished {
-		SetupUnfinished(
+		guard purpose == .onboarding else { return SetupUnfinished() }
+		return SetupUnfinished(
 			needsPassword: !PasswordVault.hasPassword,
-			needsAccessibility: !AXIsProcessTrusted()
+			needsAccessibility: !SetupPermissionStatus.current.isReady
 		)
 	}
 
@@ -319,45 +298,21 @@ struct SetupFlow: View {
 	/// Starting the camera before permission exists is what puts the system's own
 	/// prompt on screen at a moment nobody asked for it.
 	private func startCamera() {
-		guard model == nil else { return }
+		guard isPresented, step == .capture, model == nil else { return }
 		model = EnrollmentModel(embedder: store.embedder)
-		Task { await camera.start() }
-	}
-
-	/// Whether this Mac is already set up, and so whether adding a face needs permission.
-	///
-	/// Both halves matter. Checking only the face list treats "credentials stored, no
-	/// visible face" as a fresh Mac, which is precisely the state someone reaches by
-	/// deleting the owner's enrolment — and it would let them enrol themselves without
-	/// ever authenticating. Checking either one means the only unauthenticated path is a
-	/// genuinely unconfigured install.
-	private var isAlreadyConfigured: Bool {
-		store.isEnrolled || PasswordVault.hasPassword
+		work.run { revision in
+			guard work.isCurrent(revision), isPresented, step == .capture, model != nil else { return }
+			await camera.start()
+		}
 	}
 
 	private func save() {
-		guard let model else { return }
-
-		// Authorised here, at the commit, rather than at the buttons that open setup.
-		//
-		// There are three ways in — the menu, the Settings button, the add-a-face tile —
-		// and gating each one means the guarantee is only as good as the next entry point
-		// somebody adds. This is the single line every enrolment passes through, so it
-		// holds regardless of how the flow was reached.
-		guard isAlreadyConfigured else {
-			commit(model)
-			return
-		}
-		Task {
-			guard await BiometricGate.require(.addEnrollment) else {
-				fail("Gaze couldn't confirm it's you, so this face wasn't added.")
-				return
-			}
-			commit(model)
-		}
+		guard isPresented, step == .capture, let model, model.phase == .complete else { return }
+		work.run { revision in await commit(model, revision: revision) }
 	}
 
-	private func commit(_ model: EnrollmentModel) {
+	private func commit(_ model: EnrollmentModel, revision: UUID) async {
+		guard work.isCurrent(revision), isPresented, step == .capture else { return }
 		// Say so rather than returning quietly. Returning left the capture screen up
 		// with a full ring and nothing happening — the enrollment was finished and
 		// the flow simply stopped, which looks like a hang and loses the work.
@@ -366,15 +321,17 @@ struct SetupFlow: View {
 			return
 		}
 		do {
-			try store.add(prints: model.prints, cameraID: cameraID)
+			try await store.add(prints: model.prints, cameraID: cameraID)
+			guard work.isCurrent(revision), isPresented, step == .capture else { return }
 			camera.stop()
 			failure = nil
 			// On to the password rather than straight to the end: the face is saved, which
 			// is not the same as being able to unlock anything.
 			let next = nextStep(after: .capture) ?? .done
 			isReturning = false
-			withAnimation(Theme.Motion.standard) { step = next }
+			withAnimation(stepAnimation) { step = next }
 		} catch {
+			guard work.isCurrent(revision), isPresented, step == .capture else { return }
 			fail("Couldn't save your face: \(error.localizedDescription)")
 		}
 	}
@@ -383,7 +340,7 @@ struct SetupFlow: View {
 		camera.stop()
 		failure = message
 		isReturning = false
-		withAnimation(Theme.Motion.standard) { step = .done }
+		withAnimation(stepAnimation) { step = .done }
 	}
 
 	/// Start over after a failure.
@@ -392,10 +349,16 @@ struct SetupFlow: View {
 	/// before giving up is exactly the material that failed, and carrying it into
 	/// the retry is how the second attempt fails the same way as the first.
 	private func retry() {
+		cancelCaptureWork()
 		failure = nil
-		model = EnrollmentModel(embedder: store.embedder)
+		model = nil
 		isReturning = false
-		withAnimation(Theme.Motion.standard) { step = .capture }
-		Task { await camera.start() }
+		withAnimation(stepAnimation) { step = .capture }
+		startCamera()
+	}
+
+	private func cancelCaptureWork() {
+		work.cancel()
+		camera.stop()
 	}
 }

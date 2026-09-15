@@ -33,7 +33,7 @@ enum ChallengePoseIntegrationTests {
 	}
 
 	static func main() {
-		check(UnlockChallengeGate.requiredActions == 2, "two prompted movements stay required")
+		check(UnlockChallengeGate.defaultRequiredActions == 2, "two prompted movements remain the default")
 		check(UnlockChallengeGate.presentationDelay == .milliseconds(350), "pin 350ms presentation interval")
 		check(UnlockChallengeGate.responseTimeout == .seconds(8), "pin eight-second response timeout")
 		nonfrontalReturnToStart()

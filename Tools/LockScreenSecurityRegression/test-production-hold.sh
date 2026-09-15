@@ -11,6 +11,11 @@ assert(submission.indexOf('try PasswordReplaySafety.requireEnabled()') < submiss
 assert(submission.indexOf('try PasswordReplaySafety.requireEnabled()') >= 0);
 const watcher = fs.readFileSync(`${root}/Sources/Security/LockWatcher.swift`, 'utf8');
 const lockAttempt = watcher.slice(watcher.indexOf('private func attemptUnlock('));
+assert.match(lockAttempt, /let movementCount = Preferences.shared.unlockMovementCount/, 'capture movement policy at attempt start');
+const currentContext = lockAttempt.slice(lockAttempt.indexOf('func contextIsCurrent()'), lockAttempt.indexOf('func requestIsCurrent()'));
+assert.match(currentContext, /Preferences.shared.unlockMovementCount == movementCount/, 'changing count invalidates an in-flight attempt');
+assert.match(lockAttempt, /UnlockChallengeGate\(requiredActions: movementCount.rawValue\)/, 'gate uses the captured count, never a live downgrade');
+assert.match(lockAttempt, /return contextIsCurrent\(\) && challengeGate.isVerified/, 'submission revalidates the captured movement policy');
 const modelReady = lockAttempt.indexOf('if let antiSpoof, !antiSpoof.isActive');
 const cameraStart = lockAttempt.indexOf('await camera.start(pinnedDeviceID: pinnedCamera)');
 assert(modelReady >= 0 && cameraStart > modelReady, 'required PAD is loaded and validated before opening the camera');
@@ -50,6 +55,7 @@ for (const reason of ['frame gap', 'face unavailable', 'frame quality', 'camera 
 const app = fs.readFileSync(`${root}/Sources/App/GazeApp.swift`, 'utf8');
 assert(app.indexOf('Self.executionPolicy.permitsBrowserApproval') < app.indexOf('if Self.executionPolicy == .scanOnly'), 'browser listener starts before scan-only returns');
 const approval = fs.readFileSync(`${root}/Sources/Browser/GazeBrowserApproval.swift`, 'utf8');
+assert.match(approval, /var gate = UnlockChallengeGate\(\)/, 'browser approval retains the default two movements');
 assert.match(approval, /guard session.isValid else/);
 assert.match(approval, /session.isValid && requestLease.permits\(request\)/);
 assert.match(approval, /session.onInvalidation = \{ camera.stop\(\); panel.close\(\) \}/);

@@ -26,7 +26,7 @@ final class LockScanDiagnostics {
 			case .notRecognized: "Face verification or a movement did not complete. No password was sent. Face the camera and return to rest between movements."
 			case .spoofRejected: "The anti-spoof check rejected the attempt. No password was sent. Use your password or Touch ID."
 			case .ended: "The scan ended without complete verification. No password was sent. Try Test Recognition to check framing and movement."
-			case .scanOnlyPassed: "Recognition and both movements passed in scan-only mode. That mode does not enter a password or unlock your Mac."
+			case .scanOnlyPassed: "Recognition and the selected movement checks passed in scan-only mode. That mode does not enter a password or unlock your Mac."
 			case .submissionStopped: "Password delivery stopped before Gaze could confirm an unlock. It will not retry during this lock. Use your password or Touch ID."
 			case .submissionPending: "Password input was sent; waiting for macOS to confirm that the screen unlocked."
 			case .submissionUnconfirmed: "macOS did not confirm an unlock after password input. Gaze will not retry during this lock. Use your password or Touch ID."

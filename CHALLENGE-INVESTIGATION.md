@@ -1,5 +1,44 @@
 # Gaze: left/right challenge resets and choppy animation
 
+## Configurable movement count — September 15, 2026, 21:31
+
+The owner confirmed a choice between one and two movement challenges. Settings now
+offers both, with two recommended and retained as the default for existing and new
+installations. The lead audited Juno's gate and Ezra's settings changes and completed
+the runtime and onboarding integration.
+
+Each Mac unlock/scan-only attempt captures the selected count. Its context checks,
+including the final password-submission evidence check, reject a changed selection.
+The gate keeps that count through evidence resets; one requires one complete
+prompted response, and two requires two. Browser approval retains the default two.
+Identity/PAD thresholds, excursion/return requirements, freshness and presentation
+timing are unchanged. The setting does not provide a zero-movement mode.
+
+Audit corrections: enabled the picker when Mac unlock is active (the submitted UI
+had retained the old toggle's disabled state), removed obsolete caption sizing tied
+to `requireChallenge`, rejected Boolean/fractional/string preference values rather
+than coercing them to one, and corrected a gate-test return timestamp to avoid a
+synthetic 350 ms capture gap. Added isolated persistence/reload tests. Onboarding
+and the expression guide reflect the selected count; scan-only copy no longer
+assumes two. Normal animated return captions remain hidden.
+
+Validation: 860 unlock/source/gate checks, 34 preference checks, production wiring
+checks, and 54 light/dark onboarding renders passed. Inspected the new one-movement
+How, Meet Gaze and compact scanning layouts; their instructions fit. These offscreen
+renders do not establish native glass appearance or live accessibility behavior.
+Live Settings inspection failed at computer-use startup (`native pipe startup
+failed`); no retries or live preference changes were made.
+
+`script/build_and_run.sh` built, verified the signature and launched this exact
+checkout as PID 24885. Binary mtime: 2026-09-15 21:31:51; SHA-256
+`23482f6826b1c44662c554ad0dd12bae6d98c1fd5e7e47be607095de39291b1c`.
+Logs: `build/movement-count-{unlock-tests,settings-tests,wiring,onboarding-tests,build-run}.log`.
+
+The owner's positive lock/unlock feedback applies to the preceding build. The new
+one-movement option still needs an owner-run lock/unlock and omitted-return check,
+followed by a two-movement check after switching back. No lock, credential entry or
+camera test was automated. Public-launch gates remain open in `Tools/Release/READINESS.md`.
+
 ## Owner feedback and quiet return presentation — September 15
 
 The owner now reports that locking and unlocking work well. The recorded 19:48
@@ -25,9 +64,9 @@ passes policy checks and renders 48 light/dark screens; inspected Meet Gaze and 
 compact scanning lesson fit without clipping. The display-pacing test was explicitly
 skipped in this offscreen layout run.
 
-The owner then asked whether it could be an option. Clarification is pending as to
-movement count versus return-text visibility. No authentication-count change has
-been made; the current requirement remains two distinct completed movements.
+The owner then confirmed that movement count should be selectable. The subsequent
+implementation and validation are recorded above; this earlier build still required
+two distinct completed movements.
 
 Logs: `build/quiet-return-tests.log`, `build/quiet-return-onboarding-tests.log`,
 `build/quiet-return-wiring.log`, and `build/quiet-return-build-run.log`.

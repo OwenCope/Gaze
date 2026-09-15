@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 import SwiftUI
 import Observation
 
@@ -117,6 +118,33 @@ final class Preferences {
 		}
 	}
 
+	/// How many completed movement responses Mac unlock asks for.
+	///
+	/// Two is the default for new and existing users. One is quicker and two asks
+	/// for another completed response. There is deliberately no zero/off option
+	/// for Mac unlock: the count only feeds the movement gate, never whether
+	/// recognition itself runs.
+	enum UnlockMovementCount: Int, CaseIterable, Sendable {
+		case one = 1
+		case two = 2
+
+		var title: String {
+			switch self {
+			case .one: return "One movement"
+			case .two: return "Two movements (recommended)"
+			}
+		}
+
+		/// Missing or invalid stored values fall back to `.two`, so installations
+		/// that predate this setting keep their current behaviour.
+		static func resolve(stored: Any?) -> UnlockMovementCount {
+			guard let number = stored as? NSNumber,
+				CFGetTypeID(number) != CFBooleanGetTypeID(),
+				let count = Int(exactly: number.doubleValue) else { return .two }
+			return UnlockMovementCount(rawValue: count) ?? .two
+		}
+	}
+
 	private enum Key {
 		static let appTheme = "appTheme"
 		static let glyphPlacement = "notchGlyphPlacement"
@@ -130,13 +158,13 @@ final class Preferences {
 		static let tamperProtection = "tamperProtection"
 		static let requireBuiltInCamera = "requireBuiltInCamera"
 		static let requireChallenge = "requireChallenge"
+		static let unlockMovementCount = "unlockMovementCount"
 		static let unlockBackend = "unlockBackend"
 		static let pausedUntil = "pausedUntil"
 		static let walkAwayLock = "walkAwayLock"
-		static let autofillOnActivation = "autofillOnActivation"
 	}
 
-	private let defaults = UserDefaults.standard
+	private let defaults: UserDefaults
 
 	/// How long "pause" can mean.
 	///
@@ -167,16 +195,6 @@ final class Preferences {
 			case .hour: "For 1 Hour"
 			}
 		}
-	}
-
-	/// Fill a saved app's password when it comes forward asking for one.
-	///
-	/// On by default, unlike walk-away lock, and the difference is worth stating. This can
-	/// only ever act on an app the user deliberately saved a password for, and only when
-	/// that app is showing a focused *secure* field — it cannot fire anywhere the user did
-	/// not already opt in twice over. Walk-away lock, by contrast, acts on the whole Mac.
-	var autofillOnActivation: Bool {
-		didSet { defaults.set(autofillOnActivation, forKey: Key.autofillOnActivation) }
 	}
 
 	/// Lock the Mac when nobody is in front of it.
@@ -245,24 +263,15 @@ final class Preferences {
 		didSet { defaults.set(requireBuiltInCamera, forKey: Key.requireBuiltInCamera) }
 	}
 
-	/// Ask for a movement — a blink, a turn, a nod — after recognising the face and before
-	/// typing the password.
-	///
-	/// **Off by default, and that is a deliberate security trade rather than caution about
-	/// the feature.** It closes the one hole the object detector cannot: a photograph filling
-	/// the frame with no bezel, no hand and no screen edge for the detector to find. A photo
-	/// cannot blink.
-	///
-	/// The cost is paid by the owner, every single unlock. Gaze's whole proposition is that
-	/// the Mac opens while you are already looking at it; a challenge turns that into a
-	/// small task, and a challenge the camera misreads turns it into a task you have to do
-	/// twice. `AntiSpoofGate` already argues that a false reject is worse here than a missed
-	/// spoof, and that argument applies with more force to something the user must perform.
-	///
-	/// So it is offered rather than imposed: on for somebody who wants it, invisible to
-	/// everybody else.
+	/// Retained for preference compatibility. Mac unlock always requires movement;
+	/// `unlockMovementCount` controls the number of completed responses.
 	var requireChallenge: Bool {
 		didSet { defaults.set(requireChallenge, forKey: Key.requireChallenge) }
+	}
+
+	/// Completed responses required for Mac unlock; existing installations default to two.
+	var unlockMovementCount: UnlockMovementCount {
+		didSet { defaults.set(unlockMovementCount.rawValue, forKey: Key.unlockMovementCount) }
 	}
 
 	var unlockBackend: UnlockBackendKind {
@@ -302,17 +311,21 @@ final class Preferences {
 		didSet { defaults.set(notchWidthAdjust, forKey: Key.notchWidthAdjust) }
 	}
 
-	private init() {
+	private convenience init() {
+		self.init(defaults: .standard)
+	}
+
+	init(defaults: UserDefaults) {
+		self.defaults = defaults
 		pausedUntil = defaults.object(forKey: Key.pausedUntil) as? Date
 		walkAwayLock = defaults.bool(forKey: Key.walkAwayLock)
-		// Defaults to on when nothing has been written yet, which `bool(forKey:)` cannot
-		// express — it returns false for "absent" and for "off" alike.
-		autofillOnActivation = defaults.object(forKey: Key.autofillOnActivation) as? Bool ?? true
 		livenessEnabled = defaults.bool(forKey: Key.liveness)
 		touchIDFallback = defaults.object(forKey: Key.touchIDFallback) as? Bool ?? true
 		tamperProtection = defaults.bool(forKey: Key.tamperProtection)
 		requireBuiltInCamera = defaults.object(forKey: Key.requireBuiltInCamera) as? Bool ?? true
 		requireChallenge = defaults.bool(forKey: Key.requireChallenge)
+		unlockMovementCount = UnlockMovementCount.resolve(
+			stored: defaults.object(forKey: Key.unlockMovementCount))
 		unlockBackend =
 			defaults.string(forKey: Key.unlockBackend)
 			.flatMap(UnlockBackendKind.init(rawValue:)) ?? .none

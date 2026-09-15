@@ -1,523 +1,259 @@
 import SwiftUI
 
-/// Notch appearance controls.
-///
-/// Built around previews rather than descriptions. A paragraph explaining what "Semi
-/// Liquid Glass" means is both longer and less useful than a thumbnail of it — the eye
-/// settles the question before the sentence is finished.
-///
-/// Laid out like System Settings' Appearance row: label at the leading edge, thumbnails at
-/// the trailing edge, names underneath them.
+private struct NotchChoiceMenu<Selection: Hashable, Options: View>: View {
+	let title: String
+	let valueLabel: String
+	@Binding var selection: Selection
+	@ViewBuilder var options: () -> Options
+
+	var body: some View {
+		Menu {
+			Picker(title, selection: $selection) { options() }
+				.pickerStyle(.inline)
+		} label: {
+			Text(valueLabel)
+				.font(.system(size: 13))
+				.frame(width: 140, alignment: .leading)
+		}
+		.menuStyle(.button)
+		.buttonStyle(.glass)
+		.buttonBorderShape(.capsule)
+		.controlSize(.large)
+		.accessibilityLabel(title)
+		.accessibilityValue(valueLabel)
+	}
+}
+
 struct NotchSettingsSection: View {
-
 	@Bindable var settings: Preferences
+	@State private var sizeExpanded = false
+	@State private var expressionsExpanded = false
 
-	/// Read once — decoding the desktop picture on every redraw would be wasteful.
-	@State private var wallpaper: NSImage? = WallpaperBrightness.notchStripThumbnail()
-
-	/// The same measurement the real panel adapts to, so the preview shows the panel the
-	/// user will actually get rather than the un-boosted one.
-	@State private var wallpaperIsLight: Bool =
-		NSScreen.main.map(WallpaperBrightness.isLight(on:)) ?? false
+	private var isOnEar: Bool {
+		settings.panelShape == .attached && settings.glyphPlacement == .ear
+	}
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-			// No group title. It said "Notch" inside a pane called Notch, directly under a
-			// toolbar segment reading Notch — the third time in two inches of screen, and the
-			// only one of the three the eye has to read to learn anything is the row labels
-			// underneath it.
-			SettingsSection(footer: styleFooter) {
-				// Shape before style: it decides what the style is even applied to.
-				//
-				// Shown as thumbnails rather than a pop-up menu. "Attached" and "Island" are
-				// words for shapes, and a word for a shape is a worse description of it than
-				// the shape is — the same reason Style has never been a menu.
-				choiceRow(
-					title: "Shape",
-					values: Preferences.PanelShape.allCases,
-					titleFor: \.title,
-					isSelected: { settings.panelShape == $0 },
-					select: { settings.panelShape = $0 }
-				) { shape in
-					ShapeSketch(shape: shape, placement: settings.glyphPlacement)
+			NotchAppearancePreview(settings: settings)
+
+			SettingsSection {
+				DisclosureGroup("What Gaze’s expressions mean", isExpanded: $expressionsExpanded) {
+					GazeExpressionGuide(compact: true, movementCount: settings.unlockMovementCount.rawValue)
+						.padding(.vertical, 12)
 				}
+				.padding(Theme.rowInset)
+			}
 
-				RowDivider()
-				styleRow
-
-				// Ruken's suggestion, as a choice rather than a change.
-				//
-				// Only shown for the attached panel. The island *is* a panel built to carry
-				// the mark, so taking the mark out of it leaves an empty square hanging under
-				// the notch — the choice only has two sensible answers in attached mode.
-				if settings.panelShape == .attached {
-					RowDivider()
-					choiceRow(
-						title: "Gaze mark",
-						values: Preferences.GlyphPlacement.allCases,
-					titleFor: \.title,
-						isSelected: { settings.glyphPlacement == $0 },
-						select: { settings.glyphPlacement = $0 }
-					) { placement in
-						ShapeSketch(shape: settings.panelShape, placement: placement)
+			SettingsSection(title: "Appearance", info: styleFooter) {
+				SettingRow(title: "Panel") {
+					NotchChoiceMenu(title: "Panel", valueLabel: settings.panelShape.title, selection: $settings.panelShape) {
+						ForEach(Preferences.PanelShape.allCases, id: \.self) { shape in
+							Text(shape.title).tag(shape)
+						}
 					}
 				}
-				if settings.notchStyle == .semiLiquidGlass {
-					RowDivider()
-					SliderRow(
-						title: "Transparency",
-						symbol: "circle.righthalf.filled",
-						value: $settings.notchTransparency,
-						range: 0...1,
-						format: { String(format: "%.2f", $0) })
+
+				if settings.panelShape == .attached {
+					RowDivider(inset: Theme.rowInset)
+					SettingRow(title: "Face position") {
+						NotchChoiceMenu(title: "Face position",
+							valueLabel: settings.glyphPlacement == .centred ? "In the panel" : "Beside the camera",
+							selection: $settings.glyphPlacement) {
+							ForEach(Preferences.GlyphPlacement.allCases, id: \.self) { placement in
+								Text(placement == .centred ? "In the panel" : "Beside the camera").tag(placement)
+							}
+						}
+					}
+				}
+
+				if !isOnEar {
+					RowDivider(inset: Theme.rowInset)
+					SettingRow(title: "Material") {
+						NotchChoiceMenu(title: "Material", valueLabel: materialTitle(settings.notchStyle), selection: $settings.notchStyle) {
+							ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
+								Text(materialTitle(style)).tag(style)
+							}
+						}
+					}
+					if settings.notchStyle == .semiLiquidGlass {
+						RowDivider(inset: Theme.rowInset)
+						NotchAdjustmentRow(
+							title: "Transparency",
+							value: $settings.notchTransparency,
+							range: 0...1,
+							step: 0.01,
+							format: { "\(Int(($0 * 100).rounded()))%" })
+					}
 				}
 			}
 
-			SettingsSection(
-				title: "Notch size",
-				footer: "Nudge these if the panel doesn't line up with your notch."
-			) {
-				SliderRow(
-					title: "Height",
-					symbol: "arrow.up.and.down",
-					value: $settings.notchHeightAdjust,
-					range: -20...20,
-					format: { "\(Int($0)) px" })
-				RowDivider()
-				SliderRow(
-					title: "Width",
-					symbol: "arrow.left.and.right",
-					value: $settings.notchWidthAdjust,
-					range: -40...40,
-					format: { "\(Int($0)) px" })
+			sizeControls
+		}
+		.onChange(of: settings.panelShape, initial: true) { _, shape in
+			if shape == .island && settings.glyphPlacement != .centred {
+				settings.glyphPlacement = .centred
 			}
 		}
 	}
 
-	/// Says what the selected style actually is, so the thumbnail is not the only evidence.
+	private var sizeControls: some View {
+		SettingsSection {
+			DisclosureGroup(isExpanded: $sizeExpanded) {
+				VStack(spacing: 0) {
+					if !isOnEar {
+						NotchAdjustmentRow(title: "Height", value: $settings.notchHeightAdjust,
+							range: -20...20, format: adjustmentLabel)
+					}
+					NotchAdjustmentRow(title: "Width", value: $settings.notchWidthAdjust,
+						range: -40...40, format: adjustmentLabel)
+					HStack(alignment: .firstTextBaseline, spacing: 16) {
+						Text("Adjust only if the panel doesn't fit your notch.")
+							.font(Typography.detail)
+							.foregroundStyle(Theme.secondaryLabel)
+						Spacer(minLength: 0)
+						Button("Reset Size") {
+							if !isOnEar { settings.notchHeightAdjust = 0 }
+							settings.notchWidthAdjust = 0
+						}
+						.buttonStyle(.glass)
+						.buttonBorderShape(.capsule)
+						.controlSize(.large)
+						.disabled(settings.notchWidthAdjust == 0 && (isOnEar || settings.notchHeightAdjust == 0))
+					}
+					.padding(.horizontal, Theme.rowInset)
+					.padding(.top, 4)
+					.padding(.bottom, 12)
+				}
+			} label: {
+				Text("Fine-tune size")
+					.font(Typography.row)
+					.foregroundStyle(Theme.label)
+			}
+			.padding(.horizontal, Theme.rowInset)
+			.padding(.vertical, 14)
+			.tint(Theme.secondaryLabel)
+		}
+	}
+
+	private func adjustmentLabel(_ value: Double) -> String {
+		"\(value > 0 ? "+" : "")\(Int(value.rounded())) pt"
+	}
+
+	private func materialTitle(_ style: Preferences.NotchStyle) -> String {
+		switch style {
+		case .normal: "Solid"
+		case .semiLiquidGlass: "Frosted glass"
+		case .liquidGlass: "Liquid Glass"
+		}
+	}
+
 	private var styleFooter: String {
-		if settings.panelShape == .island {
-			return Preferences.PanelShape.island.detail
-				+ ". Nebulark's idea, built from his concept."
+		if isOnEar {
+			return "The mark sits beside the camera. No panel drops below the notch."
 		}
 		switch settings.notchStyle {
 		case .normal:
-			return "Solid black. On a dark wallpaper it's indistinguishable from the cutout."
+			return "Solid black, blending into your Mac's camera housing."
 		case .semiLiquidGlass:
-			return "Dark, with the wallpaper coming through a blur."
+			return "A dark panel with a softly blurred background."
 		case .liquidGlass:
-			return "The system's glass material, which refracts what's behind it."
+			return "Native glass that responds to the background."
 		}
-	}
-
-	/// A row of thumbnails, the way the Style row works.
-	///
-	/// Generic because there are three of these now and they differ only in what they draw.
-	/// A settings pane that shows you the thing and a settings pane that names the thing are
-	/// different products; this one shows you.
-	private func choiceRow<Value: Hashable, Sketch: View>(
-		title: String,
-		values: [Value],
-		titleFor: KeyPath<Value, String>,
-		isSelected: @escaping (Value) -> Bool,
-		select: @escaping (Value) -> Void,
-		@ViewBuilder sketch: @escaping (Value) -> Sketch
-	) -> some View {
-		// No icon tile before the label.
-		//
-		// An icon column earns its place on a list of switches, where it gives each row a
-		// shape to scan by. Above a row of thumbnails it is a second picture competing with
-		// three real ones, and the thumbnails already say what the setting is.
-		// Label at the leading edge, choices at the trailing edge — one row, not two.
-		//
-		// This stacked the heading *above* the thumbnails, which cost a line of text plus a
-		// 12pt gap for every choice on the pane. Three choices meant three headings and
-		// three gaps of pure furniture, and the pane needed scrolling to reach the sliders
-		// under them.
-		//
-		// Sideways is also how System Settings lays out exactly this control — Appearance
-		// puts "Appearance" on the left and Light/Dark/Auto on the right — and it makes the
-		// three rows read as one list of decisions rather than three stacked sections.
-		HStack(alignment: .center, spacing: 16) {
-			Text(title)
-				.font(Typography.row)
-				.foregroundStyle(Theme.label)
-				// A shared column, so the three labels line up and the thumbnails all start
-				// at the same x. Ragged label widths would put every row's options in a
-				// different place.
-				.frame(width: 78, alignment: .leading)
-
-			HStack(spacing: 10) {
-				ForEach(values, id: \.self) { value in
-					PreviewTile(
-						title: value[keyPath: titleFor],
-						isSelected: isSelected(value),
-						select: { select(value) },
-						wallpaper: wallpaper
-					) {
-						sketch(value)
-					}
-				}
-			}
-		}
-		.frame(maxWidth: .infinity, alignment: .leading)
-		.padding(.horizontal, Theme.rowInset)
-		.padding(.vertical, 11)
-	}
-
-	private var styleRow: some View {
-		HStack(alignment: .center, spacing: 16) {
-			Text("Style")
-				.font(Typography.row)
-				.foregroundStyle(Theme.label)
-				.frame(width: 78, alignment: .leading)
-
-			HStack(spacing: 10) {
-				ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
-					StylePreview(
-						style: style,
-						isSelected: settings.notchStyle == style,
-						select: { settings.notchStyle = style },
-						transparency: settings.notchTransparency,
-						wallpaper: wallpaper,
-						wallpaperIsLight: wallpaperIsLight)
-				}
-			}
-		}
-		.frame(maxWidth: .infinity, alignment: .leading)
-		.padding(.horizontal, Theme.rowInset)
-		.padding(.vertical, 11)
 	}
 }
 
-/// A thumbnail of what the notch will look like in a given style.
-private struct StylePreview: View {
+private struct NotchAppearancePreview: View {
+	let settings: Preferences
+	@State private var model: NotchCapsuleModel
+	@State private var wallpaper = DesktopWallpaper.shared
 
-	let style: Preferences.NotchStyle
-	let isSelected: Bool
-	let select: () -> Void
-	let transparency: Double
-	let wallpaper: NSImage?
-	let wallpaperIsLight: Bool
-
-	@State private var isHovering = false
-
-	var body: some View {
-		Button(action: select) {
-			VStack(spacing: 5) {
-				GeometryReader { geo in
-					ZStack(alignment: .top) {
-						// The user's actual wallpaper, cropped to the strip under the notch.
-						// An invented gradient made all three styles look identical.
-						if let wallpaper {
-							Image(nsImage: wallpaper)
-								.resizable()
-								.aspectRatio(contentMode: .fill)
-						} else {
-							LinearGradient(
-								colors: [
-									Color(red: 0.42, green: 0.52, blue: 0.66),
-									Color(red: 0.78, green: 0.62, blue: 0.48),
-								],
-								startPoint: .topLeading, endPoint: .bottomTrailing)
-						}
-
-						// A centred drop with wallpaper either side, not a full-width band.
-						//
-						// Spanning the whole thumbnail was the reason all three looked alike:
-						// with nothing but panel across the top there was no unobscured
-						// wallpaper to judge it against, so "darker" and "clearer" landed the
-						// same. Bordered by the picture it sits on, the differences read.
-						panel
-							.frame(width: 60, height: 32)
-							.overlay {
-								Image(systemName: "faceid")
-									.font(.system(size: 12))
-									.foregroundStyle(.white)
-									.padding(.top, 3)
-							}
-					}
-					// Scaled from the design size, as in `PreviewTile` — and this row needs
-					// it most. Three styles that differ only in how much wallpaper shows
-					// through a 60pt drop were being judged at a third of a card's width;
-					// giving them the whole width is what makes "Semi" and "Liquid" actually
-					// distinguishable rather than three near-identical grey stamps.
-					.frame(width: PreviewMetrics.width, height: PreviewMetrics.height)
-					.scaleEffect(geo.size.width / PreviewMetrics.width, anchor: .topLeading)
-				}
-				.aspectRatio(PreviewMetrics.aspect, contentMode: .fit)
-				.frame(maxWidth: PreviewMetrics.maxTileWidth)
-				.clipShape(.rect(cornerRadius: 10, style: .continuous))
-				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
-
-				// No `minimumScaleFactor`. It let "Semi Liquid Glass" shrink to 8pt — under
-				// the size macOS draws text at legibly — to avoid a wrap the layout can
-				// simply absorb.
-				Text(style.title)
-					.font(Typography.caption)
-					.fontWeight(isSelected ? .semibold : .regular)
-					.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
-					.lineLimit(2)
-					.multilineTextAlignment(.center)
-					.frame(height: 26, alignment: .top)
-			}
-		}
-		.buttonStyle(.plain)
-		.onHover { isHovering = $0 }
-		.accessibilityLabel(style.title)
-		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-		.animation(.easeOut(duration: 0.15), value: isSelected)
+	init(settings: Preferences) {
+		self.settings = settings
+		let model = NotchCapsuleModel()
+		model.shape = settings.panelShape
+		model.style = settings.notchStyle
+		model.glyphPlacement = settings.panelShape == .island ? .centred : settings.glyphPlacement
+		model.transparency = settings.notchTransparency
+		model.isExpanded = true
+		_model = State(initialValue: model)
 	}
-
-	/// The panel deepens itself over a light wallpaper, so the preview has to as well —
-	/// otherwise it advertises a paler glass than the lock screen will actually show.
-	private var boost: Double { wallpaperIsLight ? 0.22 : 0 }
-
-	private var shape: UnevenRoundedRectangle {
-		UnevenRoundedRectangle(
-			topLeadingRadius: 0, bottomLeadingRadius: 8,
-			bottomTrailingRadius: 8, topTrailingRadius: 0, style: .continuous)
-	}
-
-	/// Mirrors `NotchCapsule.background` exactly — same fills, same fade, same exemption.
-	///
-	/// "Exactly" is a duty, not a nicety: the preview fading Normal to clear is why all
-	/// three thumbnails looked like variations of the same grey wash and the user reasonably
-	/// concluded the setting did nothing. Normal is solid to its bottom edge here because it
-	/// is solid to its bottom edge on the lock screen.
-	@ViewBuilder
-	private var panel: some View {
-		switch style {
-		case .normal:
-			shape.fill(.black)
-		case .semiLiquidGlass:
-			shape
-				.fill(.black.opacity(NotchGlass.semiTint(transparency: transparency, boost: boost)))
-				.background { shape.fill(.ultraThinMaterial) }
-				.mask { fade }
-		case .liquidGlass:
-			Color.clear
-				.glassEffect(.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: boost))), in: shape)
-				.mask { fade }
-		}
-	}
-
-	private var fade: some View {
-		LinearGradient(
-			stops: [
-				.init(color: .black, location: 0),
-				.init(color: .black, location: 0.36),
-				.init(color: .black.opacity(0.72), location: 0.55),
-				.init(color: .black.opacity(0.38), location: 0.76),
-				.init(color: .black.opacity(0.12), location: 0.92),
-				.init(color: .clear, location: 1),
-			],
-			startPoint: .top, endPoint: .bottom)
-	}
-}
-
-/// The ring around the selected thumbnail.
-///
-/// Two wrong turns to get here. A ring in `Theme.label` was black on a dark photo in light
-/// mode; a glass platter behind the tile solved the contrast but read as a stray pale box
-/// sitting in the group, because glass on top of a card that is already glass has nothing to
-/// separate itself from.
-///
-/// A coloured ring is what System Settings uses for wallpapers and appearance, and what
-/// Dynamic Lake uses for exactly this control. Colour is the point: it belongs to neither the
-/// photograph nor the panel, so it cannot be lost in either, in either appearance.
-private struct SelectionRing: View {
-
-	let isSelected: Bool
-	let isHovering: Bool
-
-	private var shape: RoundedRectangle {
-		RoundedRectangle(cornerRadius: 7, style: .continuous)
-	}
-
-	var body: some View {
-		shape.strokeBorder(
-			isSelected
-				? Theme.active
-				: (isHovering ? Theme.label.opacity(0.35) : Theme.separator),
-			lineWidth: isSelected ? 2.5 : 1)
-	}
-}
-
-/// The wallpaper strip, selection ring and caption that every notch thumbnail shares.
-///
-/// Extracted because there are three rows of these now. What differs between them is the
-/// sketch drawn on the wallpaper, and nothing else.
-/// The size the notch sketches are drawn at, before being scaled to the row's width.
-///
-/// Shared so `PreviewTile` and `StylePreview` cannot drift apart — they sit in the same
-/// card, one above the other, and a few points of difference between them would read as a
-/// misalignment rather than as two sizes.
-enum PreviewMetrics {
-	static let width: CGFloat = 112
-	static let height: CGFloat = 62
-	static var aspect: CGFloat { width / height }
-
-	/// How wide one tile is allowed to get.
-	///
-	/// Letting them divide the row equally with no ceiling fixed the empty right half and
-	/// created a worse problem: two options meant two 300pt thumbnails, three stacked rows
-	/// of them filled the pane, and "Notch size" ended up below the fold on a window that
-	/// opens at 613pt tall. A picture of a notch does not become more informative past a
-	/// certain size — it just takes the room the rest of the pane needed.
-	///
-	/// So they grow to share the row and stop here. System Settings' Appearance pane does
-	/// exactly this: three thumbnails at a fixed size, left-aligned, with whatever space is
-	/// left over simply left over. Trailing space on a two-item row is normal on macOS; a
-	/// thumbnail the size of a playing card is not.
-	static let maxTileWidth: CGFloat = 132
-}
-
-private struct PreviewTile<Content: View>: View {
-
-	let title: String
-	let isSelected: Bool
-	let select: () -> Void
-	let wallpaper: NSImage?
-	@ViewBuilder var content: Content
-
-	@State private var isHovering = false
-
-	var body: some View {
-		Button(action: select) {
-			VStack(spacing: 5) {
-				GeometryReader { geo in
-					ZStack(alignment: .top) {
-						if let wallpaper {
-							Image(nsImage: wallpaper)
-								.resizable()
-								.aspectRatio(contentMode: .fill)
-						} else {
-							LinearGradient(
-								colors: [
-									Color(red: 0.42, green: 0.52, blue: 0.66),
-									Color(red: 0.78, green: 0.62, blue: 0.48),
-								],
-								startPoint: .topLeading, endPoint: .bottomTrailing)
-						}
-						content
-					}
-					// Drawn at the size the sketches were designed for, then scaled to
-					// whatever width the row hands out.
-					//
-					// The tile used to *be* 112×62, which left two tiles occupying a third
-					// of a 620pt card and the rest of it empty. Simply stretching the frame
-					// was not an option: `ShapeSketch` and `StylePreview` position their
-					// parts with absolute numbers against those 112×62 bounds, so a wider
-					// frame would have left a correctly-sized drawing marooned in the corner
-					// of an oversized picture. Scaling the whole thing keeps every
-					// proportion the sketches were tuned for, and they are vector, so it
-					// gets sharper rather than blurrier.
-					.frame(width: PreviewMetrics.width, height: PreviewMetrics.height)
-					.scaleEffect(geo.size.width / PreviewMetrics.width, anchor: .topLeading)
-				}
-				.aspectRatio(PreviewMetrics.aspect, contentMode: .fit)
-				.frame(maxWidth: PreviewMetrics.maxTileWidth)
-				.clipShape(.rect(cornerRadius: 10, style: .continuous))
-				.overlay { SelectionRing(isSelected: isSelected, isHovering: isHovering) }
-
-				Text(title)
-					.font(Typography.caption)
-					.fontWeight(isSelected ? .semibold : .regular)
-					.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
-					.lineLimit(2)
-					.multilineTextAlignment(.center)
-					.frame(height: 26, alignment: .top)
-			}
-		}
-		.buttonStyle(.plain)
-		.onHover { isHovering = $0 }
-		.accessibilityLabel(title)
-		.accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-		.animation(.easeOut(duration: 0.15), value: isSelected)
-	}
-}
-
-/// A small drawing of the panel: which shape it is, and where the mark sits.
-///
-/// Not the real `NotchCapsule`. That one is built around a physical cutout to hide behind
-/// and a window sized to the screen, neither of which exists inside a 112pt thumbnail. This
-/// draws the same two decisions at a size you can actually see them at.
-private struct ShapeSketch: View {
-
-	let shape: Preferences.PanelShape
-	let placement: Preferences.GlyphPlacement
-
-	/// The menu bar band, at roughly the proportion the real one occupies.
-	private let barHeight: CGFloat = 13
 
 	var body: some View {
 		VStack(spacing: 0) {
-			if placement == .ear {
-				// Nothing drops. The bar carries the padlock on one ear and the mark on the
-				// other, which is the whole of what this mode does.
-				ZStack {
-					Rectangle().fill(.black.opacity(0.88))
-					HStack(spacing: 0) {
-						glyph(.lock)
-						Spacer(minLength: 0)
-						glyph(.face)
-					}
-					.padding(.horizontal, 3)
-				}
-				.frame(width: 74, height: barHeight)
-
-			} else {
-				switch shape {
-				case .attached:
-					// One shape: the housing continuing downward, square across the top and
-					// rounded only along the bottom.
-					UnevenRoundedRectangle(
-						topLeadingRadius: 0, bottomLeadingRadius: 7,
-						bottomTrailingRadius: 7, topTrailingRadius: 0, style: .continuous
-					)
-					.fill(.black.opacity(0.88))
-					.frame(width: 62, height: barHeight + 18)
-					.overlay(alignment: .center) { glyph(.face).padding(.top, 5) }
-
-				case .island:
-					// Two shapes, proportioned against the real ones.
-					//
-					// The bar is one notch tall and wider than the island; the island is a
-					// square with the same radius ratio the panel uses, separated by a gap
-					// small enough to read as "just detached" rather than as two unrelated
-					// objects. It was a tall bar over a small square with a wide gap, which
-					// described neither.
-					Rectangle()
-						.fill(.black.opacity(0.9))
-						.frame(width: 54, height: 9)
-					RoundedRectangle(cornerRadius: 10, style: .continuous)
-						.fill(.black.opacity(0.92))
-						.frame(width: 36, height: 36)
-						// The hint of green the real island carries at its foot.
-						.overlay {
-							RoundedRectangle(cornerRadius: 10, style: .continuous)
-								.fill(
-									LinearGradient(
-										stops: [
-											.init(color: .clear, location: 0.45),
-											.init(color: Theme.faceID.opacity(0.22), location: 1),
-										],
-										startPoint: .top, endPoint: .bottom))
-						}
-						.overlay { glyph(.face) }
-						.padding(.top, 2)
-				}
+			NotchPreviewCanvas(model: model,
+				widthAdjust: settings.notchWidthAdjust,
+				heightAdjust: settings.notchHeightAdjust,
+				wallpaper: wallpaper.image,
+				background: Color(nsColor: .windowBackgroundColor))
+				.frame(height: 252)
+				.allowsHitTesting(false)
+				.accessibilityElement(children: .ignore)
+				.accessibilityLabel("Notch appearance preview")
+				.accessibilityValue(previewDescription)
+			HStack {
+				Text("Live preview")
+					.font(Typography.groupTitle)
+				Spacer()
+				Label("Camera off", systemImage: "video.slash")
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
 			}
-			Spacer(minLength: 0)
+			.padding(.horizontal, Theme.rowInset)
+			.padding(.vertical, 12)
+			.background(Theme.surfaceRaised)
 		}
+		.clipShape(.rect(cornerRadius: Theme.cornerRadius))
+		.overlay {
+			RoundedRectangle(cornerRadius: Theme.cornerRadius)
+				.strokeBorder(Theme.separator, lineWidth: 0.5)
+				.allowsHitTesting(false)
+		}
+		.onChange(of: settings.panelShape) { _, _ in syncAppearance() }
+		.onChange(of: settings.notchStyle) { _, _ in syncAppearance() }
+		.onChange(of: settings.glyphPlacement) { _, _ in syncAppearance() }
+		.onChange(of: settings.notchTransparency) { _, _ in syncAppearance() }
+		.onAppear { syncAppearance(); model.isExpanded = true }
+		.onDisappear { model.isExpanded = false }
 	}
 
-	private enum Mark { case face, lock }
+	private var previewDescription: String {
+		let appearance = model.glyphPlacement == .ear ? "Mark on the ear" : model.style.title
+		return "\(model.shape.title), \(appearance). Simulated appearance; camera off."
+	}
 
-	private func glyph(_ mark: Mark) -> some View {
-		Image(systemName: mark == .face ? "faceid" : "lock.fill")
-			.font(.system(size: placement == .ear ? 7 : 11))
-			.foregroundStyle(.white)
+	private func syncAppearance() {
+		model.shape = settings.panelShape
+		model.style = settings.notchStyle
+		model.glyphPlacement = settings.panelShape == .island ? .centred : settings.glyphPlacement
+		model.transparency = settings.notchTransparency
+	}
+}
+
+private struct NotchAdjustmentRow: View {
+	let title: String
+	@Binding var value: Double
+	let range: ClosedRange<Double>
+	var step: Double = 1
+	let format: (Double) -> String
+
+	var body: some View {
+		HStack(spacing: 16) {
+			Text(title)
+				.font(Typography.row)
+				.frame(width: 104, alignment: .leading)
+			Slider(value: Binding(get: { value }, set: { value = min(range.upperBound, max(range.lowerBound, ($0 / step).rounded() * step)) }), in: range)
+				.controlSize(.small)
+				.tint(Theme.label.opacity(0.85))
+				.accessibilityLabel(title)
+				.accessibilityValue(format(value))
+			Text(format(value))
+				.font(Typography.detail.monospacedDigit())
+				.foregroundStyle(Theme.secondaryLabel)
+				.frame(width: 48, alignment: .trailing)
+				.accessibilityHidden(true)
+		}
+		.padding(.horizontal, Theme.rowInset)
+		.padding(.vertical, 12)
 	}
 }
