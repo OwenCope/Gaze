@@ -21,18 +21,45 @@ struct SetupHowStep: View {
 	var body: some View {
 		SetupScaffold(
 			position: position,
-			title: "How it works",
-			message: "Three things worth knowing before you start.",
+			title: "How Gaze unlocks your Mac",
+			message: "Look at the camera, then follow two small movements.\nGaze enters your saved login password after verification.",
 			figureHeight: 0,
 			onBack: onBack
 		) {
 			EmptyView()
 		} detail: {
-			SetupFactCarousel(facts: Self.facts)
-				.padding(.top, 24)
+			VStack(alignment: .leading, spacing: 24) {
+				fact("person.crop.rectangle", "Recognition stays on your Mac",
+					"Gaze uses the built-in camera. Face recognition runs on this device, not in the cloud.")
+				fact("lock", "You’re trusting Gaze with your login",
+					"To unlock, Gaze needs an encrypted, recoverable copy of your Mac password. This is not Apple Face ID.")
+				fact("keyboard", "Your usual way in stays available",
+					"Keep using your password or Touch ID whenever available. You can pause Gaze at any time.")
+			}
+			.frame(maxWidth: 440)
+			.padding(.top, 32)
 		} actions: {
 			SetupButton(action: onContinue)
 		}
+	}
+
+	private func fact(_ symbol: String, _ title: String, _ detail: String) -> some View {
+		HStack(alignment: .top, spacing: 18) {
+			Image(systemName: symbol)
+				.font(.system(size: 23, weight: .regular))
+				.foregroundStyle(Theme.setupSecondary)
+				.frame(width: 30, height: 30)
+				.accessibilityHidden(true)
+			VStack(alignment: .leading, spacing: 5) {
+				Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
+				Text(detail)
+					.font(.system(size: 13))
+					.foregroundStyle(Theme.setupSecondary)
+					.fixedSize(horizontal: false, vertical: true)
+					.lineSpacing(2)
+			}
+		}
+		.accessibilityElement(children: .combine)
 	}
 
 	static let facts: [SetupFact] = [

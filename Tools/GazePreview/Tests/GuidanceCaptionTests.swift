@@ -8,7 +8,8 @@ enum GuidanceCaptionTests {
 		let phases: [(String, String, CGFloat)] = [
 			("Turn slightly left", "arrowshape.left.fill", -1),
 			("Turn slightly right", "arrowshape.right.fill", 1),
-			("Return to your starting position", "viewfinder", 0)
+			("Return to your starting position", "viewfinder", 0),
+			("Face the camera to retry", "viewfinder", 0)
 		]
 		var guidanceSizes: [String: CGSize] = [:]
 		for reduced in [false, true] {
@@ -32,7 +33,8 @@ enum GuidanceCaptionTests {
 						model.isExpanded = true
 						model.glyphPlacement = placement
 						model.shape = shape
-						model.phase = .challenge(prompt: prompt, symbol: symbol, hintX: x, hintY: 0, pulses: false)
+						model.phase = .challenge(prompt: prompt, symbol: symbol, hintX: x, hintY: 0, pulses: false,
+						isReturningToRest: index == 2)
 						for adjustment: CGFloat in [0, -20] {
 							let key = "\(placement)-\(shape)-\(reduced)-\(Int(adjustment))"
 							let url = directory.appendingPathComponent("guidance-notch-\(index)-\(key).png")
@@ -47,22 +49,31 @@ enum GuidanceCaptionTests {
 								}
 								guidanceSizes[key] = size
 							}
-							try assertVisible(prompt, at: url)
+							if index == 2 && !reduced {
+								let text = try recognizedText(at: url)
+								precondition(!text.contains("Return") && !text.contains("starting"), "Animated return caption must stay hidden: \(text)")
+							} else {
+								try assertVisible(prompt, at: url)
+							}
 						}
 					}
 				}
 			}
 		}
-		print("PASS: visible turn and return captions in minimum-size recognition panel and attached/island/ear notch, animated and reduced motion")
+		print("PASS: animated return captions hidden without resizing; Reduce Motion and retry captions visible; practice guidance remains visible")
 	}
 
-	private static func assertVisible(_ prompt: String, at url: URL) throws {
+	private static func recognizedText(at url: URL) throws -> String {
 		let request = VNRecognizeTextRequest()
 		request.recognitionLevel = .accurate
 		request.usesCPUOnly = true
 		request.usesLanguageCorrection = false
 		try VNImageRequestHandler(url: url).perform([request])
-		let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+		return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ")
+	}
+
+	private static func assertVisible(_ prompt: String, at url: URL) throws {
+		let text = try recognizedText(at: url)
 		// OCR can place the adjacent SF Symbol between the two text lines.
 		// Require every instruction word in order, allowing that extra symbol token.
 		let words = text.split(whereSeparator: \.isWhitespace)

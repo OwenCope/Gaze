@@ -655,7 +655,8 @@ final class LockWatcher {
 				if challenge.isReturningToRest && !wasReturningToRest {
 					let hint = challenge.guidanceHint
 					capsule.update(phase: .challenge(prompt: challenge.guidancePrompt,
-						symbol: challenge.guidanceSymbol, hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
+						symbol: challenge.guidanceSymbol, hintX: hint.x, hintY: hint.y, pulses: hint.pulses,
+						isReturningToRest: true))
 					Self.logger.notice("Requested movement observed; waiting for return to rest. action=\(challenge.action.prompt, privacy: .public)")
 				}
 				guard challenge.isComplete else { continue }
