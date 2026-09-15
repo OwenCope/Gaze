@@ -236,6 +236,11 @@ struct OnboardingTests {
 						let title = SetupDoneStep.title(failed: failed, unfinished: unfinished, isAddingFace: addingFace)
 						precondition((title == "Enjoy a little less typing.") == (!failed && !addingFace && unfinished.isComplete))
 						precondition((title == "Face added") == (!failed && addingFace))
+						// The Settings route is only for partial first-run setups: never on
+						// failure, never for add-face, never when complete, never without an opener.
+						let offersSettings = SetupDoneStep.showsFinishInSettings(failed: failed, unfinished: unfinished, isAddingFace: addingFace, canOpenSettings: true)
+						precondition(offersSettings == (!failed && !addingFace && !unfinished.isComplete))
+						precondition(!SetupDoneStep.showsFinishInSettings(failed: failed, unfinished: unfinished, isAddingFace: addingFace, canOpenSettings: false))
 					}
 				}
 			}
@@ -327,7 +332,8 @@ struct ReviewPageView: View {
 		case .done, .unfinished, .failed:
 			SetupDoneStep(failure: page == .failed ? "Gaze couldn’t save your face. Nothing was changed. Please try again." : nil,
 				unfinished: .init(needsPassword: page == .unfinished, needsAccessibility: page == .unfinished),
-				onDone: next, onRetry: previous)
+				onDone: next, onRetry: previous,
+				onOpenSettings: page == .unfinished ? {} : nil)
 		}
 	}
 }

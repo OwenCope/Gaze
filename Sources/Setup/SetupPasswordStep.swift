@@ -23,6 +23,7 @@ struct SetupPasswordStep: View {
 	@State private var isChecking = false
 	@State private var error: String?
 	@State private var shake = 0
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	private var canSubmit: Bool { !password.isEmpty && !isChecking }
 
@@ -31,8 +32,7 @@ struct SetupPasswordStep: View {
 			position: position,
 			title: "Your login password",
 			message:
-				"Gaze types this for you once it recognises your face. It is checked with "
-				+ "macOS before it is saved.",
+				"Use the password you enter to log in to this Mac.\nmacOS checks it before Gaze saves an encrypted copy.\nIf you change your Mac password later, save the new one in Gaze Settings.",
 			figureHeight: 132,
 			onBack: onBack
 		) {
@@ -40,7 +40,7 @@ struct SetupPasswordStep: View {
 		} detail: {
 			VStack(spacing: 0) {
 				GlassField(
-					placeholder: "Password for \(NSUserName())",
+					placeholder: "Mac login password",
 					text: $password,
 					isEnabled: !isChecking,
 					onSubmit: { if canSubmit { submit() } }
@@ -64,10 +64,7 @@ struct SetupPasswordStep: View {
 		} actions: {
 			SetupButton(title: isChecking ? "Checking…" : "Save Password", action: submit)
 				.disabled(!canSubmit)
-			Button("Set this up later", action: onSkip)
-				.buttonStyle(.plain)
-				.font(Typography.setupBody)
-				.foregroundStyle(Theme.setupTertiary)
+			SetupSecondaryButton(title: "Set Up Later", action: onSkip)
 				.disabled(isChecking)
 		}
 	}
@@ -95,7 +92,7 @@ struct SetupPasswordStep: View {
 					// Verified and rejected — the password itself is wrong.
 					error = "That isn't the password for \(NSUserName())."
 					password = ""
-					withAnimation(Theme.Motion.arrive) { shake += 1 }
+					if !reduceMotion { withAnimation(Theme.Motion.arrive) { shake += 1 } }
 				case .failure(let failure):
 					// Verified and then failed to save: the keychain refused, which is a
 					// different problem and must not read as a typo.

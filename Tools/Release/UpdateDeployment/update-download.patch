@@ -1,0 +1,153 @@
+--- a/src/app/api/latest/route.ts
++++ b/src/app/api/latest/route.ts
+@@ -51,6 +51,27 @@
+   return 0;
+ }
+
++/**
++ * The download the Mac app is offered for a release.
++ *
++ * The stored record keeps the real location — usually a Vercel Blob URL from
++ * the release composer — but the app (`Sources/App/ReleaseURLPolicy.swift`)
++ * only opens `https://gazeunlock.com/*`. So the feed advertises the
++ * same-origin `/dl/<name>` redirect (`src/app/dl/[file]/route.ts`), which
++ * resolves the name back to the stored URL on each request. A record with no
++ * usable filename offers no download rather than a fabricated one.
++ */
++function feedDownload(download: { url: string; name: string; size: number }) {
++  if (!download.name) {
++    return null;
++  }
++  return {
++    url: `https://gazeunlock.com/dl/${encodeURIComponent(download.name)}`,
++    name: download.name,
++    size: download.size,
++  };
++}
++
+ export async function GET() {
+   // Closed entirely, when the owner has asked for that. Same switch as
+   // src/app/releases/page.tsx: before a public launch even the version
+@@ -92,7 +113,7 @@
+     date: latest.date,
+     notes: latest.body ?? "",
+     prerelease: latest.prerelease,
+-    download: latest.download ?? null,
++    download: latest.download ? feedDownload(latest.download) : null,
+   };
+
+   // Not cached. The visibility switch above is mutable without a deploy, so a
+--- /dev/null
++++ b/src/app/dl/[file]/route.ts
+@@ -0,0 +1,111 @@
++import { NextResponse } from "next/server";
++import { getSettings } from "@/lib/settings";
++import { readAll } from "@/lib/store";
++
++/**
++ * Same-origin download redirect for the Mac app's updater.
++ *
++ * The app (`Sources/App/ReleaseURLPolicy.swift`) only opens a download whose
++ * URL is `https://gazeunlock.com/*`. Builds uploaded through the release
++ * composer go straight to Vercel Blob and land on
++ * `*.public.blob.vercel-storage.com` URLs, which the app deliberately
++ * discards — so the feed advertises `https://gazeunlock.com/dl/<file>` and
++ * this route redirects it to the build attached to the matching release
++ * record. Bytes stay on Blob storage (a Vercel function is the wrong pipe
++ * for a ~18 MB disk image); this only hands out the current location,
++ * looked up per request so a replaced build takes effect immediately.
++ *
++ * The filename is matched exactly against the `download.name` of an eligible
++ * release — public (`!draft && !private`) while releases are open. Drafts,
++ * tester-only builds and everything else answer 404 with the same body, so
++ * the route is not an oracle for unreleased versions. Nothing is proxied and
++ * no URL is accepted from the request: the only redirect target is the stored
++ * `download.url` of the record itself, written through the owner-only
++ * `/api/releases` endpoint, and even that must parse as `http(s)`.
++ */
++
++/** The origin the Mac app trusts. Mirrors `ReleaseURLPolicy.isTrusted`. */
++const SITE_ORIGIN = "https://gazeunlock.com";
++
++function missing() {
++  return NextResponse.json(
++    { error: "Not found" },
++    { headers: { "Cache-Control": "no-store" }, status: 404 },
++  );
++}
++
++export async function GET(req: Request) {
++  // The name comes from the request path, not the segment params. The async
++  // `params` convention has changed across Next versions; the path is stable,
++  // and the exact-match lookup below is the real validation either way.
++  // Strictly one segment under /dl/: anything nested misses here, the same
++  // answer the router gives for paths this single-segment route never matches.
++  const parts = new URL(req.url).pathname.split("/").filter(Boolean);
++  if (parts.length !== 2) {
++    return missing();
++  }
++  const raw = parts[1] ?? "";
++  let file = "";
++  try {
++    file = decodeURIComponent(raw);
++  } catch {
++    return missing();
++  }
++  if (
++    file.length === 0 ||
++    file === "." ||
++    file === ".." ||
++    file.includes("/") ||
++    file.includes("\\")
++  ) {
++    return missing();
++  }
++
++  // Closed entirely, when the owner has asked for that. Same switch as
++  // `src/app/releases/page.tsx` and `src/app/api/latest/route.ts`: the Mac
++  // app polls with no session, so a restricted download answers "not found"
++  // rather than leaking which builds exist. Checked before anything is
++  // fetched: a handler that reads and then hides has already touched the data.
++  const { releasesRequireSignIn } = await getSettings();
++  if (releasesRequireSignIn) {
++    return missing();
++  }
++
++  const matches = (await readAll()).filter(
++    (r) => !r.draft && !r.private && r.download?.name === file,
++  );
++  // Zero matches and several matches both miss. Several means two releases
++  // claim the same filename, and guessing which bytes the updater wants is
++  // how the wrong build ships — an admin renames one and it resolves.
++  if (matches.length !== 1) {
++    return missing();
++  }
++  const download = matches[0].download;
++  if (!download) {
++    return missing();
++  }
++
++  let dest: URL | null = null;
++  try {
++    dest = new URL(download.url);
++  } catch {
++    dest = null;
++  }
++  if (dest === null || (dest.protocol !== "http:" && dest.protocol !== "https:")) {
++    return missing();
++  }
++  // A stored URL pointing back under /dl/ is a placeholder with no bytes
++  // behind it (the seed 0.3 record). Redirecting to it would loop back here,
++  // so it misses until a real build is attached to the record.
++  if (dest.origin === SITE_ORIGIN && dest.pathname.startsWith("/dl/")) {
++    return missing();
++  }
++
++  // Temporary, never cached. Builds are replaced by re-upload (a new Blob URL
++  // under a random suffix), and the visibility switch above flips without a
++  // deploy — a cached redirect would keep serving either past its moment.
++  return NextResponse.redirect(dest, {
++    headers: { "Cache-Control": "no-store" },
++    status: 302,
++  });
++}

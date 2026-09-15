@@ -354,7 +354,7 @@ struct SettingsView: View {
 		if settings.isPaused { return "Face recognition is temporarily paused." }
 		if !cameraGranted { return "Allow the camera so Gaze can recognise you." }
 		if !PasswordReplaySafety.isEnabled { return "Enable Unlock my Mac to use face verification. Your password and Touch ID remain available." }
-		if settings.unlockBackend == .none { return "Recognise your face without entering a password." }
+		if settings.unlockBackend == .none { return "Try Test Recognition below. Nothing runs on the lock screen in this mode." }
 		if let problem = readinessProblem { return problem.message }
 		return store.faces.count == 1 ? "Your face can unlock this Mac." : "Your enrolled faces can unlock this Mac."
 	}
@@ -490,10 +490,20 @@ struct SettingsView: View {
 					set: { unlockBinding.wrappedValue = $0 ? .keystroke : .none }))
 				.disabled(AppServices.isUIReview)
 
-			if settings.unlockBackend == .keystroke {
-				RowDivider()
-				passwordRow
-			}
+		if settings.unlockBackend == .keystroke {
+			RowDivider()
+			passwordRow
+		}
+
+		// A password stored under "Unlock my Mac" survives a step down to
+		// recognition-only mode: switching modes never touches the vault. Say so
+		// where it applies, with the same Change / Revoke actions — reusing them,
+		// not re-enabling unlock. Gated on the `hasStoredPassword` state (re-read
+		// whenever this window comes forward), never on a vault read at draw time.
+		if settings.unlockBackend == .none, hasStoredPassword {
+			RowDivider()
+			retainedPasswordRow
+		}
 
 			if let problem = readinessProblem, PasswordReplaySafety.isEnabled || settings.unlockBackend == .authPlugin {
 				RowDivider(inset: 0)
@@ -547,6 +557,37 @@ struct SettingsView: View {
 		case .ready: return nil
 		case .needsSetup(let message): return (.warning, message)
 		case .unavailable(let message): return (.error, message)
+		}
+	}
+
+	/// A stored password kept while recognition-only mode is selected.
+	///
+	/// Same state and same actions as the stored branch of `passwordRow` (Change
+	/// opens the setup screen that verifies before saving; Revoke clears the vault
+	/// through the existing `authorize(.storePassword)` path). Nothing here flips
+	/// the backend back to keystroke, so automatic unlock stays off.
+	private var retainedPasswordRow: some View {
+		VStack(spacing: 0) {
+			SettingRow(
+				title: "Stored account password",
+				detail: "Kept from Unlock my Mac. Nothing can unlock with it in this mode.",
+				symbol: "key.fill"
+			) {
+				HStack(spacing: 6) {
+					Label("Stored", systemImage: "checkmark.circle.fill")
+						.font(.system(.callout, weight: .medium))
+						.foregroundStyle(Theme.faceID)
+					Button("Change") { openSetup(at: .password) }
+						.gazeButton()
+						.fixedSize()
+					Button("Revoke", role: .destructive) { revokePassword() }
+						.gazeButton()
+						.fixedSize()
+				}
+			}
+			if let passwordError {
+				StatusLine(kind: .error, message: passwordError)
+			}
 		}
 	}
 
@@ -770,15 +811,20 @@ struct SettingsView: View {
 				walkAwayNotice
 			}
 
-			RowDivider()
-			SettingToggle(
-				title: "Require Touch ID for changes here",
-				// Pink because Apple's own Touch ID icon is pink, not because a fifth hue
-				// was needed. Every tint in this window now points at a System Settings row
-				// that uses the same one.
-				symbol: "touchid",
-				isEnabled: BiometricGate.isAvailable,
-				isOn: bind(\.touchIDFallback))
+		RowDivider()
+		// Titled by what the switch actually gates: `BiometricGate.authorize()`
+		// (remove-enrolment, store/revoke password) honours it; `require()`
+		// (adding a face, trusting an autofill app) always prompts regardless.
+		// No-sensor Macs stay opted out, as the footer below states.
+		SettingToggle(
+			title: "Ask before removing a face or changing the stored password",
+			detail: "Adding a face always asks, even when this is off.",
+			// Pink because Apple's own Touch ID icon is pink, not because a fifth hue
+			// was needed. Every tint in this window now points at a System Settings row
+			// that uses the same one.
+			symbol: "touchid",
+			isEnabled: BiometricGate.isAvailable,
+			isOn: bind(\.touchIDFallback))
 		}
 	}
 
@@ -1443,6 +1489,14 @@ private struct FaceTile: View {
 	var remove: () -> Void
 
 	@State private var hovering = false
+	/// Keyboard / VoiceOver focus on either overlay action.
+	///
+	/// The buttons below only exist while `controlsVisible` is true, so focus
+	/// itself must keep them visible: tabbing from the name field to an action
+	/// clears `isEditing`, and without these the focused button would vanish
+	/// from under the focus ring.
+	@FocusState private var portraitFocused: Bool
+	@FocusState private var removeFocused: Bool
 	/// The name being typed, committed on Return or when focus leaves.
 	///
 	/// Bound straight through, every keystroke rewrote the vault and re-encrypted
@@ -1519,37 +1573,44 @@ private struct FaceTile: View {
 						}
 					}
 
-				// A camera badge on hover, because a context menu nobody right-clicks is a
-				// feature nobody finds. Bottom-leading so it cannot collide with the remove
-				// button in the opposite corner.
-				if hovering {
-					Button(action: choosePortrait) {
-						Image(systemName: "camera.fill")
-							.font(.system(size: 10, weight: .semibold))
-							.foregroundStyle(.white)
-							.padding(5)
-							.background(Circle().fill(.black.opacity(0.55)))
-					}
-					.buttonStyle(.plain)
-					.help("Choose a photo for \(face.name)")
-					.offset(x: -46, y: 46)
-					.transition(.opacity)
+			// A camera badge on hover or keyboard focus, because a context menu nobody
+			// right-clicks is a feature nobody finds. Bottom-leading so it cannot
+			// collide with the remove button in the opposite corner.
+			if controlsVisible {
+				Button(action: choosePortrait) {
+					Image(systemName: "camera.fill")
+						.font(.system(size: 10, weight: .semibold))
+						.foregroundStyle(.white)
+						.padding(5)
+						.background(Circle().fill(.black.opacity(0.55)))
 				}
-
-				if hovering {
-					Button(action: remove) {
-						Image(systemName: "minus.circle.fill")
-							.font(.system(size: 17))
-							.symbolRenderingMode(.palette)
-							.foregroundStyle(.white, Theme.danger)
-					}
-					.buttonStyle(.plain)
-					.help("Remove this face")
-					.offset(x: 7, y: -7)
-					.transition(.scale.combined(with: .opacity))
-				}
+				.buttonStyle(.plain)
+				.help("Choose a photo for \(face.name)")
+				.accessibilityLabel("Choose a photo for \(face.name)")
+				.focused($portraitFocused)
+				.offset(x: -46, y: 46)
+				.transition(.opacity)
 			}
-			.animation(.easeOut(duration: 0.15), value: hovering)
+
+			// On hover *or* keyboard focus: a control that only exists `if hovering`
+			// is in no accessibility tree and unreachable by Tab. Pointer visuals
+			// are unchanged; focus joins the same reveal condition.
+			if controlsVisible {
+				Button(action: remove) {
+					Image(systemName: "minus.circle.fill")
+						.font(.system(size: 17))
+						.symbolRenderingMode(.palette)
+						.foregroundStyle(.white, Theme.danger)
+				}
+				.buttonStyle(.plain)
+				.help("Remove \(face.name)")
+				.accessibilityLabel("Remove \(face.name)")
+				.focused($removeFocused)
+				.offset(x: 7, y: -7)
+				.transition(.scale.combined(with: .opacity))
+			}
+		}
+		.animation(.easeOut(duration: 0.15), value: controlsVisible)
 
 			TextField("Name", text: $draft)
 				.textFieldStyle(.plain)
@@ -1567,6 +1628,15 @@ private struct FaceTile: View {
 				.onChange(of: face.name) { _, name in if !isEditing { draft = name } }
 		}
 		.onHover { hovering = $0 }
+	}
+
+	/// When the overlay actions exist at all.
+	///
+	/// Hover *or* keyboard focus — including focus on the name field, so Tabbing
+	/// into the tile reveals the actions Tab will reach next. Pointer behaviour
+	/// is exactly as before.
+	private var controlsVisible: Bool {
+		hovering || isEditing || portraitFocused || removeFocused
 	}
 
 	/// One letter, or two when the name has a surname to take one from.

@@ -108,7 +108,11 @@ struct SetupFlow: View {
 					unfinished: unfinished,
 					isAddingFace: purpose == .addFace,
 					onDone: onFinish,
-					onRetry: retry
+					onRetry: retry,
+					// A partial first-run setup offers Settings as a second step, never a
+					// redirect: Done still just closes. Opening the window enables nothing
+					// and requests nothing on its own.
+					onOpenSettings: purpose == .onboarding ? { AppActivation.openSettings?() } : nil
 				)
 			}
 		}

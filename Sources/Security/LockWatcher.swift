@@ -636,9 +636,14 @@ final class LockWatcher {
 					challengeGate.present(at: .now, frameID: sampleFrameID)
 					report(.movement)
 					let hint = challenge.guidanceHint
+					// Outward prompts carry the gate's progress in two-movement mode ("· 1 of 2"),
+					// so the second prompt reads as progress rather than a reset. The return cue
+					// below stays bare: the animated return is deliberately captionless.
+					let outwardPrompt = NotchCapsuleModel.Phase.outwardPrompt(challenge.guidancePrompt,
+						completedActions: challengeGate.completedActions, requiredActions: challengeGate.requiredActions)
 					capsule.update(
 						phase: .challenge(
-							prompt: challenge.guidancePrompt,
+							prompt: outwardPrompt,
 							symbol: challenge.guidanceSymbol,
 							hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
 					Self.logger.notice("Movement prompt presented; action=\(challenge.action.prompt, privacy: .public); requiring fresh response \(challengeGate.completedActions + 1) of \(challengeGate.requiredActions).")
@@ -707,10 +712,14 @@ final class LockWatcher {
 			report(.submissionPending)
 			let receiptID = UUID()
 			submissionID = receiptID
-			capsule.update(phase: .locked)
+			// Waiting, neutrally: the padlock stays closed with "Waiting for macOS" until the
+			// Mac confirms the unlock. No tick and no opening padlock before then — either
+			// would announce an outcome the login window has not reported yet.
+			capsule.update(phase: .pending)
 
 			// Unless nothing happens. A password can be refused, and a panel left showing a
-			// tick over a lock screen that never opened is the app insisting it succeeded.
+			// waiting state over a lock screen that never opened would insist something is
+			// still in flight. Withdraw it instead.
 			DispatchQueue.main.asyncAfter(deadline: .now() + Self.unlockGracePeriod) {
 				[weak self] in
 				guard let self, self.isLocked, self.submissionID == receiptID else { return }
