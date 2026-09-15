@@ -32,11 +32,41 @@ are here for how any of this works.
 
 ### The recognition model
 
-`Resources/FaceEmbedding.mlpackage` — the model faces are matched against. It comes
-from **Sapphire**, by cshariq, and its licence is unknown, so it is not included in
-published source archives. Without it the app falls back to comparing facial
-landmarks directly, which is much weaker: it can tell you from a stranger, and not
-much more.
+`Resources/FaceEmbedding.mlpackage` — the model faces are matched against. It is
+reported to come from **Sapphire**, by cshariq, but the source and licensing of
+these exact weights have not been verified:
+the file carries no embedded author, licence, or source URL (Manifest author is
+`com.apple.CoreML`; embedded build metadata says only that it was converted from
+TorchScript with coremltools on 2026-06-15), and how it arrived in this working
+copy is unrecorded. As fingerprinted 2026-09-15:
+
+- `Data/com.apple.CoreML/model.mlmodel` (184,289 bytes): SHA-256
+  `b8992d7979904fb5d6b0cf9ec452f158d9257cd820730328de9242eb6652f494`
+- `Data/com.apple.CoreML/weights/weight.bin` (7,408,704 bytes): SHA-256
+  `f9145f919e28153bee573651d9681d9917858be038998f59233bc7bd28c00da9`
+
+The source-archive script excludes and re-checks for this package. A geometry
+fallback exists for practice features, but the current Mac-unlock path refuses
+it; it is not an approved substitute for a validated recognition model.
+
+ArcFace names a model architecture, not the license of a particular weight file.
+Code and model licenses must be checked separately. Upstream references checked
+on 2026-09-15: [InsightFace README](https://github.com/deepinsight/insightface#license)
+and [InsightFace licensing](https://www.insightface.ai/).
+
+- If the weights descend from InsightFace: the **code** is MIT, but the
+  **pretrained recognition models (and the training data behind them) are for
+  non-commercial research only**. Commercial use needs a separate licence —
+  upstream names `recognition-oss-pack@insightface.ai` for the open-source
+  recognition packs. Crediting the authors does not grant redistribution or
+  commercial-use rights.
+- If the file came via Sapphire, whose repository is GPL-3.0: GPL is copyleft,
+  not credit-only. Bundling a GPL-covered file in an MIT-labelled distribution
+  needs a proper licence analysis, not an attribution line.
+
+Either way, a credit line is not permission. The launch gate stays open until a
+per-model permission or licence, tied to the hashes above and the intended
+distribution scope, is recorded here.
 
 ### FaceIDKit
 
@@ -47,7 +77,12 @@ the framework is absent, so setup works and simply looks plainer.
 
 ### SkyLight window server
 
-Not used by Gaze today, and noted because it is the known answer to a problem Gaze
-has not solved: making a window appear on the real macOS lock screen. Glance uses it,
-adapted from **Lakr233/SkyLightWindow** (MIT). It calls undocumented private symbols
-that Apple can change or remove in any release.
+Used by Gaze for the lock-screen capsule only (`Sources/LockScreen/LockScreenSpace.swift`):
+it opens SkyLight privately and moves the capsule window into a lock-screen-level space
+via undocumented symbols (`SLSMainConnectionID`, `SLSSpaceCreate`,
+`SLSSpaceSetAbsoluteLevel`, `SLSShowSpaces`, `SLSSpaceAddWindowsAndRemoveFromSpaces`,
+`SLSRemoveWindowsFromSpaces`), adapted from the same approach as **Lakr233/SkyLightWindow**
+(MIT) used by Glance. These APIs position the panel; they do not authenticate the user.
+If they are unavailable, `canPresentGuidance` is false and the current unlock flow
+refuses password submission rather than presenting an invisible movement challenge.
+The symbols can change or be removed in any macOS release.

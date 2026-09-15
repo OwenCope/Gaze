@@ -2,8 +2,7 @@ import Foundation
 import Vision
 
 struct FaceSample {
-	struct Pose { let yaw: Double; let pitch: Double }
-	let pose: Pose
+	let pose: FacePose
 	let landmarks: VNFaceLandmarks2D
 }
 
@@ -99,7 +98,9 @@ enum UnlockFlowTests {
 			check(!challenge.isReturningToRest && challenge.guidancePrompt == action.prompt,
 				"reset restores original guidance")
 			for _ in 0..<5 { sample(challenge) }
-			sample(challenge, yaw: .nan)
+			challenge.consume(yaw: action == .turnLeft || action == .turnRight ? .nan : 0,
+				pitch: action == .nod ? .nan : 0,
+				eyes: action == .blink ? .nan : 0.3, mouth: action == .openMouth ? .nan : 0.1)
 			for _ in 0..<2 { sample(challenge, yaw: yaw, pitch: pitch, eyes: 0.10, mouth: 0.4) }
 			sample(challenge)
 			check(!challenge.isComplete, "invalid numeric evidence clears baseline")
@@ -146,7 +147,9 @@ enum UnlockFlowTests {
 			for _ in 0..<3 { challenge.prepareBaseline(yaw: yaw, pitch: pitch, eyes: 0.1, mouth: 0.4) }
 			for _ in 0..<3 { challenge.prepareBaseline(yaw: 0, pitch: 0, eyes: 0.3, mouth: 0.1) }
 			check(!challenge.isComplete, "pre-prompt movement cannot complete \(action)")
-			challenge.prepareBaseline(yaw: .nan, pitch: 0, eyes: 0.3, mouth: 0.1)
+			challenge.prepareBaseline(yaw: action == .turnLeft || action == .turnRight ? .nan : 0,
+				pitch: action == .nod ? .nan : 0,
+				eyes: action == .blink ? .nan : 0.3, mouth: action == .openMouth ? .nan : 0.1)
 			check(!challenge.isBaselineReady, "invalid preparatory evidence clears baseline")
 		}
 		let blink = LivenessChallenge(action: .blink)

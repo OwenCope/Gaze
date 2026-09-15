@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CoreImage
 import Observation
 import Vision
@@ -30,56 +30,6 @@ enum FaceAbsence: Equatable, Sendable {
 	}
 }
 
-/// Head orientation, in radians, as reported by Vision.
-struct FacePose: Sendable, Equatable {
-	/// Vision's yaw. **Negative when the user turns to their own left.**
-	///
-	/// Measured, not reasoned about: `LivenessChallenge` was tested against a real head, and
-	/// "Turn your head left" completes on a *fall* in this value. Everything that reads a
-	/// direction reads this, in this convention, and there is no second one.
-	///
-	/// This was documented as the opposite — "negative when the user turns to their right" —
-	/// while the code twenty lines below it recorded the measured fact. Two contradictory
-	/// statements about the same axis in the same file is how the enrolment ring ended up
-	/// mapping a head to the wrong side of itself for months.
-	var yaw: Double
-	/// Vision's pitch: **positive is chin DOWN**, negative is chin up.
-	///
-	/// This was documented the other way round for a long time, and both things that read
-	/// it were wrong as a result — the nod challenge completed when you *raised* your head,
-	/// and the enrolment ring's vertical axis ran upside down. The sign was never verified
-	/// against the camera; it was assumed from the name and then built on twice.
-	var pitch: Double
-	var roll: Double   // head tilt
-
-	static let zero = FacePose(yaw: 0, pitch: 0, roll: 0)
-
-	/// Where this pose sits on the enrolment ring, in radians clockwise from up.
-	///
-	/// Both axes are worked out the same way: from where the face appears to point *on the
-	/// screen*, because the ring is drawn around the preview and the user is aiming at it.
-	///
-	/// **Yaw is used raw.** `CameraPreview` mirrors the image, so a head turned to the user's
-	/// own left appears pointing at the left of the screen — and a left turn lowers Vision's
-	/// yaw, which `atan2` reads as counter-clockwise from up. The two flips cancel; the raw
-	/// value is already in the ring's terms.
-	///
-	/// It was negated here for a long while, via a `mirroredYaw` helper, and the ring
-	/// therefore lit the side opposite the one being looked at — turn towards a gap and the
-	/// highlight ran away from you. The negation came from reasoning about which way a
-	/// camera faces rather than from watching it, and it survived because the doc comment on
-	/// `yaw` stated the sign backwards, so the two agreed with each other and not with the
-	/// camera. The helper is gone rather than corrected: one convention, stated once, is
-	/// what stops this happening a third time.
-	///
-	/// **Pitch is negated**, because Vision's positive pitch is chin *down* while the ring's
-	/// zero is straight *up*.
-	var ringAngle: Double { atan2(yaw, -pitch) }
-
-	/// How far off-centre the head is, roughly 0...1 over a comfortable range.
-	var offCentre: Double { min(1, hypot(yaw, pitch) / 0.55) }
-}
-
 /// One usable look at a face: the geometry Vision found, plus the frame it came from.
 struct FaceSample: @unchecked Sendable {
 	let landmarks: VNFaceLandmarks2D
@@ -106,6 +56,7 @@ final class CameraController {
 	}
 
 	private(set) var state: State = .idle
+	private(set) var evidenceContinuity = CameraEvidenceContinuity()
 	/// The most recent frame containing exactly one usable face.
 	private(set) var sample: FaceSample?
 	/// True when a face was expected but the frame had none, or had several.
@@ -120,21 +71,51 @@ final class CameraController {
 	/// that doesn't populate yaw/pitch at all — and an observer watching the pose alone
 	/// would then simply stop being called.
 	private(set) var frameID: UInt64 = 0
+	private(set) var analyzedFrames: UInt64 = 0
+	private(set) var expiredFrames: UInt64 = 0
 
 	/// `uniqueID` of the camera this session is bound to, recorded at enrolment.
 	private(set) var boundDeviceID: String?
+	private(set) var lastFrameCapturedAt: ContinuousClock.Instant?
+	private let capture = CameraCaptureDriver()
+	private var lease = CameraFrameLease()
+	private var starting = false
+	private var observers: [NSObjectProtocol] = []
+	private let sessionGate: CameraSessionGate
 
-	private let session = AVCaptureSession()
-	private let output = AVCaptureVideoDataOutput()
-	private let queue = DispatchQueue(label: "com.gazeunlock.Gaze.capture", qos: .userInitiated)
-	private var proxy: SampleProxy?
+	init(accessScope: CameraSessionGate.Scope = .foreground) {
+		sessionGate = CameraSessionGate(scope: accessScope)
+		for name in [AVCaptureSession.runtimeErrorNotification, AVCaptureSession.wasInterruptedNotification] {
+			observers.append(NotificationCenter.default.addObserver(forName: name, object: capture.session, queue: .main) { [weak self] _ in
+				MainActor.assumeIsolated {
+					guard let self, self.lease.generation != nil else { return }
+					self.stop()
+					self.state = .failed("Camera capture was interrupted. Try again.")
+				}
+			})
+		}
+	}
 
 	// MARK: - Lifecycle
 
 	func start(pinnedDeviceID: String? = nil) async {
-		guard state != .running else { return }
+		guard state != .running, !starting, !Task.isCancelled else { return }
+		let generation = lease.begin()
+		analyzedFrames = 0
+		expiredFrames = 0
+		starting = true
+		defer { if lease.generation == generation { starting = false } }
+		guard sessionGate.begin(onInvalidation: { [weak self] in
+			guard let self, self.lease.generation == generation else { return }
+			self.stop()
+			self.state = .failed("Camera paused when the Mac locked, slept or changed users. Reopen this window after unlocking to restart it.")
+		}) else { return }
 
-		guard await requestAccess() else {
+		let authorized = await requestAccess()
+		guard lease.generation == generation, sessionGate.isValid else { return }
+		guard !Task.isCancelled else { stop(); return }
+		guard authorized else {
+			stop()
 			state = .denied
 			return
 		}
@@ -143,31 +124,60 @@ final class CameraController {
 		do {
 			device = try CameraDevice.trusted(pinnedID: pinnedDeviceID)
 		} catch {
+			stop()
 			state = .failed(String(describing: error))
 			return
 		}
 
 		do {
-			try configure(with: device)
+			let running = try await capture.start(with: device) { [weak self] sample, absence, capturedAt in
+				Task { @MainActor in
+					guard let self, self.state == .running, self.lease.generation == generation,
+						self.sessionGate.isValid else { return }
+					self.analyzedFrames &+= 1
+					guard self.lease.accepts(generation, capturedAt: capturedAt, now: .now) else {
+						self.expiredFrames &+= 1
+						return
+					}
+					let usable = absence == nil && sample.map { FrameQuality.isUsable($0) } == true
+					guard self.evidenceContinuity.record(usable: usable, capturedAt: capturedAt) else { return }
+					self.sample = sample
+					self.absence = absence
+					self.faceMissing = absence != nil
+					self.lastFrameCapturedAt = capturedAt
+					self.frameID &+= 1
+				}
+			}
+			guard lease.generation == generation, sessionGate.isValid else { return }
+			guard !Task.isCancelled else { stop(); return }
+			guard running else {
+				stop()
+				state = .failed("The camera did not start delivering video.")
+				return
+			}
 		} catch {
+			guard lease.generation == generation else { return }
+			stop()
 			state = .failed(error.localizedDescription)
 			return
 		}
 
 		boundDeviceID = device.uniqueID
-		let session = self.session
-		await Task.detached { session.startRunning() }.value
 		state = .running
 	}
 
 	func stop() {
-		guard state == .running else { return }
-		let session = self.session
-		Task.detached { session.stopRunning() }
+		sessionGate.end()
+		evidenceContinuity.invalidate()
+		lease.stop()
+		starting = false
+		capture.stop()
 		state = .idle
 		sample = nil
 		faceMissing = true
 		absence = .noFace
+		boundDeviceID = nil
+		lastFrameCapturedAt = nil
 	}
 
 	private func requestAccess() async -> Bool {
@@ -178,7 +188,49 @@ final class CameraController {
 		}
 	}
 
-	private func configure(with device: AVCaptureDevice) throws {
+	func previewLayer() -> AVCaptureVideoPreviewLayer {
+		let layer = AVCaptureVideoPreviewLayer(session: capture.session)
+		layer.videoGravity = .resizeAspectFill
+		return layer
+	}
+
+	isolated deinit {
+		sessionGate.end()
+		for observer in observers { NotificationCenter.default.removeObserver(observer) }
+		capture.stop()
+	}
+}
+
+private final class CameraCaptureDriver: @unchecked Sendable {
+	let session = AVCaptureSession()
+	private let output = AVCaptureVideoDataOutput()
+	private let sessionQueue = DispatchQueue(label: "com.gazeunlock.Gaze.session", qos: .userInitiated)
+	private let frameQueue = DispatchQueue(label: "com.gazeunlock.Gaze.capture", qos: .userInitiated)
+	private var proxy: SampleProxy?
+
+	func start(with device: AVCaptureDevice,
+		onSample: @escaping @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void) async throws -> Bool {
+		try await withCheckedThrowingContinuation { continuation in
+			sessionQueue.async { [self] in
+				do {
+					try configure(with: device, onSample: onSample)
+					session.startRunning()
+					continuation.resume(returning: session.isRunning)
+				} catch { continuation.resume(throwing: error) }
+			}
+		}
+	}
+
+	func stop() {
+		sessionQueue.async { [self] in
+			output.setSampleBufferDelegate(nil, queue: nil)
+			if session.isRunning { session.stopRunning() }
+			proxy = nil
+		}
+	}
+
+	private func configure(with device: AVCaptureDevice,
+		onSample: @escaping @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void) throws {
 		session.beginConfiguration()
 		defer { session.commitConfiguration() }
 
@@ -193,15 +245,7 @@ final class CameraController {
 		}
 		session.addInput(input)
 
-		let proxy = SampleProxy { [weak self] sample, absence in
-			Task { @MainActor in
-				guard let self else { return }
-				self.sample = sample
-				self.absence = absence
-				self.faceMissing = absence != nil
-				self.frameID &+= 1
-			}
-		}
+		let proxy = SampleProxy(onSample: onSample)
 		self.proxy = proxy
 
 		output.videoSettings = [
@@ -209,7 +253,7 @@ final class CameraController {
 		]
 		// Analysing stale frames just delays recognition, so drop rather than queue.
 		output.alwaysDiscardsLateVideoFrames = true
-		output.setSampleBufferDelegate(proxy, queue: queue)
+		output.setSampleBufferDelegate(proxy, queue: frameQueue)
 
 		session.outputs.forEach(session.removeOutput)
 		guard session.canAddOutput(output) else {
@@ -219,13 +263,6 @@ final class CameraController {
 		}
 		session.addOutput(output)
 	}
-
-	/// A layer that renders the live feed, for the enrolment preview.
-	func previewLayer() -> AVCaptureVideoPreviewLayer {
-		let layer = AVCaptureVideoPreviewLayer(session: session)
-		layer.videoGravity = .resizeAspectFill
-		return layer
-	}
 }
 
 // MARK: - Vision
@@ -233,12 +270,12 @@ final class CameraController {
 /// Runs Vision off the main actor and hands finished samples back.
 private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
-	private let onSample: @Sendable (FaceSample?, FaceAbsence?) -> Void
+	private let onSample: @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void
 	private let rectanglesRequest = VNDetectFaceRectanglesRequest()
 	private let landmarksRequest = VNDetectFaceLandmarksRequest()
 	private let qualityRequest = VNDetectFaceCaptureQualityRequest()
 
-	init(onSample: @escaping @Sendable (FaceSample?, FaceAbsence?) -> Void) {
+	init(onSample: @escaping @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void) {
 		self.onSample = onSample
 
 		// Pose comes from the *rectangles* request, not the landmarks one, and only from
@@ -256,6 +293,7 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 		didOutput sampleBuffer: CMSampleBuffer,
 		from connection: AVCaptureConnection
 	) {
+		let capturedAt = ContinuousClock.now
 		guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
 		let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up)
@@ -265,7 +303,7 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 		do {
 			try handler.perform([rectanglesRequest])
 		} catch {
-			onSample(nil, .detectionFailed)
+			onSample(nil, .detectionFailed, capturedAt)
 			return
 		}
 
@@ -279,7 +317,7 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 		// first one's wording is going to conclude the camera is broken.
 		let detected = rectanglesRequest.results ?? []
 		guard detected.count == 1, let face = detected.first else {
-			onSample(nil, detected.isEmpty ? .noFace : .multipleFaces(detected.count))
+			onSample(nil, detected.isEmpty ? .noFace : .multipleFaces(detected.count), capturedAt)
 			return
 		}
 
@@ -288,24 +326,27 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 		do {
 			try handler.perform([landmarksRequest, qualityRequest])
 		} catch {
-			onSample(nil, .analysisFailed)
+			onSample(nil, .analysisFailed, capturedAt)
 			return
 		}
 
 		guard let landmarks = landmarksRequest.results?.first?.landmarks else {
-			onSample(nil, .analysisFailed)
+			onSample(nil, .analysisFailed, capturedAt)
 			return
 		}
 
 		let quality = qualityRequest.results?.first?.faceCaptureQuality ?? 0
 
-		// Vision's own estimate when it gives one, geometry when it doesn't. Some
-		// revisions populate yaw but leave pitch nil, so the two are decided separately.
-		let landmarkPose = SampleProxy.pose(from: landmarks)
-		let pose = FacePose(
-			yaw: face.yaw?.doubleValue ?? landmarkPose.yaw,
-			pitch: face.pitch?.doubleValue ?? landmarkPose.pitch,
-			roll: face.roll?.doubleValue ?? landmarkPose.roll)
+		// Vision's own estimate when it gives one, geometry when it doesn't, per-axis
+		// provenance always. Some revisions populate yaw but leave pitch nil, so the
+		// axes decide separately, and a missing landmark estimate lands as
+		// NaN/unavailable — never as a frontal zero the challenge could mistake for
+		// a held-still head.
+		let pose = FacePose.resolved(
+			visionYaw: face.yaw?.doubleValue,
+			visionPitch: face.pitch?.doubleValue,
+			visionRoll: face.roll?.doubleValue,
+			estimate: FacePose.estimate(from: landmarks))
 
 		onSample(
 			FaceSample(
@@ -314,60 +355,7 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 				pose: pose,
 				quality: quality,
 				pixelBuffer: buffer),
-			nil)
+			nil, capturedAt)
 	}
 
-	/// Estimates head orientation from landmark geometry.
-	///
-	/// A fallback for when Vision declines to report pose. The nose tip sits above the
-	/// midpoint between the pupils when the head is level and centred; turning the head
-	/// slides it sideways, tipping it slides it up or down. Measuring that displacement
-	/// against the interocular distance cancels out how near the face is to the camera.
-	///
-	/// Approximate, and not a substitute for a real pose estimate — but the enrolment
-	/// ring only needs a direction that moves consistently as the user turns.
-	static func pose(from landmarks: VNFaceLandmarks2D) -> FacePose {
-		guard
-			let leftPupil = landmarks.leftPupil?.normalizedPoints.first,
-			let rightPupil = landmarks.rightPupil?.normalizedPoints.first,
-			let nose = landmarks.nose?.normalizedPoints, !nose.isEmpty
-		else { return .zero }
-
-		let eyeMidX = (leftPupil.x + rightPupil.x) / 2
-		let eyeMidY = (leftPupil.y + rightPupil.y) / 2
-		let interocular = hypot(rightPupil.x - leftPupil.x, rightPupil.y - leftPupil.y)
-		guard interocular > 0.001 else { return .zero }
-
-		// Centroid of the nose region is steadier frame to frame than any single point.
-		let noseX = nose.map(\.x).reduce(0, +) / CGFloat(nose.count)
-		let noseY = nose.map(\.y).reduce(0, +) / CGFloat(nose.count)
-
-		let dx = (noseX - eyeMidX) / interocular
-		let dy = (noseY - eyeMidY) / interocular
-
-		// Scale factors chosen so a comfortable head turn reaches roughly ±0.5 rad, which
-		// is the range `FacePose.offCentre` normalises against.
-		//
-		// **Negated, to agree with Vision.** This is a fallback for the frames where Vision
-		// declines to report a pose, and it was reporting the opposite sign to the thing it
-		// stands in for.
-		//
-		// Vision's yaw falls when the head turns to the user's left (measured against a real
-		// head, via the liveness challenge). This estimator's raw `dx` rises: the camera
-		// faces the user, so the user's left is the *image's* right, and turning that way
-		// slides the nose toward higher x. Two estimators feeding one `FacePose.yaw` with
-		// opposite conventions meant anything reading it — the enrolment ring, the turn
-		// challenge — silently reversed on the frames where the fallback took over.
-		//
-		// Untested directly, because Vision almost always answers and there is no supported
-		// way to make it decline. The sign is derived rather than measured; the measured
-		// half is Vision's, above.
-		let yaw = -Double(dx) * 1.6
-		// The nose sits about 0.55 interocular widths below the eye line at rest; the
-		// offset from that baseline is what indicates pitch.
-		let pitch = (Double(dy) + 0.55) * 1.6
-		let roll = Double(atan2(rightPupil.y - leftPupil.y, rightPupil.x - leftPupil.x))
-
-		return FacePose(yaw: yaw, pitch: pitch, roll: roll)
-	}
 }

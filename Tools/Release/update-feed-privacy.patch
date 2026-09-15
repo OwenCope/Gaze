@@ -1,0 +1,56 @@
+--- a/src/app/api/latest/route.ts
++++ b/src/app/api/latest/route.ts
+@@ -1,5 +1,6 @@
+ import { NextResponse } from "next/server";
+ import { readAll } from "@/lib/store";
++import { getSettings } from "@/lib/settings";
+ 
+ /**
+  * The update feed the Mac app polls.
+@@ -51,6 +52,20 @@
+ }
+ 
+ export async function GET() {
++  // Closed entirely, when the owner has asked for that. Same switch as
++  // src/app/releases/page.tsx: before a public launch even the version
++  // numbers are more than is wanted in public, and the Mac app polls with
++  // no session, so a restricted feed answers "nothing to offer" rather
++  // than leaking metadata. Checked before anything is fetched: a handler
++  // that reads and then hides has already touched the data.
++  const { releasesRequireSignIn } = await getSettings();
++  if (releasesRequireSignIn) {
++    return NextResponse.json(
++      { latest: null },
++      { headers: { "Cache-Control": "no-store" } },
++    );
++  }
++
+   const all = await readAll();
+ 
+   // Newest by version, not by date. The stored list is sorted by date, and a release
+@@ -67,7 +82,7 @@
+     // "nothing to offer" and says nothing to the user.
+     return NextResponse.json(
+       { latest: null },
+-      { headers: { "Cache-Control": "public, max-age=300, s-maxage=300" } },
++      { headers: { "Cache-Control": "no-store" } },
+     );
+   }
+ 
+@@ -80,11 +95,12 @@
+     download: latest.download ?? null,
+   };
+ 
+-  // Cached for five minutes at the edge. Every install polls this on a timer, so an
+-  // uncached route would turn the update check into a steady load for a document that
+-  // changes a few times a year.
++  // Not cached. The visibility switch above is mutable without a deploy, so a
++  // cached public response could keep serving release metadata after the owner
++  // hides releases. The document is tiny and changes a few times a year, so
++  // correctness beats five minutes of edge savings.
+   return NextResponse.json(
+     { latest: payload },
+-    { headers: { "Cache-Control": "public, max-age=300, s-maxage=300" } },
++    { headers: { "Cache-Control": "no-store" } },
+   );
+ }

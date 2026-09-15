@@ -94,6 +94,14 @@ struct RecognitionTestView: View {
 
 	private var canChallenge: Bool { store.isEnrolled && camera.state == .running && !camera.faceMissing }
 
+	private var currentYaw: Double? {
+		canChallenge && pose.yaw.isFinite && pose.yawSource != .unavailable ? pose.yaw : nil
+	}
+
+	private var currentPitch: Double? {
+		canChallenge && pose.pitch.isFinite && pose.pitchSource != .unavailable ? pose.pitch : nil
+	}
+
 	private var companionMotion: GazeFaceMotion {
 		guard canChallenge else { return .resting }
 		guard challenge.isBaselineReady else { return .resting }
@@ -116,12 +124,13 @@ struct RecognitionTestView: View {
 			("Match threshold", String(format: "%.2f", store.embedder.matchThreshold)),
 			("Lowest / highest", String(format: "%.3f / %.3f", floor == 1 ? 0 : floor, peak)),
 			("Samples", "\(samples)"),
-			("Yaw (raw)", canChallenge ? String(format: "%+.2f rad", pose.yaw) : "—"),
-			("Pitch (raw)", canChallenge ? String(format: "%+.2f rad", pose.pitch) : "—"),
+			("Yaw (raw)", currentYaw.map { String(format: "%+.2f rad", $0) } ?? "—"),
+			("Pitch (raw)", currentPitch.map { String(format: "%+.2f rad", $0) } ?? "—"),
 			("Blink observed", blinked ? "Yes" : "Not yet"),
 			("Eye openness", String(format: "%.3f · %@", eyeOpen, eyesShut ? "shut" : "open"))
 		]
-		if canChallenge, let movement = challenge.poseMeasurement(yaw: pose.yaw, pitch: pose.pitch) {
+		if canChallenge, let movement = challenge.poseMeasurement(yaw: pose.yaw, pitch: pose.pitch,
+			yawSource: pose.yawSource, pitchSource: pose.pitchSource) {
 			rows.append(("Movement from start", String(format: "%+.2f rad", movement.offset)))
 			rows.append(("Requested excursion", String(format: "%+.2f rad", movement.target)))
 			rows.append(("Return to start", String(format: "within ±%.2f rad", movement.returnTolerance)))
@@ -145,7 +154,7 @@ struct RecognitionTestView: View {
 		return RecognitionTestReadout(status: statusText, matched: matched, score: score,
 			threshold: store.embedder.matchThreshold, instruction: instruction,
 			complete: canChallenge && challenge.isComplete, canChallenge: canChallenge, diagnosticRows: rows,
-			yaw: canChallenge ? pose.yaw : nil, pitch: canChallenge ? pose.pitch : nil)
+			yaw: currentYaw, pitch: currentPitch)
 	}
 
 	@ViewBuilder private var cameraPreview: some View {

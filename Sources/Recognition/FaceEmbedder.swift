@@ -9,18 +9,29 @@ struct Faceprint: Codable, Sendable, Equatable {
 	/// Which embedder produced it. Prints from different embedders are never comparable.
 	var source: String
 
+	static func normalized(_ values: [Float], source: String) -> Faceprint? {
+		guard !source.isEmpty, !values.isEmpty, values.allSatisfy(\.isFinite) else { return nil }
+		var energy: Float = 0
+		for value in values { energy += value * value }
+		guard energy.isFinite, energy > 0 else { return nil }
+		let norm = sqrt(energy)
+		return Faceprint(values: values.map { $0 / norm }, source: source)
+	}
+
 	/// Cosine similarity, 0...1 for the embedders here (all produce non-negative prints
 	/// or are L2-normalised, so negative similarity means the inputs are unrelated).
 	func similarity(to other: Faceprint) -> Float {
-		guard source == other.source, values.count == other.values.count else { return 0 }
+		guard !source.isEmpty, source == other.source, !values.isEmpty,
+			values.count == other.values.count else { return 0 }
 		var dot: Float = 0, a: Float = 0, b: Float = 0
 		for i in values.indices {
 			dot += values[i] * other.values[i]
 			a += values[i] * values[i]
 			b += other.values[i] * other.values[i]
 		}
-		guard a > 0, b > 0 else { return 0 }
-		return dot / (sqrt(a) * sqrt(b))
+		guard dot.isFinite, a.isFinite, b.isFinite, a > 0, b > 0 else { return 0 }
+		let score = dot / (sqrt(a) * sqrt(b))
+		return score.isFinite ? score : 0
 	}
 }
 
@@ -47,10 +58,10 @@ extension FaceEmbedder {
 enum Embedders {
 	/// The Core ML embedder when a model is bundled, otherwise the geometry fallback.
 	///
-	/// Sapphire ships a 512-d `ModernFace` model, but its repository is GPL-3.0 and we
-	/// are not copying from it, so no weights are vendored here. Drop a model at
-	/// `Resources/FaceEmbedding.mlpackage` and `build.sh` compiles it in; until then the
-	/// app runs on landmark geometry, which is materially weaker (see below).
+	/// Local weights at `Resources/FaceEmbedding.mlpackage` are compiled by build.sh.
+	/// Their distribution rights are tracked separately in NOTICE.md; a source-code
+	/// license does not establish the license of a weight file. The geometry fallback
+	/// remains available for practice, but UnlockGuard refuses it for Mac unlocking.
 	static func best() -> FaceEmbedder {
 		CoreMLEmbedder() ?? LandmarkEmbedder()
 	}
@@ -80,7 +91,8 @@ struct LandmarkEmbedder: FaceEmbedder {
 	/// So: root-mean-square displacement, in interocular widths, mapped to 0...1. Same
 	/// person lands around 0.02–0.04 RMS; different people are several times that.
 	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float {
-		guard a.source == b.source, a.values.count == b.values.count, !a.values.isEmpty
+		guard !a.source.isEmpty, a.source == b.source, a.values.count == b.values.count,
+			!a.values.isEmpty, a.values.count.isMultiple(of: 2)
 		else { return 0 }
 
 		var sumSquares: Float = 0
@@ -88,6 +100,7 @@ struct LandmarkEmbedder: FaceEmbedder {
 			let delta = a.values[i] - b.values[i]
 			sumSquares += delta * delta
 		}
+		guard sumSquares.isFinite else { return 0 }
 		// Two coordinates per landmark, so halve the count to get per-point displacement.
 		let rms = sqrt(sumSquares / Float(a.values.count / 2))
 
@@ -219,17 +232,11 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 		// magnitude, so normalising makes cosine similarity a plain dot product and keeps
 		// scores comparable across lighting.
 		var values = [Float](repeating: 0, count: array.count)
-		var norm: Float = 0
 		for i in 0..<array.count {
 			let v = array[i].floatValue
 			values[i] = v
-			norm += v * v
 		}
-		norm = sqrt(norm)
-		guard norm > 0 else { return nil }
-		for i in values.indices { values[i] /= norm }
-
-		return Faceprint(values: values, source: identifier)
+		return Faceprint.normalized(values, source: identifier)
 	}
 
 	/// Converts a BGRA crop into the planar RGB tensor the model expects.

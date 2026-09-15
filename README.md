@@ -6,25 +6,35 @@ this one, but no code was copied (it is GPL-3.0; see *Licensing* below).
 
 ## Install
 
-```sh
-git clone https://github.com/OwenCope/Gaze.git
+**Development build, not a release recommendation.** Real lock-screen unlocking,
+recognition/PAD evaluation, redistribution evidence and clean-install testing are
+still release gates. See `Tools/Release/READINESS.md` for the current checklist.
 
-cd Gaze && ./build.sh && open "build/Gaze.app"
+```sh
+git clone https://github.com/OwenCope/FaceID.git Gaze
+cd Gaze
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./build.sh
+open "build/Gaze.app"
 ```
 
 
-Requires the macOS 26 SDK. No Xcode project — `build.sh` drives `swiftc` and assembles the
-bundle by hand.
+Requires the macOS 26 SDK and a valid stable signing identity. No Xcode project —
+`build.sh` drives `swiftc` and assembles the bundle by hand. `DIST=1` requires a
+Developer ID Application identity; it no longer produces ad-hoc distribution builds.
 
 ---
 
 ## What it does
 
-Lock the screen, look at the camera, and it types you in. A panel drops out of the notch
-while it looks, morphs to a green tick on success, and retracts.
+After explicit setup and consent, Gaze attempts face verification and two movement
+challenges when the screen locks. Its notch companion guides the movements. Only
+complete, current verification can authorize password submission; macOS must then
+confirm an actual unlock. A stalled camera or failed check must leave manual
+authentication available, not trigger password retries.
 
-Measured on the author's Mac: enrolled user **0.85+** across every head angle, a different
-adult **0.23**, threshold **0.45**.
+Historical scores from individual users are not a validation study. Current
+lock-screen reliability and false-accept/PAD performance still need the release
+evaluation described in `Tools/Release/READINESS.md`.
 
 ---
 
@@ -34,7 +44,7 @@ adult **0.23**, threshold **0.45**.
 screen locks
    └─ LockWatcher              notices the lock, opens the camera
         ├─ CameraController    AVCapture + Vision → FaceSample (landmarks, pose, quality)
-        ├─ FaceEnrollmentStore embeds the sample, compares to enrolled prints
+        ├─ UnlockFrameEvaluator evaluates identity and configured anti-spoof off the main actor
         ├─ NotchCapsule        the panel, in a SkyLight space above the lock screen
         └─ KeystrokeUnlock     types the stored password into the login window
 ```
@@ -52,11 +62,12 @@ screen locks
 
 The app watches for the screen lock, recognises you, and types your stored password into
 the login window. Touch ID keeps working, and the login window is Apple's own — so if
-recognition fails there is always a real password field waiting. That property is what
-makes it safe: a recognition failure costs you a password, never your way in.
+recognition fails, manual authentication remains the intended fallback. The release
+checklist includes testing that fallback through cancellation, failures, and updates.
 
-The cost is that your password is stored on this Mac in recoverable form. Anything running
-as you can extract it.
+Your password is stored on this Mac in a form Gaze can recover. Face verification controls
+when Gaze chooses to use it; it is not a cryptographic factor required to decrypt it.
+See `SECURITY.md` for the storage and local-code-execution threat model.
 
 ### Three decisions worth knowing
 
@@ -66,16 +77,17 @@ because the shared face template dominates the vector. Switching to Euclidean di
 fixed that but it still collapsed from 0.77 to 0.33 when the head tilted. Pose invariance
 has to be learned.
 
-**Liveness is off by default, and camera pinning is on.** Anti-spoof models score *capture*
-artefacts — moiré, paper grain, print edges — so they catch a photo held to the lens. They
-do nothing against frame injection: a virtual camera feeding a recording has no capture
-artefacts at all. `CameraDevice` refuses anything but the built-in camera, which is the
-defence that actually matters.
+**Camera pinning and movement verification are required for unlocking.** Anti-spoof models score *capture*
+artefacts such as print edges and visible devices, but those signals do not guarantee
+rejection of a photo or replay. `CameraDevice` restricts unlock capture to the enrolled
+built-in camera. Pinning, identity checks, movement verification and the configured
+photo detector are distinct checks; their combined resistance still needs evaluation.
 
 **The lock-screen panel uses private SkyLight SPI.** Window level is irrelevant — every
 level fails, including above `CGShieldingWindowLevel`. The lock screen is a separate
 *space*, so the panel gets its own space pinned to absolute level 400. Unsupported, and
-written so that if it breaks you lose the panel and unlocking still works.
+the unlock loop requires the guidance panel to be available. If the private APIs
+break, password submission is refused and the user must unlock manually.
 
 ---
 
@@ -92,27 +104,26 @@ it much faster.
 
 ## Current state
 
-**Working:** enrolment, recognition, Secure Enclave storage, 6-attempt lockout, camera
-pinning, screen-lock trigger, keystroke unlock, notch panel, Touch ID for in-app changes,
-tamper protection, login item.
+**Implemented, not a shipping sign-off:** enrollment, recognition, protected storage,
+lockout, camera pinning, lock/wake handling, guarded password submission, notch UI,
+Touch ID for in-app changes and login item.
 
-**Not done:**
-
-- The notch panel stacks below DynamicLake Pro's lock icon rather than replacing it.
-- Tamper protection only covers graceful quit; `kill -9` bypasses it entirely.
-- No liveness model is bundled, so that toggle is disabled.
+**Unverified release gates:** actual lock-screen unlock/fallback reliability,
+independent recognition/PAD evidence, model/asset distribution permissions,
+Developer ID/notarization and clean installation/update. The earlier rejected-password
+report is not resolved merely because the synthetic tests or build pass.
 
 ---
 
 ## Licensing
 
-`Resources/FaceEmbedding.mlpackage` is Sapphire's `ModernFace` model, from a **GPL-3.0**
-repository. This repo is private, and GPL obligations trigger on distribution.
-
-**Before it goes public**, either replace the model with an openly-licensed one or license
-the whole project GPL-3.0. `CoreMLEmbedder` reads the input shape from the model, so any
-ArcFace-family `[1, 3, S, S]` → `[1, N]` network drops in — but changing it invalidates
-existing enrolments by design.
+The face model is described historically as Sapphire's `ModernFace`, but the
+repository's license records are inconsistent. Owner-reported permission must be
+documented for the exact bundled model and intended distribution. Do not infer a
+model's redistribution rights from the source repository's license alone.
+`Tools/Release/READINESS.md` tracks this open gate alongside other model and asset
+permissions. Changing the embedding model requires compatible enrollment handling
+and a new recognition evaluation; it is not a packaging-only replacement.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for build details and a list of the mistakes that
 cost the most time.
