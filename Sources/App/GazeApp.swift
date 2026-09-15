@@ -9,27 +9,20 @@ struct GazeApp: App {
 
 	private var store: FaceEnrollmentStore { AppServices.shared.store }
 	private var lockout: LockoutManager { AppServices.shared.lockout }
+	private let presentsSettingsAtLaunch: Bool
+
+	init() {
+		let enrolled = AppServices.shared.store.isEnrolled
+		if enrolled { OnboardingHistory.markPresented() }
+		presentsSettingsAtLaunch = !AppActivation.isBackgroundLaunch
+			&& !OnboardingHistory.presentsSetup(isEnrolled: enrolled, arguments: CommandLine.arguments)
+	}
 
 	var body: some Scene {
 		MenuBarExtra {
 			MenuBarContent(store: store, lockout: lockout)
 		} label: {
-			// The system symbol, not the drawn mark.
-			//
-			// This has now been `faceid`, then `eye`, then a drawn mark, then a bare
-			// `viewfinder`. The trademark worry that started the churn is real but narrow:
-			// it is about an app wearing Apple's glyph as *its own identity* — which is the
-			// icon in the Dock and on disk. Using the system symbol inside the interface is
-			// what system symbols are for, and `faceid` is the one glyph on macOS that means
-			// exactly "a face, being recognised". `eye` said "this watches you"; an empty
-			// viewfinder said nothing at all.
-			//
-			// So: the icon is a drawn keyhole (`Scripts/make_icon_mark.swift`), which is not
-			// a face at all and cannot be confused for one; everything inside the app is the
-			// system symbol. Fixed rather than changing with state — swapping the icon
-			// around makes the item hard to find, and the state is the first line of the
-			// menu anyway.
-			Image(systemName: "faceid")
+			GazeStatusItemLabel()
 		}
 		// A real menu, not a window.
 		//
@@ -42,7 +35,16 @@ struct GazeApp: App {
 
 		Window("Gaze", id: "settings") {
 			SettingsView(store: store, lockout: lockout)
+				.scrollIndicators(.never)
+				.safeAreaInset(edge: .bottom, spacing: 0) {
+					if AppServices.isUIReview {
+						Label(AppServices.safetyNotice, systemImage: "lock.shield")
+							.font(.caption).foregroundStyle(.secondary)
+							.padding(10).frame(maxWidth: .infinity).background(.bar)
+					}
+				}
 		}
+		.defaultLaunchBehavior(presentsSettingsAtLaunch ? .presented : .suppressed)
 		// `.contentMinSize`, not `.contentSize`: the view states a floor and an ideal, and
 		// the user is allowed to go bigger. A settings window that cannot be resized has no
 		// answer for someone who finds the text small.
@@ -71,7 +73,8 @@ struct GazeApp: App {
 		Window("Test Recognition", id: "test") {
 			RecognitionTestView(store: store)
 		}
-		.windowResizability(.contentSize)
+		.windowResizability(.contentMinSize)
+		.defaultSize(width: 560, height: 820)
 
 		// Behind a launch flag, and deliberately not in any menu. Collecting an
 		// anti-spoof dataset is a job for whoever is building the model, not a
@@ -79,23 +82,19 @@ struct GazeApp: App {
 		// to live in this app.
 		Window("Capture Dataset", id: "dataset") {
 			DatasetCaptureView()
+				.scrollIndicators(.never)
 		}
 		.windowResizability(.contentSize)
 
 		Window("Set Up Gaze", id: "enrollment") {
 			EnrollmentWindow(store: store)
+				.scrollIndicators(.never)
 		}
-		.windowResizability(.contentSize)
-		// No title bar. The window is a fixed-size panel with its own progress row and its
-		// own back button, and a system title bar above that is a second, emptier header
-		// competing with the one that means something — "Set Up Gaze" over a screen whose
-		// title already says what it is. The traffic lights stay, because they are how a
-		// macOS window is closed and inventing our own would be worse; `SetupScaffold`
-		// insets its chrome to clear them.
+		.windowResizability(.contentMinSize)
+		.defaultSize(width: 880, height: 660)
+		.restorationBehavior(.disabled)
 		.windowStyle(.hiddenTitleBar)
-		// Opens on launch so a fresh install lands straight in setup. `EnrollmentWindow`
-		// closes itself again when there is already a face enrolled.
-		.defaultLaunchBehavior(.presented)
+		.defaultLaunchBehavior(!AppActivation.isBackgroundLaunch && !presentsSettingsAtLaunch ? .presented : .suppressed)
 	}
 
 }
@@ -110,6 +109,7 @@ struct GazeApp: App {
 /// fixed by switching to a regular app for as long as a window is on screen.
 @MainActor
 enum AppActivation {
+	static var openSettings: (() -> Void)?
 
 	/// True when launchd started us rather than the user.
 	///
@@ -122,8 +122,8 @@ enum AppActivation {
 		CommandLine.arguments.contains("--agent")
 	}
 
-	static func bringToFront() {
-		guard !isBackgroundLaunch else { return }
+	static func bringToFront(userInitiated: Bool = false) {
+		guard userInitiated || !isBackgroundLaunch else { return }
 		NSApp.setActivationPolicy(.regular)
 		NSApp.activate()
 		// `activate()` alone can lose the race against a window that is still being
@@ -187,110 +187,65 @@ enum AppActivation {
 final class AppServices {
 
 	static let shared = AppServices()
+	static let executionPolicy = UnlockExecutionPolicy.current
+	static var isUIReview: Bool { executionPolicy != .normal }
+	static var safetyNotice: String {
+		if executionPolicy == .browserOnly {
+			return "Browser approvals only · Mac locking and password entry are off for this run"
+		}
+		return executionPolicy == .scanOnly
+			? "Scanning enabled on lock and wake · No password entry or automatic locking"
+			: "UI review · Automatic locking and unlocking are off for this run"
+	}
 
 	let store = FaceEnrollmentStore()
 	let lockout = LockoutManager()
-	let savedApps = SavedAppStore()
-
-	/// The autofill shortcut, and the panel it reports through.
-	///
-	/// The capsule is owned here rather than made per-fill: it is a window, and building
-	/// one on every keypress would leak a window per fill.
-	private var autofillHotKey: GlobalHotKey?
-	private var autofillCapsule: NotchCapsuleController?
-	private var autofillWatcher: AutofillWatcher?
-
-	/// Whether ⌥⌘G is actually held. Read by the Places pane so the state is visible
-	/// rather than only knowable from a log line.
-	var isAutofillShortcutRegistered: Bool { autofillHotKey?.isRegistered ?? false }
 
 	private var unlockService: UnlockService?
 	private var lockWatcher: LockWatcher?
 	private var presenceWatcher: PresenceWatcher?
-	private var previewCapsule: NotchCapsuleController?
 	private var lockScreenShoot: LockScreenShoot?
+	private var browserApprovals: GazeBrowserApproval?
 
 	private init() {}
 
-	/// Shows the lock screen panel while unlocked, for inspecting it without locking.
-	///
-	/// Registers ⌥⌘G.
-	///
-	/// Deliberately *not* gated on there being a face enrolled, which is how this was
-	/// written first and why it did not work. `startUnlockTrigger()` runs once at launch,
-	/// so the guard was evaluated exactly once — before the enrolment store had finished
-	/// reading the keychain — and a false answer there meant the shortcut was never
-	/// registered and never retried. Nothing said so; the feature was simply inert.
-	///
-	/// The argument for the guard was that holding a system-wide shortcut which then does
-	/// nothing is worse than not holding it. That is true and it is much the smaller
-	/// problem: an unregistered shortcut is invisible, whereas a registered one that finds
-	/// nothing saved can say so. `AutofillService` already handles every case — no face, no
-	/// savedApp, no password — so let it.
-	private func startAutofill() {
-		guard autofillHotKey == nil else { return }
-
-		let capsule = NotchCapsuleController()
-		autofillCapsule = capsule
-
-		// The shortcut stays, as the manual path: it accepts a plain text field as well as
-		// a secure one, and it works in an app that was already frontmost.
-		let watcher = AutofillWatcher(savedApps: savedApps, store: store, capsule: capsule)
-		watcher.start()
-		autofillWatcher = watcher
-
-		let hotKey = GlobalHotKey()
-		hotKey.register { [weak self] in
-			guard let self else { return }
-			Task { @MainActor in
-				await AutofillService.fillFrontmost(
-					savedApps: self.savedApps, store: self.store, capsule: capsule)
-			}
-		}
-		autofillHotKey = hotKey
-	}
-
-	/// Launch with `--preview-capsule`. Cycles the whole sequence the lock screen actually
-	/// plays — resting padlock, scan, success, retract — so every state can be watched and
-	/// screenshotted without locking the machine.
-	func runCapsulePreviewIfRequested() {
-		guard CommandLine.arguments.contains("--preview-capsule") else { return }
-		let capsule = NotchCapsuleController()
-		previewCapsule = capsule
-		capsule.show(phase: .locked)
-		Task {
-			try? await Task.sleep(for: .seconds(3))
-			capsule.update(phase: .scanning)
-			try? await Task.sleep(for: .seconds(4))
-			// The challenge, in the preview cycle too. It only ever appears at the real lock
-			// screen otherwise, which is the one savedApp macOS will not let anyone screenshot —
-			// so without this the caption and the mark's lean could not be looked at at all.
-			capsule.update(
-				phase: .challenge(
-					prompt: "Turn your head left", symbol: "arrowshape.left.fill",
-					hintX: -1, hintY: 0, pulses: false))
-			try? await Task.sleep(for: .seconds(5))
-			// The tick, while the password goes in.
-			capsule.update(phase: .success)
-			try? await Task.sleep(for: .seconds(2))
-			// Then the Mac opens, and the padlock lets go where it has been sitting. Held for
-			// the same three seconds `LockWatcher.unlockAnimationDuration` holds it.
-			capsule.update(phase: .unlocked)
-			try? await Task.sleep(for: .seconds(3))
-			capsule.hide()
-		}
-	}
-
 	/// Puts a stand-in lock screen on the display, for screenshots.
 	///
-	/// Launch with `--shoot-lockscreen`. Separate from `--preview-capsule`, which cycles
+	/// Launch with `--shoot-lockscreen`. Separate from the developer preview, which cycles
 	/// the panel's phases over the desktop and then hides it: that is for watching the
 	/// animation, this is for framing one picture, and it holds until Escape.
 	func runLockScreenShootIfRequested() {
+		guard !Self.isUIReview else { return }
 		guard CommandLine.arguments.contains("--shoot-lockscreen") else { return }
 		let shoot = LockScreenShoot()
 		lockScreenShoot = shoot
 		shoot.run()
+	}
+
+	/// Starts or stops walk-away locking to match the launch policy and the setting.
+	///
+	/// Deliberately independent of the unlock backend: automatic locking needs
+	/// neither password storage nor replay, so backend `none` with replay
+	/// disabled still locks when the setting is on. Only the normal launch
+	/// policy permits it — scan-only, UI review, browser-only and any other
+	/// prohibited policy stop and clear the watcher instead.
+	///
+	/// Idempotent: calling it when the watcher already matches the desired
+	/// state neither starts a second watcher nor disturbs the running one. It
+	/// touches only the presence watcher, so flipping the walk-away toggle
+	/// never restarts an unlock attempt.
+	func syncPresenceWatcher() {
+		let shouldRun =
+			Self.executionPolicy.permitsAutomaticLocking && Preferences.shared.walkAwayLock
+		if shouldRun {
+			guard presenceWatcher == nil else { return }
+			let presence = PresenceWatcher(store: store)
+			presence.start()
+			presenceWatcher = presence
+		} else {
+			presenceWatcher?.stop()
+			presenceWatcher = nil
+		}
 	}
 
 	/// Starts whichever trigger the selected backend needs, stopping the other.
@@ -300,9 +255,26 @@ final class AppServices {
 	/// looked active while nothing was watching for the lock. Selecting the plugin without
 	/// installing it was the worst case: neither path running, and no indication why.
 	func startUnlockTrigger() {
+		// Walk-away locking first, before any early return below: prohibited
+		// policies must stop a watcher left over from a mode switch, and an
+		// enabled setting must start one even with backend none / replay off.
+		syncPresenceWatcher()
+		if Self.executionPolicy.permitsBrowserApproval(passwordReplayEnabled: PasswordReplaySafety.isEnabled), browserApprovals == nil {
+			let service = GazeBrowserApproval(store: store, lockout: lockout)
+			service.start()
+			browserApprovals = service
+		}
 		// Tear down whatever was running before switching.
 		lockWatcher?.stop()
 		lockWatcher = nil
+		if Self.executionPolicy == .scanOnly {
+			_ = LockScreenSpace.shared
+			let watcher = LockWatcher(store: store, lockout: lockout)
+			lockWatcher = watcher
+			watcher.start()
+			return
+		}
+		guard !Self.isUIReview else { return }
 
 		// The lock screen space, built now rather than when the screen first locks.
 		//
@@ -338,25 +310,12 @@ final class AppServices {
 			break
 
 		case .keystroke:
+			guard PasswordReplaySafety.isEnabled else { return }
 			// Nothing calls us here — we have to notice the lock ourselves.
 			guard lockWatcher == nil else { return }
 			let watcher = LockWatcher(store: store, lockout: lockout)
 			watcher.start()
 			lockWatcher = watcher
-
-			// Started unconditionally, not behind the setting.
-			//
-			// Its loop is one idle check every five seconds and it returns immediately
-			// when the setting is off, so leaving it running costs nothing — and reading
-			// the preference on each tick means switching walk-away lock on takes effect
-			// straight away rather than at the next launch.
-			if presenceWatcher == nil {
-				let presence = PresenceWatcher(store: store)
-				presence.start()
-				presenceWatcher = presence
-			}
-
-			startAutofill()
 
 		case .none:
 			break
@@ -370,6 +329,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 	private var invisibleWindowSweep: Timer?
 
+	func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+		MainActor.assumeIsolated {
+			guard let openSettings = AppActivation.openSettings else { return true }
+			openSettings()
+			return false
+		}
+	}
+
 	func applicationDidFinishLaunching(_ notification: Notification) {
 		MainActor.assumeIsolated {
 			TamperGuard.shared.start()
@@ -377,7 +344,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 			// Looks for a new release shortly after launch, then daily. See
 			// `startScheduledChecks` for why this is not left to the button in Settings.
 			ReleaseUpdateChecker.shared.startScheduledChecks()
-			AppServices.shared.runCapsulePreviewIfRequested()
 			AppServices.shared.runLockScreenShootIfRequested()
 			startInvisibleWindowSweep()
 		}
@@ -463,6 +429,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: - Menu bar
 
+private struct GazeStatusItemLabel: View {
+	@Environment(\.openWindow) private var openWindow
+
+	var body: some View {
+		Image(nsImage: GazeBrand.menuBarIcon)
+			.renderingMode(.template)
+			.accessibilityLabel("Gaze")
+			.onAppear {
+				AppActivation.openSettings = {
+					AppActivation.bringToFront(userInitiated: true)
+					openWindow(id: "settings")
+				}
+			}
+	}
+}
+
 struct MenuBarContent: View {
 
 	/// Just the time, in whatever form this Mac writes times. Built once — a
@@ -515,7 +497,7 @@ struct MenuBarContent: View {
 		// and the menu was the only way in for anyone who never opens Settings.
 		if store.canAddFace {
 			Button(store.isEnrolled ? "Add a Face…" : "Set Up Gaze…") {
-				SetupRequest.begin()
+				if store.isEnrolled { SetupRequest.begin() } else { SetupRequest.beginOnboarding() }
 				AppActivation.bringToFront()
 				openWindow(id: "enrollment")
 			}
@@ -527,7 +509,7 @@ struct MenuBarContent: View {
 			}
 		}
 		Button("Settings…") {
-			AppActivation.bringToFront()
+			AppActivation.bringToFront(userInitiated: true)
 			openWindow(id: "settings")
 		}
 
@@ -560,7 +542,7 @@ struct EnrollmentWindow: View {
 			// Settings has no way in but the menu bar, which makes it the one window that
 			// cannot be opened from a script — so checking a change to it meant clicking
 			// through the menu by hand every rebuild. `--settings` opens it straight from
-			// the command line, the same way `--preview-capsule` shows the lock panel.
+			// the command line.
 			//
 			// It lives here because this window is the only scene guaranteed to exist at
 			// launch, so it is the only savedApp holding an `openWindow` this early.
@@ -617,15 +599,7 @@ struct EnrollmentWindow: View {
 				return
 			}
 
-			// Launch presents this window unconditionally; step back out if the user is
-			// already set up and simply started the app. Anything opened on purpose —
-			// "Add a Face", the menu item — stays, which is the whole point of it.
-			if SetupRequest.shouldDismissImmediately(isEnrolled: store.isEnrolled) {
-				dismissWindow(id: "enrollment")
-				AppActivation.returnToBackgroundIfIdle()
-			} else {
-				AppActivation.bringToFront()
-			}
+			AppActivation.bringToFront(userInitiated: SetupRequest.isDeliberateOpen)
 		}
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
 	}

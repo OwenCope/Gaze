@@ -1,5 +1,32 @@
 # Gaze: left/right challenge resets and choppy animation
 
+## Walk-away integration and current artifact — September 15, 2026
+
+The new walk-away implementation has been audited and integrated. It observes every
+analyzed frame, so a face or analysis failure between polls cannot disappear from
+the evidence history. Only fresh no-face captures spanning four seconds allow a
+lock request. Stale repeats, unknown analysis, superseded tasks and session/input/
+permission/policy changes cannot supply proof. The camera closes on cancellation;
+checks wait 30 seconds after each attempt while input remains idle. The owner's
+toggle remains off, and no live walk-away trial was automated.
+
+The lead corrected a session guard that required an explicit unlocked flag: the
+read-only session check on this Mac showed that flag absent while console and login
+state were valid. The watcher now uses the existing owner-console session lease.
+Other corrections and historical findings are recorded in
+`Tools/Release/WALK-AWAY-READINESS-20260915.md`.
+
+99 presence/scheduling checks, 9 execution-policy checks and production lifecycle
+wiring pass. All 860 unlock/source/gate regressions also pass after the camera
+observation hook. This does not establish a real-world false-lock rate.
+
+Current Gaze executable: built 2026-09-15 21:53:01, SHA-256
+`f75675d3f58213ab4128884b7f7274153d008937141b42e8b656dc8904ee289c`.
+Strict signature verification passed; `script/build_and_run.sh --no-build` launched
+PID 46045 from this exact checkout. A signed status probe to the running browser
+approval service passed without requesting a camera or credential. Distribution,
+model rights and live authentication gates remain open.
+
 ## Configurable movement count — September 15, 2026, 21:31
 
 The owner confirmed a choice between one and two movement challenges. Settings now
