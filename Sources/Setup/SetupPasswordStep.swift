@@ -47,7 +47,7 @@ struct SetupPasswordStep: View {
 				)
 					// The one place in setup where something is *wrong* rather than
 					// merely unfinished, and the only place a nudge is warranted.
-					.modifier(ShakeEffect(travel: shake))
+					.modifier(ShakeEffect(travel: shake, isEnabled: !reduceMotion))
 
 				// Reserved whether or not it is filled, so the buttons below do not jump
 				// up the screen the first time a password is wrong.
@@ -110,14 +110,21 @@ struct SetupPasswordStep: View {
 /// travel further than the first. This always covers the same distance and always ends at
 /// zero, however often it is retriggered.
 struct ShakeEffect: GeometryEffect {
-	var travel: Int
+	private var progress: CGFloat
+	var isEnabled: Bool
+
+	init(travel: Int, isEnabled: Bool = true) {
+		progress = CGFloat(travel)
+		self.isEnabled = isEnabled
+	}
 
 	var animatableData: CGFloat {
-		get { CGFloat(travel) }
-		set { travel = Int(newValue.rounded()) }
+		get { progress }
+		set { progress = newValue }
 	}
 
 	func effectValue(size: CGSize) -> ProjectionTransform {
+		guard isEnabled else { return ProjectionTransform(.identity) }
 		let phase = animatableData.truncatingRemainder(dividingBy: 1)
 		let offset = sin(phase * .pi * 3) * 7 * (1 - phase)
 		return ProjectionTransform(CGAffineTransform(translationX: offset, y: 0))

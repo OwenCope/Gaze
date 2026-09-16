@@ -116,6 +116,10 @@ struct SetupFlow: View {
 					onOpenSettings: purpose == .onboarding ? {
 						AppActivation.bringToFront(userInitiated: true)
 						openWindow(id: "settings")
+					} : nil,
+					onTestRecognition: purpose == .onboarding ? {
+						AppActivation.bringToFront(userInitiated: true)
+						openWindow(id: "test")
 					} : nil
 				)
 			}

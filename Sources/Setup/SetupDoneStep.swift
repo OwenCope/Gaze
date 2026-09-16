@@ -61,11 +61,13 @@ struct SetupDoneStep: View {
 	/// is nothing to open (previews, tests): the screen stays a single button.
 	/// Ignored on failure and add-face runs, which keep their existing buttons.
 	var onOpenSettings: (() -> Void)? = nil
+	/// Opens the recognition check without locking the Mac. Only shown after a
+	/// complete first-run setup; nil keeps existing callers and previews unchanged.
+	var onTestRecognition: (() -> Void)? = nil
 
 	@State private var trigger = 0
 
 	private var didFail: Bool { failure != nil }
-	private var isComplete: Bool { !didFail && unfinished.isComplete }
 
 	/// Whether the Done screen offers the secondary route into Settings.
 	///
@@ -80,6 +82,10 @@ struct SetupDoneStep: View {
 		Self.showsFinishInSettings(failed: didFail, unfinished: unfinished, isAddingFace: isAddingFace, canOpenSettings: onOpenSettings != nil)
 	}
 
+	private var showsRecognitionAction: Bool {
+		!didFail && unfinished.isComplete && !isAddingFace && onTestRecognition != nil
+	}
+
 	static func title(failed: Bool, unfinished: SetupUnfinished, isAddingFace: Bool) -> String {
 		if failed { return "Setup didn’t finish" }
 		if isAddingFace { return "Face added" }
@@ -89,7 +95,7 @@ struct SetupDoneStep: View {
 	private var message: String {
 		if let failure { return failure }
 		if isAddingFace { return "Your new face is saved.\nYour unlock settings haven’t changed." }
-		return isComplete ? "Gaze is ready for your next unlock.\nYour password and Touch ID are still there when you need them." : unfinished.summary
+		return unfinished.summary
 	}
 
 	var body: some View {
@@ -99,12 +105,25 @@ struct SetupDoneStep: View {
 			figureHeight: 180
 		) {
 			SetupMark(kind: didFail ? .failure : .success, diameter: 180, trigger: trigger)
+		} detail: {
+			if showsRecognitionAction {
+				Text("Test Recognition uses the camera without locking or unlocking this Mac.")
+					.font(.caption)
+					.foregroundStyle(Theme.setupSecondary)
+					.multilineTextAlignment(.center)
+					.fixedSize(horizontal: false, vertical: true)
+					.frame(maxWidth: 400)
+					.padding(.top, 12)
+			}
 		} actions: {
 			SetupButton(title: didFail ? "Try Again" : "Done", action: didFail ? onRetry : onDone)
 			if didFail {
-			SetupSecondaryButton(title: "Close", action: onDone)
+				SetupSecondaryButton(title: "Close", action: onDone)
 			} else if showsSettingsAction {
-			SetupSecondaryButton(title: "Finish in Settings", action: { onOpenSettings?() })
+				SetupSecondaryButton(title: "Finish in Settings", action: { onOpenSettings?() })
+			} else if showsRecognitionAction, let onTestRecognition {
+				SetupSecondaryButton(title: "Test Recognition", action: onTestRecognition)
+					.help("Uses the camera to check your face. It does not lock or unlock the Mac.")
 			}
 		}
 		// Played once the view is actually on screen rather than on appear, so it
