@@ -1,3 +1,4 @@
+import { PageIntro } from "@/components/page-intro";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { TopNav } from "@/components/top-nav";
@@ -48,17 +49,7 @@ export default async function Releases() {
       className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased"
     >
       <TopNav />
-      <section className="px-6 py-16 sm:py-20">
-        <div className="mx-auto max-w-[1080px]">
-          <p className="mb-5 text-base font-medium text-[var(--muted-ink)]">Releases</p>
-          <h1 className="text-balance text-[clamp(2.5rem,6vw,4rem)] font-semibold leading-[1.05] tracking-[-0.035em]">
-            The latest from Gaze.
-          </h1>
-          <p className="mt-4 max-w-xl text-lg leading-relaxed text-[var(--muted-ink)]">
-            New builds, thoughtful fixes, and the details behind each update.
-          </p>
-        </div>
-      </section>
+      <PageIntro eyebrow="Releases" title="What’s new in Gaze." description="Builds, release notes, and the changes behind each update." />
 
       <section className="px-6 pb-20">
         <div className="mx-auto max-w-[1080px]">

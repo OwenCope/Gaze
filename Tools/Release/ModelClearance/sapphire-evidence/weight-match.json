@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/cshariq/Sapphire",
+  "commit": "ee56de09a0c5ab2cbf442858de36780a0cb151b2",
+  "remotePath": "Sapphire/Services/FaceID/Models/ArcFace.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+  "localPath": "Resources/FaceEmbedding.mlmodelc/weights/weight.bin",
+  "bytes": 87197184,
+  "gitBlobSha1": "004ee9ab6fbfb4fd0c4c34a2bc89be4db624ddf8",
+  "sha256": "c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545",
+  "repositoryLicense": "AGPL-3.0",
+  "redistributionClearance": "unresolved"
+}

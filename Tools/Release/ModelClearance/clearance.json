@@ -68,16 +68,20 @@
         ]
       },
       "provenance": {
-        "summary": "Reported to come from Sapphire, by cshariq; source and licensing of these exact weights unverified. Manifest author is com.apple.CoreML; embedded build metadata says only TorchScript conversion via coremltools on 2026-06-15. How the file arrived in this working copy is unrecorded.",
+        "summary": "Precompiled weight bytes match Sapphire at pinned commit ee56de09a0c5ab2cbf442858de36780a0cb151b2. Raw package is different. Matching bytes do not establish upstream training provenance or historical local acquisition.",
         "evidenceRefs": [
-          "NOTICE.md:35-46"
+          "Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md",
+          "Tools/Release/ModelClearance/sapphire-evidence/weight-match.json"
         ],
-        "status": "reported-unverified"
+        "status": "weight-source-matched-upstream-unresolved"
       },
       "license": {
-        "summary": "No permission or licence tied to these hashes and the intended distribution scope. Credit is not permission: InsightFace-descended weights would be non-commercial-research-only for the pretrained models (separate licence via upstream); a Sapphire/GPL-3.0-covered file would need a copyleft analysis, not an attribution line.",
+        "summary": "Pinned Sapphire repository LICENSE is AGPL-3.0, not GPL-3.0. Model-specific/upstream coverage and obligations for the intended Gaze distribution remain unresolved; no clearance inferred from a repository licence or byte match.",
         "grant": "",
-        "evidenceRefs": [],
+        "evidenceRefs": [
+          "Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md",
+          "Tools/Release/ModelClearance/sapphire-evidence/LICENSE"
+        ],
         "redistributionScope": [],
         "status": "unresolved"
       },
@@ -281,7 +285,7 @@
     {
       "id": "app-icon",
       "kind": "icon",
-      "description": "App icon (Icon Composer bundle); glyph generated in-repo. Compiled by build.sh into Assets.car + AppIcon.icns.",
+      "description": "Current companion app icon in an Icon Composer bundle, compiled into Assets.car and AppIcon.icns. The old keyhole generator is not evidence for the current artwork.",
       "repoPaths": [
         "Resources/AppIcon.icon"
       ],
@@ -301,11 +305,11 @@
         ]
       },
       "provenance": {
-        "summary": "Glyph generated in-repo by scripts/make_icon_mark.swift; gradients live in icon.json.",
+        "summary": "The current icon asset depicts the Gaze companion. scripts/make_icon_mark.swift draws an older keyhole and does not establish provenance for these current bytes. Authorship/scope remains to be recorded.",
         "evidenceRefs": [
           "scripts/make_icon_mark.swift:1-24"
         ],
-        "status": "stated-in-repo"
+        "status": "current-asset-provenance-unresolved"
       },
       "license": {
         "summary": "No recorded authorship/grant statement covering redistribution in the app bundle.",

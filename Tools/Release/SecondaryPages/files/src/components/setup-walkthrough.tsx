@@ -8,8 +8,8 @@ const steps = [
     title: "Make it yours",
     label: "Enroll",
     body: "Enroll your face from a few angles, review camera access, then choose whether to enable automatic unlocking. You can finish skipped steps in Settings.",
-    image: "/features/welcome.jpg",
-    alt: "Gaze’s welcome screen during setup",
+    image: "/product/setup-welcome.webp",
+    alt: "Native preview of Gaze’s welcome screen during setup",
     caption: "Setup gives you control over what you enable.",
   },
   {
@@ -25,9 +25,9 @@ const steps = [
     title: "Back to what you were doing",
     label: "Unlock",
     body: "Once the configured recognition and movement checks pass, Gaze submits your saved Mac password and waits for macOS. Your password and Touch ID remain available. After a restart, sign in normally so Gaze can start.",
-    image: "/previews/settings-poster.png",
-    alt: "Gaze Settings showing stored-password controls",
-    caption: "Change or revoke your saved password in Settings.",
+    image: "/product/setup-how.webp",
+    alt: "Native setup preview explaining Gaze’s local recognition and saved password",
+    caption: "Setup preview. Change or revoke your saved password later in Settings.",
   },
 ];
 
@@ -63,7 +63,7 @@ export function SetupWalkthrough() {
             }}
             className="min-h-12 cursor-pointer rounded-xl px-2 py-3 text-sm font-medium text-[var(--muted-ink)] transition-[background-color,color,box-shadow] duration-200 aria-selected:bg-[var(--surface)] aria-selected:text-[var(--foreground)] aria-selected:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] sm:text-base"
           >
-            <span className="mr-2 tabular-nums opacity-60">{index + 1}</span>{step.label}
+            <span aria-hidden className="mr-2 tabular-nums opacity-60">{index + 1}</span>{step.label}
           </button>
         ))}
       </div>

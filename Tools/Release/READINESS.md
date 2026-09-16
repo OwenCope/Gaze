@@ -2,6 +2,14 @@
 
 ## Current local checkpoint — September 16, 2026
 
+Website update: public and private page layouts are now unified, old gallery media
+is replaced with current labelled setup previews, and Credits is revised after
+owner feedback. Production build, TypeScript, scoped lint and synthetic local
+page checks pass. Preview remains http://127.0.0.1:55523; logs are under
+build/website-whole-site-final. See SecondaryPages/REPORT.md and SOURCES.json.
+Admin reliability source/report packaging is now complete in AdminReliability/.
+
+
 Local development builds are available. Public release is not approved. The owner
 requested localhost only and deferred Developer ID signing; nothing was deployed
 or uploaded.
@@ -20,7 +28,8 @@ or uploaded.
   `http://127.0.0.1:55523` with synthetic data and no production secrets. The full
   production build, TypeScript, scoped lint and all five HTTP assertions pass.
   The switcher is below the laptop, hover tilt is removed, FAQ/mobile navigation
-  animate, and Liquid glass uses a clean crop of the existing native recording.
+  animate, and current Solid/Semi media use the corrected scale and clean background.
+  The old Liquid Glass clip was removed; a faithful current capture remains pending.
 
 The integrated website includes private metadata configuration, conditional catalog
 mutations, atomic release renames, version-checked tester notes, bounded email-code
@@ -33,9 +42,9 @@ service or live administrator acceptance results.
 
 The homepage revision passed desktop/mobile interaction checks, including rapid
 FAQ reversal, immediate keyboard/reduced-motion changes, closed-content inertness,
-Escape focus restoration and automatic preview pausing. Native glass media fully
-decodes and has faststart. See HomeMotion/ReadySources/REPORT.md and
-HomeMotion/NativeGlassCrop/REPORT.md for evidence and recording/compositing limits.
+Escape focus restoration and automatic preview pausing. Earlier native-glass capture evidence is historical; that old flat-face media is
+no longer selected by the website. See HomeMotion/ReferenceCorrection/REPORT.md
+for the current media and capture limitations.
 
 Additional homepage polish is integrated: a compact demo layout, pointer-only
 theme-icon motion, scoped feature-rail keyboard controls and larger footer links.
@@ -44,9 +53,10 @@ See HomeMotion/SmallPolish/REPORT.md.
 
 The owner now reports a successful basic unlock on the current Gaze candidate.
 That smoke check is passed by owner report; broader negative/fallback, wake/relock
-and clean-install/update acceptance are still pending. The owner also reports
-GPL-3.0 licensing for the recognition model; the exact source URL and weight
-coverage are being confirmed. See ModelClearance/OWNER-REPORT-20260916.md.
+and clean-install/update acceptance are still pending. The owner supplied Sapphire’s source. The precompiled recognition weights match
+the pinned Sapphire weight blob, whose repository LICENSE is AGPL-3.0 (not the
+reported GPL-3.0). Upstream/model coverage and distribution obligations remain
+unresolved. See ModelClearance/SAPPHIRE-EVIDENCE-20260916.md.
 
 Remaining public-release requirements: model/asset redistribution clearance (six
 groups unresolved), Developer ID/notarization when supplied, owner-supervised live

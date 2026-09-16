@@ -1,5 +1,57 @@
 # Resume handoff — September 16, 2026
 
+## Latest checkpoint — whole website pass, 2026-09-16 10:20 UTC
+
+This section supersedes the historical task/status sections below.
+
+The owner asked to inspect and improve the ENTIRE website, including secondary
+and private pages. Actual source at /Users/owencope/Developer/gaze-site is updated;
+33 source/media mirrors and hashes are in Tools/Release/SecondaryPages/. The report
+lists scope, visual decisions, browser evidence and limitations. No deployment,
+commit, branch, push or git status/diff occurred. Preserve concurrent user work.
+
+The local production preview is http://127.0.0.1:55523, runner exec 9820, logs
+build/website-whole-site-final. It is a secret-free copy with synthetic records.
+The optional --admin-ui build-runner flag enables only preview@example.test as
+admin and writes a synthetic local cookie to the ignored output directory. Never
+copy that test configuration into production or use real auth/data for UI checks.
+Use the installed agent-browser executable under
+/Users/owencope/.npm/_npx/6de2aa2fded2970c/node_modules/.bin/agent-browser with
+BrowserOS neo. Session gaze-site-review contains the synthetic admin cookie;
+public/owner browser tabs were not changed.
+
+New work: consistent page introductions and dark surfaces; concise Credits cards;
+current native setup gallery/WebPs instead of stale panel/desktop captures;
+keyboard-operated How It Works; clearer Security storage ledger; changelog
+Releases and smaller Sign-in; styled Testers/404; persistent admin navigation and
+larger editing controls. Authentication, metadata writes and privacy gates remain.
+The dashboard mobile overflow found during checks was fixed and rebuilt. See
+build/website-whole-site/page-checks.json and final-checks.json in the final folder.
+Do not redo completed heads: Ivo (Testers), Lux (404), Tova (admin nav), Gus (current
+gallery), earlier Credits/Features work. Root integrated the rest. Account-button
+and release-gallery behavior remain outside the resumed work.
+
+Hydra: the owner supplied Droppy Code developer clarification that Codex spawned
+agents ARE Hydra heads. There is no separate launcher to discover. Root previously
+claimed otherwise; that was wrong. Use the available spawning tool for authorized
+heads, and do not treat generic delegated-head rows as proof of launch failure.
+
+Gaze app artifact remains 919e168b...22ab14. Owner reported basic unlocking works.
+No app source/build or live lock/camera/credential test occurred in this website pass.
+The model source research found the actual 87MB precompiled weights byte-match
+Sapphire at ee56de09a0c5ab2cbf442858de36780a0cb151b2. Its LICENSE is AGPL-3.0.
+NOTICE.md and clearance.json now record this evidence without granting clearance.
+All six asset/model groups remain unresolved; app icon's old keyhole generator
+was corrected as insufficient provenance for the current companion icon.
+Current source evidence: ModelClearance/SAPPHIRE-EVIDENCE-20260916.md.
+
+Still not a public shipping approval: native current Liquid Glass capture,
+model/asset terms, broader owner acceptance, clean installation/update, Developer
+ID/notarization (owner deferred), and actual production service wiring remain open.
+Gaze first; Passwords later. The raw personal screenshot and stale Liquid Glass
+footage were not reintroduced into the rendered pages.
+
+
 ## Owner acceptance/licence update — 2026-09-16 09:21 UTC
 
 The owner confirms basic unlocking works on the current build. Record that basic

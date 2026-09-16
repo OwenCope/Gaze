@@ -32,41 +32,37 @@ are here for how any of this works.
 
 ### The recognition model
 
-`Resources/FaceEmbedding.mlpackage` — the model faces are matched against. It is
-reported to come from **Sapphire**, by cshariq, but the source and licensing of
-these exact weights have not been verified:
-the file carries no embedded author, licence, or source URL (Manifest author is
-`com.apple.CoreML`; embedded build metadata says only that it was converted from
-TorchScript with coremltools on 2026-06-15), and how it arrived in this working
-copy is unrecorded. As fingerprinted 2026-09-15:
+The build prefers `Resources/FaceEmbedding.mlmodelc` over the raw package.
+Its 87,197,184-byte weight file matches the ArcFace weights in
+[Sapphire](https://github.com/cshariq/Sapphire) at commit
+`ee56de09a0c5ab2cbf442858de36780a0cb151b2` (Git blob SHA-1
+`004ee9ab6fbfb4fd0c4c34a2bc89be4db624ddf8`; SHA-256
+`c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545`).
 
-- `Data/com.apple.CoreML/model.mlmodel` (184,289 bytes): SHA-256
-  `b8992d7979904fb5d6b0cf9ec452f158d9257cd820730328de9242eb6652f494`
-- `Data/com.apple.CoreML/weights/weight.bin` (7,408,704 bytes): SHA-256
-  `f9145f919e28153bee573651d9681d9917858be038998f59233bc7bd28c00da9`
+The repository's pinned LICENSE is **AGPL-3.0**, correcting the earlier GPL-3.0
+reference. The matching bytes identify an available source, not who trained the
+model or which upstream rights cover it. The inspected README and model metadata
+provide no separate weight licence or training provenance. Gaze's MIT licence
+has not been changed, and redistribution is not cleared by this finding.
 
-The source-archive script excludes and re-checks for this package. A geometry
-fallback exists for practice features, but the current Mac-unlock path refuses
-it; it is not an approved substitute for a validated recognition model.
+The raw `Resources/FaceEmbedding.mlpackage` is different: its 7,408,704-byte weight
+file has SHA-256 `f9145f919e28153bee573651d9681d9917858be038998f59233bc7bd28c00da9`.
+Its provenance remains unresolved. Do not use its fingerprint as a substitute for
+the precompiled model actually bundled by the build.
 
-ArcFace names a model architecture, not the license of a particular weight file.
-Code and model licenses must be checked separately. Upstream references checked
-on 2026-09-15: [InsightFace README](https://github.com/deepinsight/insightface#license)
-and [InsightFace licensing](https://www.insightface.ai/).
+ArcFace names an architecture, not a licence for particular weights. If these
+weights descend from InsightFace, its pretrained-model restrictions need to be
+resolved separately from its MIT code licence. See
+https://github.com/deepinsight/insightface#license and https://www.insightface.ai/.
+Likewise, AGPL-covered material requires analysis of applicable source, licence
+and notice obligations for the intended distribution; attribution alone does
+not settle those questions.
 
-- If the weights descend from InsightFace: the **code** is MIT, but the
-  **pretrained recognition models (and the training data behind them) are for
-  non-commercial research only**. Commercial use needs a separate licence —
-  upstream names `recognition-oss-pack@insightface.ai` for the open-source
-  recognition packs. Crediting the authors does not grant redistribution or
-  commercial-use rights.
-- If the file came via Sapphire, whose repository is GPL-3.0: GPL is copyleft,
-  not credit-only. Bundling a GPL-covered file in an MIT-labelled distribution
-  needs a proper licence analysis, not an attribution line.
-
-Either way, a credit line is not permission. The launch gate stays open until a
-per-model permission or licence, tied to the hashes above and the intended
-distribution scope, is recorded here.
+Evidence and inspected-source limits are recorded in
+[the Sapphire source report](Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md).
+The launch gate remains open pending exact model coverage and distribution terms.
+The source-archive script excludes model inputs. The geometry fallback is not an
+approved substitute for the Mac-unlock recognition model.
 
 ### FaceIDKit
 

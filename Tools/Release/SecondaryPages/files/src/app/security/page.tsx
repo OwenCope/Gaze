@@ -1,3 +1,4 @@
+import { PageIntro } from "@/components/page-intro";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { TopNav } from "@/components/top-nav";
@@ -31,11 +32,7 @@ export default function SecurityPage() {
   return (
     <main className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased">
       <TopNav />
-      <header className="site-container py-16 sm:py-20">
-        <p className="mb-5 text-base font-medium text-[var(--muted-ink)]">Security</p>
-        <h1 className="max-w-[17ch] text-balance text-[clamp(2.5rem,6vw,4rem)] font-semibold leading-[1.05] tracking-[-0.035em]">Your Mac. Your data. Your choice.</h1>
-        <p className="mt-6 max-w-[38rem] text-lg leading-relaxed text-[var(--muted-ink)]">Recognition happens on your Mac, without a Gaze account. Here’s exactly what the app keeps and what protects it.</p>
-      </header>
+      <PageIntro eyebrow="Security" title="Recognition stays here." description="Gaze processes your face on your Mac. See what it stores, what protects it, and the choices you control." />
       <section aria-labelledby="storage-heading" className="site-container pb-20">
         <div className="overflow-hidden rounded-[28px] bg-[var(--surface)] shadow-[var(--card-shadow)]">
           <div className="grid gap-8 border-b border-[var(--hairline)] p-6 sm:p-10 md:grid-cols-[0.8fr_1.2fr] md:gap-16">

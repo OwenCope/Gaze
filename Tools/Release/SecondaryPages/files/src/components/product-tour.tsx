@@ -20,34 +20,33 @@ const shots: Shot[] = [
       "This website preview shows how the lock-screen panel guides you through the configured movement prompts before Gaze unlocks your Mac.",
   },
   {
-    media: "/features/settings-pan.mp4",
-    poster: "/previews/settings-poster.png",
-    alt: "Gaze Settings with stored-password controls",
-    eyebrow: "Your password",
-    title: "Keep control of the saved password.",
+    media: "/product/setup-how.webp",
+    alt: "Native setup preview explaining Gaze’s local recognition and password storage",
+    eyebrow: "Your choices",
+    title: "Know what you’re turning on.",
     body:
-      "Gaze encrypts the saved password with a key from this Mac. After authorization, you can update it or remove it in Settings.",
+      "Setup explains what Gaze stores and how unlocking works. Choose recognition-only mode or enable automatic unlocking after reviewing the permissions.",
   },
   {
-    media: "/features/welcome.jpg",
-    alt: "The Gaze setup flow",
+    media: "/product/setup-companion.webp",
+    alt: "Native preview of Gaze’s companion introduction during setup",
     eyebrow: "Setup",
     title: "Set it up at your pace.",
     body:
-      "Enroll your face, review permissions and choose whether Gaze may unlock this Mac. You can finish skipped steps in Settings.",
+      "Meet the companion and practice the movements before using Gaze at the lock screen. These are previews of the current setup screens.",
   },
 ];
 
 export function ProductTour() {
   return (
-    <section id="tour" className="scroll-mt-20 px-6 pb-16 pt-16">
+    <section id="tour" className="scroll-mt-20 px-6 pb-16 pt-2">
       <div className="mx-auto max-w-[1080px]">
         <article>
           <Frame media={shots[0].media} poster={shots[0].poster} alt={shots[0].alt} />
           <div className="mt-8 grid gap-5 md:grid-cols-2 md:gap-12">
             <div>
               <p className="text-[14px] font-medium text-[var(--faint-ink)]">{shots[0].eyebrow}</p>
-              <h2 className="mt-3 max-w-[16ch] text-balance text-[clamp(1.9rem,4vw,2.75rem)] font-bold leading-[1.08] tracking-[-0.03em]">
+              <h2 className="mt-3 max-w-[16ch] text-balance text-[clamp(1.9rem,4vw,2.75rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
                 {shots[0].title}
               </h2>
             </div>
@@ -72,7 +71,7 @@ function TourPanel({ shot }: { shot: Shot }) {
     <article className="flex flex-col rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 md:p-8">
       <div>
         <p className="text-[14px] font-medium text-[var(--faint-ink)]">{shot.eyebrow}</p>
-        <h2 className="mt-3 text-balance text-[clamp(1.75rem,3.6vw,2.5rem)] font-bold leading-[1.08] tracking-[-0.03em]">
+        <h2 className="mt-3 text-balance text-[clamp(1.75rem,3.6vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
           {shot.title}
         </h2>
         <p className="mt-4 max-w-md text-[16px] leading-relaxed text-[var(--muted-ink)]">

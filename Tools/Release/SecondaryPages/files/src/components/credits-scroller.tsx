@@ -64,7 +64,7 @@ function ProjectCredit({
 }) {
   return (
     <article className="flex h-full flex-col rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-7 shadow-[var(--card-shadow)]">
-      <div className="flex items-center gap-5">
+      <div className="flex flex-wrap items-center gap-4 sm:gap-5">
         <CreditPortrait credit={credit} size="project" />
         <div className="min-w-0">
           <h3 className="text-pretty text-[28px] font-semibold leading-tight tracking-[-0.025em]">
@@ -143,7 +143,7 @@ function PersonCredit({
         </p>
       )}
 
-      <div className="mt-auto pt-1">
+      <div className="mt-auto flex flex-wrap items-end gap-x-5 pt-1">
         <CreditLinks credit={credit} contributions={contributions} />
 
         {credit.sideApp && (
