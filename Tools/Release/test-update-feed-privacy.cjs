@@ -91,6 +91,14 @@ m.require = (request) => {
   if (request === "next/server") return nextServer;
   if (request === "@/lib/store") return fakeStore;
   if (request === "@/lib/settings") return fakeSettings;
+  if (request === "@/lib/release-download") {
+    const helperPath = path.join(SITE_DIR, "src/lib/release-download.ts");
+    const helper = new Module(helperPath, null);
+    helper._compile(ts.transpileModule(fs.readFileSync(helperPath, "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText, helperPath);
+    return helper.exports;
+  }
   return siteRequire(request);
 };
 m._compile(js, staged);
@@ -136,7 +144,7 @@ function mkRelease(tag, opts = {}) {
   currentGate = false;
   currentData = [
     mkRelease("0.9"),
-    mkRelease("0.10", { download: { url: "https://gazeunlock.com/dl/Gaze-0.10.dmg", name: "Gaze-0.10.dmg", size: 42 } }),
+    mkRelease("0.10", { download: { url: "https://fixture.public.blob.vercel-storage.com/Gaze-0.10.dmg", name: "Gaze-0.10.dmg", size: 42 } }),
     mkRelease("0.12", { prerelease: true }),
     mkRelease("9.9", { draft: true }),
     mkRelease("9.8", { private: true }),
@@ -150,7 +158,7 @@ function mkRelease(tag, opts = {}) {
       `public: expected latest.tag "0.10" (numeric 0.10>0.9, draft 9.9/private 9.8 excluded, prerelease 0.12 deferred), got ${JSON.stringify(body)}`);
     assert(body.latest.notes === "notes 0.10", "public: notes must carry stored body");
     assert(body.latest.prerelease === false, "public: prerelease flag must pass through");
-    assert(body.latest.download && body.latest.download.url === "https://gazeunlock.com/dl/Gaze-0.10.dmg",
+    assert(body.latest.download && body.latest.download.url === (currentRoute ? "https://gazeunlock.com/dl/Gaze-0.10.dmg" : "https://fixture.public.blob.vercel-storage.com/Gaze-0.10.dmg"),
       "public: download must pass through");
     assert(readAllCalls === 1, `public: expected exactly 1 readAll call, got ${readAllCalls}`);
     checkNoStore(res, "public");

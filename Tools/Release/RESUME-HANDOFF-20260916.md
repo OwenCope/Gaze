@@ -3,6 +3,74 @@
 The owner warned that the connection may drop. This records the active task and
 remaining integration work; it is not a launch approval.
 
+## Website production/privacy follow-up
+
+Kai 2's production build report was audited. The lead corrected its script to parse
+--smoke properly, allowlist source inputs, clear inherited credentials, use a temp
+working directory, bind loopback on an ephemeral port, assert response bodies/status,
+and clean up the owned server on exit. Its stronger smoke found a real /admin 500
+caused by node:crypto in Edge middleware. The auth guard was moved unchanged to
+Node-based src/proxy.ts. The isolated full build and five HTTP assertions now pass.
+No live data or production configuration was used.
+
+Vera's private-metadata patch was audited, corrected and APPLIED LOCALLY to gaze-site:
+storage.ts, store.ts, testers.ts and roles.ts. Private-only/Vercel configuration cannot
+fall back to disk; explicit private token/OIDC options cannot fall back to public
+credentials. Missing/corrupt private metadata refuses writes; mutations use strict
+reads so outages cannot seed partial catalogs, and unavailable roles grant nothing.
+The current-source SDK/filesystem tests and website typecheck pass. .env.example
+now lists optional Apple/email settings and separate private Blob settings, with no
+secret values. No store was created, no metadata migrated/deleted, and nothing deployed.
+
+Production deployment now additionally requires a private Blob store and copy/verify
+of the five metadata documents before cutover. Previously public originals require
+separate reviewed cleanup. Follow Tools/Release/MetadataPrivacy/METADATA-PRIVACY-HANDOFF.md.
+Logs: build/metadata-privacy-current.log, build/website-build-review.log, and
+build/website-build-check/{build,serve,smoke}.log. Do not call the website ready to
+publish merely because its synthetic build passes.
+
+## Latest integration checkpoint — resumed September 16
+
+The detailed Nova 2 report was received and the lead inspected the six files.
+The real sixth file is CompanionIntegrationTests.swift; GuidanceCaptionTests.swift
+was unchanged. Nova's pending/progress suite and the full companion harness pass.
+The combined main-app build also passes after the lead's corrections below.
+
+- Ada: buttons remain in the hierarchy with named accessibility actions before
+  hover; stored-password wording is scoped to Gaze. Photo-rejection availability
+  now checks SpoofDetector, and paused Settings offers Resume.
+- Otto: Finish in Settings uses the direct openWindow action, avoiding a possibly
+  uninitialised menu-installed callback. 54 onboarding renders/checks pass.
+- Lux: the validator now checks nonempty/schema/identity evidence, rejects directory
+  coverage shortcuts, and fingerprints all model/asset payloads including precompiled
+  FaceEmbedding and Liveness and package metadata. Fifteen tests pass. Six real
+  artifact groups remain unresolved; no licence was inferred.
+- Pip: preflight invokes clearance by default; --build-tools-only is explicitly
+  labelled. DIST=1 builds also require clearance before staging. Tool discovery uses
+  xcrun for stapler. 23 identity/wiring + 29 verifier + 12 preflight checks pass.
+- Ivo: the patch was corrected and APPLIED LOCALLY to gaze-site. Shared policy limits
+  destinations to HTTPS public Vercel Blob URLs with no userinfo/custom port/query/
+  fragment and bounded DMG/ZIP filenames. The feed omits placeholders and ambiguous
+  targets. Three site files changed; staged/current download tests, prior privacy
+  tests and full site tsc pass. Nothing deployed or uploaded.
+
+Logs are build/launch-integration-20260916.log, guidance-integration-20260916.log,
+settings-ux-20260916.log, onboarding-20260916.log, release-regressions-20260916.log,
+clearance-tests-20260916.log, clearance-current-20260916.json,
+release-preflight-20260916.log, download-staged-20260916.log,
+download-current-20260916.log, and feed-privacy-20260916.log.
+The app was reloaded through script/build_and_run.sh --no-build. PID 75024;
+built 2026-09-16 07:48:31; SHA-256
+74e63dc41e9f7a4b6d61b693e90f824dcee6b8490e8b29bd25a4ad4a5f9c0b4d.
+No Swift source was newer. Current public /api/latest still returns 404; site
+changes remain local. Native live acceptance is not inferred from render checks.
+
+Two async questions are pending: where model permissions/authorship records live,
+and whether the owner can perform one normal lock/unlock on this running build.
+No answer yet; retain unresolved rights and live-acceptance status. Public launch still requires
+that evidence, Developer ID/notarization, real acceptance and a website deployment.
+The historical pending-work list below is superseded by this checkpoint.
+
 ## Owner intent and constraints
 
 - Finish Gaze launch preparation, then improve UI/UX. Gaze Passwords was also

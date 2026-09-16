@@ -26,7 +26,7 @@ python3 Tools/Release/ModelClearance/validate.py [--json] [--skip-bytes]
   unclear clearance, missing grant/refs, incomplete scope, changed
   size/hash, missing file, or a model file under `Resources/` with no
   clearance entry). `--json` emits `{"verdict", "reasons", "disclaimer"}`.
-- `--skip-bytes` checks evidence records only (no disk access).
+- `--skip-bytes` checks evidence records only (no disk access) and reports RECORDS_ONLY, never a release PASS.
 
 ## Artifact coverage
 
@@ -38,9 +38,18 @@ python3 Tools/Release/ModelClearance/validate.py [--json] [--skip-bytes]
 | `credit-portraits` | 9 files, per-file hashes | unresolved — permissions unrecorded |
 | `app-icon` | glyph + `icon.json` hashes | unresolved — authorship unconfirmed |
 
-Out of scope here: `Liveness.*` (absent from this copy; `verify.sh` does
-not require it). If any `.mlmodel`/`.mlpackage` appears under `Resources/`
-without an entry, the validator refuses until it is inventoried.
+The lead checkout also contains precompiled `FaceEmbedding.mlmodelc` and
+`Liveness.mlmodelc`; build.sh can copy these directly. They and the package
+metadata are now fingerprinted. The legacy Liveness entry remains unresolved.
+All `.mlmodel`, `.mlpackage` and `.mlmodelc` payload files, plus files under
+Art/Credits/AppIcon.icon, require exact fingerprint coverage. Directory names
+alone do not cover new payloads. Empty inventories, duplicate IDs and empty
+byte identities are refused. The gate does not prove that precompiled weights
+were derived from a neighbouring source package.
+
+Release preflight invokes this validator. DIST=1 builds also refuse incomplete
+clearance before staging an output. Local development builds remain available.
+Fifteen synthetic validator cases pass; real clearance remains unresolved.
 
 This validator checks recorded evidence and byte identity, not a legal
 determination. It does not edit NOTICE.md, READINESS.md, app code, weights,

@@ -21,6 +21,8 @@ import argparse
 import hashlib
 import json
 import os
+import re
+from pathlib import Path
 import sys
 
 DISCLAIMER = (
@@ -29,7 +31,7 @@ DISCLAIMER = (
 )
 
 SCHEMA = "gaze-model-clearance/1"
-MODEL_SUFFIXES = (".mlmodel", ".mlpackage")
+MODEL_SUFFIXES = (".mlmodel", ".mlpackage", ".mlmodelc")
 
 
 def sha256_file(path):
@@ -41,36 +43,55 @@ def sha256_file(path):
 
 
 def check_evidence(inv):
-    """Refuse on missing entries, unclear clearance, or incomplete evidence."""
+    """Require a nonempty, explicit inventory; directory names are not byte evidence."""
     reasons = []
-    required = inv.get("requiredArtifacts", [])
-    scopes = set(inv.get("requiredScopes", []))
-    by_id = {a.get("id"): a for a in inv.get("artifacts", [])}
-    for rid in required:
-        a = by_id.get(rid)
-        if a is None:
-            reasons.append("missing clearance entry: %s" % rid)
-            continue
+    required = inv.get("requiredArtifacts")
+    scopes = inv.get("requiredScopes")
+    artifacts = inv.get("artifacts")
+    def strings(value):
+        return isinstance(value, list) and bool(value) and all(isinstance(v, str) and v.strip() for v in value)
+    if not strings(required) or not strings(scopes) or not isinstance(artifacts, list) or not artifacts:
+        return ["inventory requires nonempty artifacts, requiredArtifacts and requiredScopes"]
+    if not all(isinstance(a, dict) and isinstance(a.get("id"), str) and a["id"].strip() for a in artifacts):
+        return ["invalid artifact entry"]
+    ids = [a["id"] for a in artifacts]
+    if len(ids) != len(set(ids)) or len(required) != len(set(required)):
+        reasons.append("duplicate artifact identifiers")
+    for rid in set(required) - set(ids):
+        reasons.append("missing clearance entry: %s" % rid)
+    for a in artifacts:
+        rid = a["id"]
         if a.get("clearance") != "cleared":
-            reasons.append(
-                "uncleared artifact: %s (clearance=%r)"
-                % (rid, a.get("clearance"))
-            )
-            continue
-        prov = a.get("provenance", {})
-        if not prov.get("evidenceRefs"):
+            reasons.append("uncleared artifact: %s (clearance=%r)" % (rid, a.get("clearance")))
+        prov, lic = a.get("provenance", {}), a.get("license", {})
+        if not isinstance(prov, dict) or not strings(prov.get("evidenceRefs")):
             reasons.append("no provenance evidence refs: %s" % rid)
-        lic = a.get("license", {})
-        if not lic.get("grant"):
+        if not isinstance(lic, dict):
+            reasons.append("invalid licence record: %s" % rid)
+            continue
+        if not isinstance(lic.get("grant"), str) or not lic["grant"].strip():
             reasons.append("no licence/grant recorded: %s" % rid)
-        if not lic.get("evidenceRefs"):
+        if not strings(lic.get("evidenceRefs")):
             reasons.append("no licence evidence refs: %s" % rid)
-        missing = scopes - set(lic.get("redistributionScope", []))
-        if missing:
-            reasons.append(
-                "incomplete redistribution scope for %s: missing %s"
-                % (rid, sorted(missing))
-            )
+        covered_scopes = lic.get("redistributionScope", [])
+        if not strings(covered_scopes) or not set(scopes).issubset(set(covered_scopes)):
+            reasons.append("incomplete redistribution scope for %s" % rid)
+        identity = a.get("byteIdentity", {})
+        files = identity.get("files") if isinstance(identity, dict) else None
+        if not isinstance(files, list) or not files:
+            reasons.append("no byte identity files: %s" % rid)
+            continue
+        paths = set()
+        for f in files:
+            if not isinstance(f, dict):
+                reasons.append("invalid byte identity record: %s" % rid)
+                continue
+            rel = f.get("path", "")
+            if not isinstance(rel, str) or not rel.startswith("Resources/") or ".." in Path(rel).parts or rel in paths:
+                reasons.append("invalid or duplicate resource path: %s" % rid)
+            paths.add(rel) if isinstance(rel, str) else None
+            if type(f.get("bytes")) is not int or f["bytes"] < 0 or not re.fullmatch(r"[0-9a-f]{64}", str(f.get("sha256", ""))):
+                reasons.append("invalid byte identity: %s" % rid)
     return reasons
 
 
@@ -80,7 +101,12 @@ def check_bytes(inv, root):
     for a in inv.get("artifacts", []):
         for f in a.get("byteIdentity", {}).get("files", []):
             rel = f.get("path", "")
+            if not isinstance(rel, str) or not rel.startswith("Resources/") or ".." in Path(rel).parts:
+                continue
             disk = os.path.join(root, rel)
+            if not Path(disk).resolve().is_relative_to(Path(root).resolve()):
+                reasons.append("resource path escapes repository: %s" % rel)
+                continue
             if not os.path.isfile(disk):
                 reasons.append("file missing on disk: %s" % rel)
                 continue
@@ -100,47 +126,22 @@ def check_bytes(inv, root):
 
 
 def check_coverage(inv, root):
-    """Refuse when a model file under Resources has no clearance entry."""
-    known = set()
-    for a in inv.get("artifacts", []):
-        for f in a.get("byteIdentity", {}).get("files", []):
-            known.add(f.get("path", ""))
-        for p in a.get("repoPaths", []):
-            known.add(p)
-    reasons = []
-    res = os.path.join(root, "Resources")
-    if not os.path.isdir(res):
+    """Every model payload and asset file needs its own recorded fingerprint."""
+    known = {f.get("path") for a in inv.get("artifacts", [])
+             for f in a.get("byteIdentity", {}).get("files", []) if isinstance(f, dict)}
+    resources = Path(root) / "Resources"
+    if not resources.is_dir():
         return ["Resources/ directory missing"]
-    for dirpath, _dirnames, filenames in os.walk(res):
-        # Compiled outputs are build products, not clearance subjects.
-        if dirpath.endswith(".mlmodelc") or ".mlmodelc/" in dirpath:
-            continue
-        for name in filenames:
-            full = os.path.join(dirpath, name)
-            rel = os.path.relpath(full, root)
-            if rel.endswith(MODEL_SUFFIXES):
-                if rel not in known and not _covered_by_dir(rel, known):
-                    reasons.append("model file without clearance entry: %s" % rel)
-        # An .mlpackage whose files are all known is covered; a stray
-        # top-level .mlpackage dir that is not referenced at all is not.
-        for name in _dirnames:
-            if name.endswith(".mlpackage"):
-                rel = os.path.join(os.path.relpath(dirpath, root), name)
-                if rel not in known and not any(
-                    k == rel or k.startswith(rel + "/") for k in known
-                ):
-                    reasons.append(
-                        "model package without clearance entry: %s" % rel
-                    )
-    return reasons
-
-
-def _covered_by_dir(rel, known):
-    parts = rel.split(os.sep)
-    for i in range(1, len(parts)):
-        if os.sep.join(parts[:i]) in known:
-            return True
-    return False
+    covered_roots = [resources / name for name in ("Art", "Credits", "AppIcon.icon")]
+    covered_roots.extend(p for p in resources.rglob("*") if p.suffix in MODEL_SUFFIXES)
+    expected = set()
+    for path in covered_roots:
+        if path.is_file():
+            expected.add(path.relative_to(root).as_posix())
+        elif path.is_dir():
+            expected.update(f.relative_to(root).as_posix() for f in path.rglob("*") if f.is_file())
+    return ["model or asset file without clearance entry: %s" % path
+            for path in sorted(expected - known)]
 
 
 def validate(inventory_path, root, check_disk=True):
@@ -150,13 +151,18 @@ def validate(inventory_path, root, check_disk=True):
             inv = json.load(f)
     except (OSError, ValueError) as e:
         return False, ["cannot read inventory: %s" % e]
+    if not isinstance(inv, dict):
+        return False, ["inventory must be an object"]
     if inv.get("schema") != SCHEMA:
         reasons.append("unknown inventory schema: %r" % inv.get("schema"))
         return False, reasons
     reasons.extend(check_evidence(inv))
     if check_disk:
-        reasons.extend(check_bytes(inv, root))
-        reasons.extend(check_coverage(inv, root))
+        try:
+            reasons.extend(check_bytes(inv, root))
+            reasons.extend(check_coverage(inv, root))
+        except (OSError, TypeError, AttributeError, ValueError) as e:
+            reasons.append("invalid or unreadable byte inventory: %s" % e)
     return (len(reasons) == 0), reasons
 
 
@@ -172,10 +178,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
     ok, reasons = validate(args.inventory, args.root,
                            check_disk=not args.skip_bytes)
-    verdict = "PASS" if ok else "REFUSE"
+    verdict = ("RECORDS_ONLY" if args.skip_bytes else "PASS") if ok else "REFUSE"
     if args.json:
         print(json.dumps({"verdict": verdict, "reasons": reasons,
-                          "disclaimer": DISCLAIMER}, indent=2))
+                          "disclaimer": DISCLAIMER, "byteIdentityChecked": not args.skip_bytes}, indent=2))
     else:
         print("%s: model clearance" % verdict)
         for r in reasons:

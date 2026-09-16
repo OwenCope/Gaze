@@ -13,10 +13,11 @@ DID_IDENTITIES='  1) AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "Developer ID Appl
 DEV_IDENTITIES='  1) BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB "Apple Development: Fixture (TEAMID1234)"
      1 valid identities found'
 COUNT=0
+MODE=--build-tools-only
 check() {
 	local expected="$1" marker="$2"
 	local actual=0
-	bash "$ROOT/Tools/Release/preflight.sh" > "$SCRATCH/output" 2>&1 || actual=$?
+	bash "$ROOT/Tools/Release/preflight.sh" "$MODE" > "$SCRATCH/output" 2>&1 || actual=$?
 	if [ "$expected" = pass ]; then
 		test "$actual" = 0 || { cat "$SCRATCH/output"; exit 1; }
 	else
@@ -59,5 +60,9 @@ mkdir -p "$RES/FaceEmbedding.mlmodelc" "$RES/Spoof.mlmodelc"
 PATH="/usr/bin:/bin:/usr/sbin" check pass 'PREFLIGHT PASS'
 /usr/libexec/PlistBuddy -c 'Delete :NSCameraUsageDescription' "$RES/Info.plist"
 PATH="/usr/bin:/bin:/usr/sbin" check fail 'key NSCameraUsageDescription is absent'
+
+MODE=''
+export GAZE_PREFLIGHT_RESOURCES="$ROOT/Resources"
+check fail 'model/asset clearance evidence is incomplete'
 
 echo "PASS: $COUNT preflight checks; synthetic identities and resources, mocked xcrun, no signing or network."

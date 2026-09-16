@@ -140,6 +140,48 @@ class ClearanceTest(unittest.TestCase):
                             and "Liveness.mlmodel" in r for r in reasons),
                         reasons)
 
+    def test_empty_inventory_refused(self):
+        self.inv['requiredArtifacts'] = []
+        self.inv['artifacts'] = []
+        self._save()
+        self.assertFalse(self._validate()[0])
+
+    def test_unhashed_directory_does_not_cover_payload(self):
+        self.inv['artifacts'][0]['repoPaths'] = ['Resources']
+        _write(os.path.join(self.root, 'Resources', 'Other.mlmodelc', 'model.bin'), b'new')
+        self._save()
+        self.assertFalse(self._validate()[0])
+
+    def test_new_asset_refused(self):
+        _write(os.path.join(self.root, 'Resources', 'Art', 'new.png'), b'new image')
+        self.assertFalse(self._validate()[0])
+
+    def test_package_metadata_requires_fingerprint(self):
+        _write(os.path.join(self.root, 'Resources', 'Model.mlpackage', 'Manifest.json'), b'{}')
+        self.inv['artifacts'][0]['repoPaths'].append('Resources/Model.mlpackage')
+        self._save()
+        self.assertFalse(self._validate()[0])
+
+    def test_missing_byte_identity_refused(self):
+        self.inv['artifacts'][0]['byteIdentity']['files'] = []
+        self._save()
+        self.assertFalse(self._validate()[0])
+
+    def test_duplicate_id_refused(self):
+        self.inv['artifacts'].append(copy.deepcopy(self.inv['artifacts'][0]))
+        self._save()
+        self.assertFalse(self._validate()[0])
+
+    def test_path_escape_refused(self):
+        self.inv['artifacts'][0]['byteIdentity']['files'][0]['path'] = '../outside'
+        self._save()
+        self.assertFalse(self._validate()[0])
+
+    def test_blank_evidence_refused(self):
+        self.inv['artifacts'][0]['license']['grant'] = '  '
+        self._save()
+        self.assertFalse(self._validate()[0])
+
 
 if __name__ == "__main__":
     unittest.main()

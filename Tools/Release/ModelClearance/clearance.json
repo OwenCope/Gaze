@@ -1,15 +1,27 @@
 {
   "schema": "gaze-model-clearance/1",
-  "generated": "2026-09-15",
-  "note": "Records clearance EVIDENCE for the exact bundled recognition/spoof models and third-party bundled assets. Built from repository evidence only (NOTICE.md, Tools/ModelLab/README.md, build.sh, scripts/train_spoof.swift). Absent evidence is recorded as unresolved, never inferred. Fingerprints verified against this working copy on 2026-09-15.",
-  "requiredScopes": ["bundled-app-distribution"],
-  "requiredArtifacts": ["face-embedding", "spoof-detector", "setup-art", "credit-portraits", "app-icon"],
+  "generated": "2026-09-16",
+  "note": "Fingerprints cover all declared model inputs, including precompiled models, package metadata and asset files. No clearance or provenance is inferred from matching bytes.",
+  "requiredScopes": [
+    "bundled-app-distribution"
+  ],
+  "requiredArtifacts": [
+    "face-embedding",
+    "spoof-detector",
+    "setup-art",
+    "credit-portraits",
+    "app-icon",
+    "legacy-liveness"
+  ],
   "artifacts": [
     {
       "id": "face-embedding",
       "kind": "ml-model",
-      "description": "Recognition embedding model; faces are matched against it (CoreMLEmbedder, threshold 0.45). Compiled by build.sh into FaceEmbedding.mlmodelc.",
-      "repoPaths": ["Resources/FaceEmbedding.mlpackage"],
+      "description": "Recognition model inputs. build.sh prefers precompiled FaceEmbedding.mlmodelc when present; the relationship to the raw package is not established by these fingerprints.",
+      "repoPaths": [
+        "Resources/FaceEmbedding.mlpackage",
+        "Resources/FaceEmbedding.mlmodelc"
+      ],
       "bundledAs": "Contents/Resources/FaceEmbedding.mlmodelc",
       "byteIdentity": {
         "files": [
@@ -22,12 +34,44 @@
             "path": "Resources/FaceEmbedding.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
             "bytes": 7408704,
             "sha256": "f9145f919e28153bee573651d9681d9917858be038998f59233bc7bd28c00da9"
+          },
+          {
+            "path": "Resources/FaceEmbedding.mlpackage/Manifest.json",
+            "bytes": 617,
+            "sha256": "24e955faff7aa1b24639ead833d2ce31aa0df9a79a7c84e21de5b5104498ab95"
+          },
+          {
+            "path": "Resources/FaceEmbedding.mlmodelc/analytics/coremldata.bin",
+            "bytes": 243,
+            "sha256": "6632d1cf26fcc4e38df07e69c75c511a6cb59cb913d4ab08ed1fe53ef9894f81"
+          },
+          {
+            "path": "Resources/FaceEmbedding.mlmodelc/coremldata.bin",
+            "bytes": 375,
+            "sha256": "19552d9bb6e02da8ed5fee4acba626f2e4df3848b40eff0d406489ab66e550fb"
+          },
+          {
+            "path": "Resources/FaceEmbedding.mlmodelc/metadata.json",
+            "bytes": 1762,
+            "sha256": "1d0740f9bc9f0922e6482d7735cd39722d05698c0630928f227466a9bdf91596"
+          },
+          {
+            "path": "Resources/FaceEmbedding.mlmodelc/model.mil",
+            "bytes": 148234,
+            "sha256": "72632e8f5c15fbd9772231f3db7baf4e26ddb80309e44e415a6c2feb9202d071"
+          },
+          {
+            "path": "Resources/FaceEmbedding.mlmodelc/weights/weight.bin",
+            "bytes": 87197184,
+            "sha256": "c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545"
           }
         ]
       },
       "provenance": {
         "summary": "Reported to come from Sapphire, by cshariq; source and licensing of these exact weights unverified. Manifest author is com.apple.CoreML; embedded build metadata says only TorchScript conversion via coremltools on 2026-06-15. How the file arrived in this working copy is unrecorded.",
-        "evidenceRefs": ["NOTICE.md:35-46"],
+        "evidenceRefs": [
+          "NOTICE.md:35-46"
+        ],
         "status": "reported-unverified"
       },
       "license": {
@@ -44,7 +88,9 @@
       "id": "spoof-detector",
       "kind": "ml-model",
       "description": "Face-spoof object detector (held phone/screen/printed photo). Runs via SpoofDetector through AntiSpoofGate; reject cutoff 0.65. Compiled by build.sh into Spoof.mlmodelc.",
-      "repoPaths": ["Resources/Spoof.mlmodel"],
+      "repoPaths": [
+        "Resources/Spoof.mlmodel"
+      ],
       "bundledAs": "Contents/Resources/Spoof.mlmodelc",
       "byteIdentity": {
         "files": [
@@ -57,7 +103,11 @@
       },
       "provenance": {
         "summary": "Trained locally with scripts/train_spoof.swift (CreateML transfer learning, Apple ObjectPrint extractor) from a Roboflow 'Face Spoof Detection v1' CreateML export. Model metadata author 'Gaze', version '1.0'. Training-data copy is git-ignored, not in the repo.",
-        "evidenceRefs": ["scripts/train_spoof.swift:1-12,53-57", "Sources/Recognition/SpoofDetector.swift:6-10", ".gitignore:21-23"],
+        "evidenceRefs": [
+          "scripts/train_spoof.swift:1-12,53-57",
+          "Sources/Recognition/SpoofDetector.swift:6-10",
+          ".gitignore:21-23"
+        ],
         "status": "stated-in-repo"
       },
       "license": {
@@ -74,26 +124,74 @@
       "id": "setup-art",
       "kind": "image-set",
       "description": "Setup card art (screenshots/clips of Gaze in use) copied whole from Resources/Art into the bundle. Optional at build time (vector fallback).",
-      "repoPaths": ["Resources/Art"],
+      "repoPaths": [
+        "Resources/Art"
+      ],
       "bundledAs": "Contents/Resources/Art/",
       "byteIdentity": {
         "files": [
-          {"path": "Resources/Art/backdrop.png", "bytes": 1524542, "sha256": "4d563818c5787cfe924ea58284ba7abfeec3c01a91ff82d319fb44c7f5b924b4"},
-          {"path": "Resources/Art/gaze-toolbar-black.png", "bytes": 6089, "sha256": "905565a83c139b9af9ecd2929aaf81599a63d6fc5aef0af8d22091ea4ed5761a"},
-          {"path": "Resources/Art/gaze-toolbar-white.png", "bytes": 4956, "sha256": "ef4d5539e5b73865990d6cb71ebb99c2f46553a0da8be0738532348b589238d2"},
-          {"path": "Resources/Art/gaze-toolbar.png", "bytes": 3630, "sha256": "f148082f8c35b17dba8ac8852dbd7001bead0d7b4ce4b216d395af557fab9d9b"},
-          {"path": "Resources/Art/how-keychain.mp4", "bytes": 153844, "sha256": "7bc08ef968f5b91179de0241240c5b8229d58787289eab62c5c70b423814a672"},
-          {"path": "Resources/Art/how-keychain.png", "bytes": 199788, "sha256": "cf6817fbc5eaa4943bb643562d32c9e6a433e6f1b87b235e0733bb04de88eefd"},
-          {"path": "Resources/Art/how-ondevice.mp4", "bytes": 216618, "sha256": "419e5421092f1adb7dae6495a15da04ede8d78f03fd9f22adc6cd3c371e8d641"},
-          {"path": "Resources/Art/how-ondevice.png", "bytes": 160089, "sha256": "80601ea3cfe2c0d9fb207b5fc6f2e8a2a4792201e068835f8ee7f211b5a74917"},
-          {"path": "Resources/Art/how-unlock.mp4", "bytes": 38210, "sha256": "e9a6e80c06e399a8353c274aa8ff16331db09afa26ea3bc6b63982ad7a4e21c3"},
-          {"path": "Resources/Art/how-unlock.png", "bytes": 1185872, "sha256": "21b0dd2bb8db54217a3f5df633b7dcd3818b218eadf1a90d76204ef24e42aa2d"},
-          {"path": "Resources/Art/lockscreen-base.png", "bytes": 7788315, "sha256": "6e91fd10666d898f0f9177fbe20afebcde2610c8bad7e27e1bb57104489b6ef6"}
+          {
+            "path": "Resources/Art/backdrop.png",
+            "bytes": 1524542,
+            "sha256": "4d563818c5787cfe924ea58284ba7abfeec3c01a91ff82d319fb44c7f5b924b4"
+          },
+          {
+            "path": "Resources/Art/gaze-toolbar-black.png",
+            "bytes": 6089,
+            "sha256": "905565a83c139b9af9ecd2929aaf81599a63d6fc5aef0af8d22091ea4ed5761a"
+          },
+          {
+            "path": "Resources/Art/gaze-toolbar-white.png",
+            "bytes": 4956,
+            "sha256": "ef4d5539e5b73865990d6cb71ebb99c2f46553a0da8be0738532348b589238d2"
+          },
+          {
+            "path": "Resources/Art/gaze-toolbar.png",
+            "bytes": 3630,
+            "sha256": "f148082f8c35b17dba8ac8852dbd7001bead0d7b4ce4b216d395af557fab9d9b"
+          },
+          {
+            "path": "Resources/Art/how-keychain.mp4",
+            "bytes": 153844,
+            "sha256": "7bc08ef968f5b91179de0241240c5b8229d58787289eab62c5c70b423814a672"
+          },
+          {
+            "path": "Resources/Art/how-keychain.png",
+            "bytes": 199788,
+            "sha256": "cf6817fbc5eaa4943bb643562d32c9e6a433e6f1b87b235e0733bb04de88eefd"
+          },
+          {
+            "path": "Resources/Art/how-ondevice.mp4",
+            "bytes": 216618,
+            "sha256": "419e5421092f1adb7dae6495a15da04ede8d78f03fd9f22adc6cd3c371e8d641"
+          },
+          {
+            "path": "Resources/Art/how-ondevice.png",
+            "bytes": 160089,
+            "sha256": "80601ea3cfe2c0d9fb207b5fc6f2e8a2a4792201e068835f8ee7f211b5a74917"
+          },
+          {
+            "path": "Resources/Art/how-unlock.mp4",
+            "bytes": 38210,
+            "sha256": "e9a6e80c06e399a8353c274aa8ff16331db09afa26ea3bc6b63982ad7a4e21c3"
+          },
+          {
+            "path": "Resources/Art/how-unlock.png",
+            "bytes": 1185872,
+            "sha256": "21b0dd2bb8db54217a3f5df633b7dcd3818b218eadf1a90d76204ef24e42aa2d"
+          },
+          {
+            "path": "Resources/Art/lockscreen-base.png",
+            "bytes": 7788315,
+            "sha256": "6e91fd10666d898f0f9177fbe20afebcde2610c8bad7e27e1bb57104489b6ef6"
+          }
         ]
       },
       "provenance": {
         "summary": "In-repo claim: screenshots of Gaze in use, shot on a real desktop (build.sh). No per-file authorship record.",
-        "evidenceRefs": ["build.sh:131-134"],
+        "evidenceRefs": [
+          "build.sh:131-134"
+        ],
         "status": "stated-in-repo"
       },
       "license": {
@@ -110,24 +208,64 @@
       "id": "credit-portraits",
       "kind": "image-set",
       "description": "Credits avatars: each person's own picture or their app's icon, bundled (not fetched) for privacy. Shown in Settings 'Who helped'.",
-      "repoPaths": ["Resources/Credits"],
+      "repoPaths": [
+        "Resources/Credits"
+      ],
       "bundledAs": "Contents/Resources/Credits/",
       "byteIdentity": {
         "files": [
-          {"path": "Resources/Credits/app-atoll.png", "bytes": 17171, "sha256": "7c46d160e698aa7a517c0b2fecff059faae51ffa19afc2b6b71eced89e7354b3"},
-          {"path": "Resources/Credits/app-dynamiclake.png", "bytes": 23370, "sha256": "a7bf6a5bc51f9c6987ce9ad25b98ab173fb2328516312c89baf9c796ad279527"},
-          {"path": "Resources/Credits/app-sapphire.png", "bytes": 16628, "sha256": "353fa0f61af6dbcda82e023836490f790dbbace44ae4f424a748711da6eef9fd"},
-          {"path": "Resources/Credits/app-wallx.png", "bytes": 20389, "sha256": "34ad906e25404309e8be76d311eaf95da2b70bcd5a1f571dce597bf7df15898f"},
-          {"path": "Resources/Credits/cshariq.png", "bytes": 32651, "sha256": "081649335e7f30c352cd5cb962002d29029fc842484bb2a6e416a8b34191bb04"},
-          {"path": "Resources/Credits/danfq.png", "bytes": 32039, "sha256": "5e266a7dc70722497acd57cb94875b116dd44d535dd439edd7cd51d92516c772"},
-          {"path": "Resources/Credits/nautey.png", "bytes": 37112, "sha256": "9b23cd7e9a6b4a0215d5419f756009c388f9ab7cf9cc48aa15dca7affc028c4e"},
-          {"path": "Resources/Credits/unxnown.png", "bytes": 3743, "sha256": "642b6c1b8eeed5b92afe765b9c419d14bd7d6a2fd3c5f5f138cd7cf4ebdf8f52"},
-          {"path": "Resources/Credits/vanilla.png", "bytes": 27704, "sha256": "d55d14ed58397df9c0d7c8f1ad5fcbbe9241adddc8f47b61fdb1307d62e0721d"}
+          {
+            "path": "Resources/Credits/app-atoll.png",
+            "bytes": 17171,
+            "sha256": "7c46d160e698aa7a517c0b2fecff059faae51ffa19afc2b6b71eced89e7354b3"
+          },
+          {
+            "path": "Resources/Credits/app-dynamiclake.png",
+            "bytes": 23370,
+            "sha256": "a7bf6a5bc51f9c6987ce9ad25b98ab173fb2328516312c89baf9c796ad279527"
+          },
+          {
+            "path": "Resources/Credits/app-sapphire.png",
+            "bytes": 16628,
+            "sha256": "353fa0f61af6dbcda82e023836490f790dbbace44ae4f424a748711da6eef9fd"
+          },
+          {
+            "path": "Resources/Credits/app-wallx.png",
+            "bytes": 20389,
+            "sha256": "34ad906e25404309e8be76d311eaf95da2b70bcd5a1f571dce597bf7df15898f"
+          },
+          {
+            "path": "Resources/Credits/cshariq.png",
+            "bytes": 32651,
+            "sha256": "081649335e7f30c352cd5cb962002d29029fc842484bb2a6e416a8b34191bb04"
+          },
+          {
+            "path": "Resources/Credits/danfq.png",
+            "bytes": 32039,
+            "sha256": "5e266a7dc70722497acd57cb94875b116dd44d535dd439edd7cd51d92516c772"
+          },
+          {
+            "path": "Resources/Credits/nautey.png",
+            "bytes": 37112,
+            "sha256": "9b23cd7e9a6b4a0215d5419f756009c388f9ab7cf9cc48aa15dca7affc028c4e"
+          },
+          {
+            "path": "Resources/Credits/unxnown.png",
+            "bytes": 3743,
+            "sha256": "642b6c1b8eeed5b92afe765b9c419d14bd7d6a2fd3c5f5f138cd7cf4ebdf8f52"
+          },
+          {
+            "path": "Resources/Credits/vanilla.png",
+            "bytes": 27704,
+            "sha256": "d55d14ed58397df9c0d7c8f1ad5fcbbe9241adddc8f47b61fdb1307d62e0721d"
+          }
         ]
       },
       "provenance": {
         "summary": "Third-party likenesses and app icons (build.sh: 'each person's own picture, or their app's icon'; snapshots resized to 128pt). No per-file permission record in the repo.",
-        "evidenceRefs": ["build.sh:152-158"],
+        "evidenceRefs": [
+          "build.sh:152-158"
+        ],
         "status": "third-party-unrecorded"
       },
       "license": {
@@ -144,17 +282,29 @@
       "id": "app-icon",
       "kind": "icon",
       "description": "App icon (Icon Composer bundle); glyph generated in-repo. Compiled by build.sh into Assets.car + AppIcon.icns.",
-      "repoPaths": ["Resources/AppIcon.icon"],
+      "repoPaths": [
+        "Resources/AppIcon.icon"
+      ],
       "bundledAs": "Contents/Resources/Assets.car + AppIcon.icns",
       "byteIdentity": {
         "files": [
-          {"path": "Resources/AppIcon.icon/Assets/gaze-mark.png", "bytes": 188762, "sha256": "da15060b359476badcde1f41c7395a07f7e61ace68e6736258025c4ee5cb7df0"},
-          {"path": "Resources/AppIcon.icon/icon.json", "bytes": 862, "sha256": "81b4dc3d125dcd4878f53d217acb77e0a9908fa41acf4f6f59e323d992bb44dc"}
+          {
+            "path": "Resources/AppIcon.icon/Assets/gaze-mark.png",
+            "bytes": 188762,
+            "sha256": "da15060b359476badcde1f41c7395a07f7e61ace68e6736258025c4ee5cb7df0"
+          },
+          {
+            "path": "Resources/AppIcon.icon/icon.json",
+            "bytes": 862,
+            "sha256": "81b4dc3d125dcd4878f53d217acb77e0a9908fa41acf4f6f59e323d992bb44dc"
+          }
         ]
       },
       "provenance": {
         "summary": "Glyph generated in-repo by scripts/make_icon_mark.swift; gradients live in icon.json.",
-        "evidenceRefs": ["scripts/make_icon_mark.swift:1-24"],
+        "evidenceRefs": [
+          "scripts/make_icon_mark.swift:1-24"
+        ],
         "status": "stated-in-repo"
       },
       "license": {
@@ -166,6 +316,59 @@
       },
       "clearance": "unresolved",
       "notes": "If first-party, the owner confirms authorship and scope; that confirmation is the missing evidence."
+    },
+    {
+      "id": "legacy-liveness",
+      "kind": "ml-model",
+      "description": "Optional legacy texture model, copied from precompiled Resources by build.sh; not the active lock-screen Spoof gate.",
+      "repoPaths": [
+        "Resources/Liveness.mlmodelc"
+      ],
+      "bundledAs": "Contents/Resources/Liveness.mlmodelc",
+      "byteIdentity": {
+        "files": [
+          {
+            "path": "Resources/Liveness.mlmodelc/analytics/coremldata.bin",
+            "bytes": 243,
+            "sha256": "da5cbadf58225fd732924ef133b51f77d72b1057c98ecc83a7925d3f868bba81"
+          },
+          {
+            "path": "Resources/Liveness.mlmodelc/coremldata.bin",
+            "bytes": 374,
+            "sha256": "d30ac2070083013939a2350abd824084f6615338327ea6c574a06a256cb9ca9f"
+          },
+          {
+            "path": "Resources/Liveness.mlmodelc/metadata.json",
+            "bytes": 1835,
+            "sha256": "e8414b1a9ccf2f7758023618760b606076c956d0727aeb930e2d52c0a92a2118"
+          },
+          {
+            "path": "Resources/Liveness.mlmodelc/model.mil",
+            "bytes": 125268,
+            "sha256": "90dfe66bafe51d04ddefef02a431a09896547c90990c8eb35c3f4ba6d1a42c4e"
+          },
+          {
+            "path": "Resources/Liveness.mlmodelc/weights/weight.bin",
+            "bytes": 948992,
+            "sha256": "fed52485dedd9fcaf4e5d5069b0ab6213e9b44e050f63a4d3dc30d0cf13feaa2"
+          }
+        ]
+      },
+      "provenance": {
+        "summary": "Precompiled model is present in the lead checkout; source and relationship to any training data are unverified.",
+        "evidenceRefs": [
+          "build.sh"
+        ],
+        "status": "unresolved"
+      },
+      "license": {
+        "summary": "No redistribution evidence recorded.",
+        "grant": "",
+        "evidenceRefs": [],
+        "redistributionScope": [],
+        "status": "unresolved"
+      },
+      "clearance": "unresolved"
     }
   ]
 }

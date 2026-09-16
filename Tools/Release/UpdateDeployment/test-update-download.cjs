@@ -41,6 +41,7 @@ process.on("exit", () => fs.rmSync(tmp, { recursive: true, force: true }));
 
 let feedSrc;
 let dlSrc;
+let helperSrc;
 if (!currentMode) {
   const staged = path.join(tmp, "src/app/api/latest/route.ts");
   fs.mkdirSync(path.dirname(staged), { recursive: true });
@@ -57,11 +58,13 @@ if (!currentMode) {
   assert(fs.existsSync(stagedDL), "patch did not create src/app/dl/[file]/route.ts");
   feedSrc = fs.readFileSync(staged, "utf8");
   dlSrc = fs.readFileSync(stagedDL, "utf8");
+  helperSrc = fs.readFileSync(path.join(tmp, "src/lib/release-download.ts"), "utf8");
   pass("patch applies cleanly to a temp copy (feed mapped, dl route created)");
 } else {
   assert(fs.existsSync(SITE_DL), `download route not found (patch not applied to site?): ${SITE_DL}`);
   feedSrc = fs.readFileSync(ORIG_FEED, "utf8");
   dlSrc = fs.readFileSync(SITE_DL, "utf8");
+  helperSrc = fs.readFileSync(path.join(SITE_DIR, "src/lib/release-download.ts"), "utf8");
   pass("testing the current website routes");
 }
 
@@ -110,6 +113,7 @@ function load(src, fakeName) {
   m.paths = Module._nodeModulePaths(path.dirname(fakeName));
   m.require = (request) => {
     if (request === "next/server") return nextServer;
+    if (request === "@/lib/release-download") return helpers;
     if (request === "@/lib/store") return fakeStore;
     if (request === "@/lib/settings") return fakeSettings;
     return siteRequire(request);
@@ -118,6 +122,7 @@ function load(src, fakeName) {
   return m.exports;
 }
 
+const helpers = load(helperSrc, path.join(tmp, "release-download.ts"));
 const feed = load(feedSrc, path.join(tmp, "feed-route.ts"));
 const dl = load(dlSrc, path.join(tmp, "dl-route.ts"));
 assert(feed && typeof feed.GET === "function", "feed route exports no GET()");
@@ -316,6 +321,23 @@ async function expectMissing(label, reqPath) {
     checkNoStore(res, "feed restricted");
     pass("feed visibility gate intact after mapping edit (restricted => null, zero reads, no-store)");
   }
+
+  currentGate = false;
+  for (const target of ["http://demo.public.blob.vercel-storage.com/file.dmg", "https://evil.example/file.dmg",
+    "https://demo.public.blob.vercel-storage.com.evil.example/file.dmg", "https://u:p@demo.public.blob.vercel-storage.com/file.dmg",
+    "https://demo.public.blob.vercel-storage.com:444/file.dmg", "https://demo.public.blob.vercel-storage.com/file.dmg#fragment"]) {
+    currentData = [mkRelease("0.3", { download: { url: target, name: "Gaze.dmg", size: 42 } })];
+    await expectMissing("unsafe destination", "/dl/Gaze.dmg");
+    assert((await (await feed.GET()).json()).latest.download === null, "feed must not advertise an unsafe destination");
+  }
+  pass("HTTP, arbitrary hosts, disguised hosts, credentials, ports and fragments refused by feed and download");
+  for (const name of ["../Gaze.dmg", "Gaze\\bad.dmg", "bad\u0000.dmg", "payload.html"]) {
+    currentData = [mkRelease("0.3", { download: { url: BLOB_010, name, size: 42 } })];
+    assert((await (await feed.GET()).json()).latest.download === null, "feed must not advertise an invalid filename");
+  }
+  currentData = [mkRelease("0.3", { download: { url: "https://gazeunlock.com/dl/Gaze.dmg", name: "Gaze.dmg", size: 42 } })];
+  assert((await (await feed.GET()).json()).latest.download === null, "placeholder must fall back to releases page");
+  pass("invalid filenames and placeholder downloads omitted from feed");
 
   console.log("OK: all same-origin download checks passed (patched routes executed, logic not duplicated).");
 })().catch((e) => fail(e && e.stack ? e.stack : String(e)));
