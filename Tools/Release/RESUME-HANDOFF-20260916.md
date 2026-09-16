@@ -1,5 +1,34 @@
 # Resume handoff — September 16, 2026
 
+## Hydra quota diagnosis — user-provided screenshot
+
+The user supplied a screenshot with Muse Spark 1.3 Free selected and the message:
+"Free usage exceeded, subscribe to Go", "retrying in 63791s - attempt #1".
+That displayed delay is approximately 17 hours 43 minutes, not a verified reset
+schedule. The quota exhaustion explains the repeated inactivity timeouts; earlier
+notes describing an unknown cause or recommending a fresh session are superseded.
+Starting a new session does not clear a provider usage quota. Do not resend heads
+on the exhausted model until access is restored. The user can wait for reset or
+choose an available model/provider/plan; no paid plan or configuration was changed.
+
+All completed local work remains saved. The failed heads landed nothing, and root
+already implemented their outstanding homepage and small-polish edits. Do not
+repeat those tasks. Continue from the completed checkpoints below.
+
+## Additional hour resumed — 2026-09-16 06:12 UTC
+
+Owner requested another hour of work. Continue through 07:12:09 UTC
+(15:12 Taipei), preserving localhost-only, no deployment, no real lock/camera/
+credential tests and no git operations. Finished homepage work stays intact;
+previously stopped account-menu/gallery tasks remain stopped.
+
+New bounded work: truthful request/error handling in website SettingsPanel,
+TestersManager and RolesManager. Heads will deliver separate source copies and
+patches under AdminSettingsUX, AdminTestersUX and AdminRolesUX; actual gaze-site
+remains lead-owned for integration. Lead owns API input/error contracts, review,
+synthetic verification, refreshed local preview and final checkpoint. No new
+shipping rights, service provisioning or live acceptance is implied.
+
 ## Latest small polish completed — 2026-09-16 05:28 UTC
 
 Juno 3, Ezra 3, Lena 3 and Bo 3 also auto-stopped after ten minutes without edits.
