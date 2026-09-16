@@ -1,5 +1,21 @@
 # Resume handoff — September 16, 2026
 
+## Latest small polish completed — 2026-09-16 05:28 UTC
+
+Juno 3, Ezra 3, Lena 3 and Bo 3 also auto-stopped after ten minutes without edits.
+Root implemented their four small tasks directly. Source copies and verified patch
+are in HomeMotion/SmallPolish; REPORT.md records browser measurements. The demo
+layout, theme-icon motion, feature-rail keyboard navigation and footer readability
+are integrated. Full build, TypeScript, lint, HTTP and focused browser checks pass.
+Prepared source files exist in two failed worktrees checked read-only; no root cause
+for Hydra's inactivity is established. A new Hydra session is reasonable before
+another retry, but restarting is not a proven fix. Do not repeat these finished tasks.
+
+The current preview is http://127.0.0.1:55523, kept by exec session 81953;
+logs are build/website-small-polish. Preserve this server. Everything remains local.
+Earlier user-stopped account-menu/gallery tasks remain untouched. App public-release
+gates in READINESS.md remain open; development builds are ready for local testing.
+
 ## Completed homepage revision — 2026-09-16 05:01 UTC
 
 The repeated Hydra retries were automatically stopped for inactivity, with no
