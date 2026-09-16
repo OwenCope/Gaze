@@ -1,15 +1,17 @@
 # Gaze release gates
 
-## Current local checkpoint — 2026-09-16 04:33 UTC
+## Current local checkpoint — September 16, 2026
 
 Local development builds are available. Public release is not approved. The owner
 requested localhost only and deferred Developer ID signing; nothing was deployed
 or uploaded.
 
 - Gaze: `build/Gaze.app`, executable SHA-256
-  `a9e160c5d684749e5b545e32044f96ab304aa7d2e9f4224e99113ed13b4b0773`.
-  Running process 6006 was checked September 16. This Apple Development build
-  includes Settings search and the previously checked challenge/progress work.
+  `919e168b1633a0124f019130573ca1d3bb56a15b44d86da3e7ffb16e3f22ab14`.
+  Running process 36107 was verified after the Gaze-only usability pass. This
+  Apple Development build includes truthful readiness, setup/Settings improvements,
+  companion-preview changes and the corrected error shake. See
+  GazeUsability/20260916/REPORT.md for the exact scope and checks.
 - Gaze Passwords: `build/browser-integration/Gaze Passwords.app`, executable SHA-256
   `cc1751f3406e31f5b4e87e433544557c4a26aab484a6666a044655c9385b0e92`.
   Local protected build and verification passed. The real browser action popup

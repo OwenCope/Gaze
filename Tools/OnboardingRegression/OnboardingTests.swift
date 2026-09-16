@@ -29,6 +29,7 @@ struct OnboardingTests {
 		checkExpressions()
 		checkLessonPlayback()
 		checkCompletion()
+		checkShakeInterpolation()
 		let directory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 		if CommandLine.arguments.contains("--offscreen-only") {
@@ -90,6 +91,25 @@ struct OnboardingTests {
 				to: directory.appendingPathComponent("lesson-scanning-one-\(suffix).png"))
 		}
 		print("PASS: first-use policy, request routing, add-face isolation, expression mappings, companion motion, permission policy and \(ReviewPage.allCases.count * 2 + GazeExpressionLesson.allCases.count * 2 + 6) light/dark offscreen screens")
+	}
+
+	static func checkShakeInterpolation() {
+		var shake = ShakeEffect(travel: 1)
+		for endpoint in [CGFloat(0), 1, 2] {
+			shake.animatableData = endpoint
+			precondition(abs(shake.effectValue(size: CGSize(width: 100, height: 40)).m31) < 0.001,
+				"A completed shake must return to its resting position")
+		}
+		shake.animatableData = 0.25
+		precondition(abs(shake.animatableData - 0.25) < 0.001, "Interpolation must retain fractional progress")
+		let outward = shake.effectValue(size: CGSize(width: 100, height: 40)).m31
+		shake.animatableData = 0.5
+		let returning = shake.effectValue(size: CGSize(width: 100, height: 40)).m31
+		precondition(outward > 1 && returning < -1, "The error cue must visibly move in both directions")
+		shake.isEnabled = false
+		precondition(abs(shake.effectValue(size: CGSize(width: 100, height: 40)).m31) < 0.001,
+			"Reduce Motion must suppress an in-flight shake immediately")
+		print("PASS: shake interpolation retains fractional frames, settles at zero and respects Reduce Motion")
 	}
 
 	static func checkPlan() {
@@ -333,7 +353,8 @@ struct ReviewPageView: View {
 			SetupDoneStep(failure: page == .failed ? "Gaze couldn’t save your face. Nothing was changed. Please try again." : nil,
 				unfinished: .init(needsPassword: page == .unfinished, needsAccessibility: page == .unfinished),
 				onDone: next, onRetry: previous,
-				onOpenSettings: page == .unfinished ? {} : nil)
+				onOpenSettings: page == .unfinished ? {} : nil,
+				onTestRecognition: {})
 		}
 	}
 }

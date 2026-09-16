@@ -104,10 +104,11 @@ struct SettingsView: View {
 	/// is already stored.
 	@State private var hasStoredPassword = PasswordVault.hasPassword
 	@State private var lockoutPassword = ""
-	@State private var accessibilityGranted = AXIsProcessTrusted()
+	@State private var accessibilityGranted = SetupPermissionStatus.current.isReady
 	@State private var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
 	/// The settings search field. Blank means no search: the panes show as before.
 	@State private var searchQuery = ""
+	@State private var pauseExpiryRevision = 0
 	/// The section a search result asked to reveal.
 	///
 	/// Set together with the destination pane and the cleared query; a `.task(id:)`
@@ -118,6 +119,7 @@ struct SettingsView: View {
 	@Environment(\.openWindow) private var openWindow
 
 	var body: some View {
+		let _ = pauseExpiryRevision
 		Group {
 			// A search replaces the panes while it is nonempty, rather than filtering
 			// rows in savedApp: the panes are per-subject groups, and a filtered
@@ -212,6 +214,13 @@ struct SettingsView: View {
 				for: NSApplication.didBecomeActiveNotification)
 		) { _ in
 			refreshExternalState()
+		}
+		.task(id: settings.pausedUntil) {
+			guard let until = settings.pausedUntil, until > Date() else { return }
+			do { try await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow))) }
+			catch { return }
+			// Pause expiry changes with time, without changing the stored preference.
+			pauseExpiryRevision &+= 1
 		}
 		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
 	}
@@ -354,6 +363,11 @@ struct SettingsView: View {
 		pendingSearchSection = item
 	}
 
+	private func revealSettingsSection(_ section: String) {
+		guard let item = SettingsSearchItem.all.first(where: { $0.pane == "face" && $0.section == section }) else { return }
+		selectSearchResult(item)
+	}
+
 	// MARK: - Overview
 
 	/// The glyph, the state, and the two things you can do about it.
@@ -394,15 +408,28 @@ struct SettingsView: View {
 							.gazeButton(.primary, size: .large)
 							.frame(maxWidth: .infinity)
 					}
-					Button {
-						if store.isEnrolled { SetupRequest.begin() } else { SetupRequest.beginOnboarding() }
-						AppActivation.bringToFront()
-						openWindow(id: "enrollment")
-					} label: {
-						Text(store.isEnrolled ? "Add a Face" : "Set Up Gaze")
-							.frame(maxWidth: .infinity)
+					if store.isEnrolled, !cameraGranted {
+						Button("Review Permissions") { revealSettingsSection("permissionsSection") }
+							.gazeButton(.primary, size: .large)
+					} else if store.isEnrolled, !settings.isPaused, PasswordReplaySafety.isEnabled,
+						settings.unlockBackend != .none, readinessProblem != nil {
+						Button("Review Setup") {
+							revealSettingsSection(accessibilityGranted ? "unlockSection" : "permissionsSection")
+						}
+						.gazeButton(.primary, size: .large)
+					} else {
+						Button {
+							if store.isEnrolled { SetupRequest.begin() } else { SetupRequest.beginOnboarding() }
+							AppActivation.bringToFront()
+							openWindow(id: "enrollment")
+						} label: {
+							Text(store.isEnrolled ? "Add a Face" : "Set Up Gaze")
+								.frame(maxWidth: .infinity)
+						}
+						.gazeButton(store.isEnrolled ? .standard : .primary, size: .large)
+						.disabled(!store.canAddFace)
+						.help(store.canAddFace ? "Enroll another face on this Mac" : "Remove an enrolled face before adding another")
 					}
-					.gazeButton(store.isEnrolled ? .standard : .primary, size: .large)
 
 					if store.isEnrolled {
 						Button {
@@ -449,7 +476,9 @@ struct SettingsView: View {
 		if lockout.isLockedOut { return "Enter your account password below to enable Gaze again." }
 		if store.isCorrupted { return "Your enrolled face couldn’t be read. Enroll it again." }
 		if !store.isEnrolled { return "Add your face to get started." }
-		if settings.isPaused { return "Face recognition is temporarily paused." }
+		if settings.isPaused, let until = settings.pausedUntil {
+			return "Face recognition resumes at \(until.formatted(date: .omitted, time: .shortened)). You can resume it sooner below."
+		}
 		if !cameraGranted { return "Allow the camera so Gaze can recognise you." }
 		if !PasswordReplaySafety.isEnabled { return "Enable Unlock my Mac to use face verification. Your password and Touch ID remain available." }
 		if settings.unlockBackend == .none { return "Try Test Recognition below. Nothing runs on the lock screen in this mode." }
@@ -571,7 +600,7 @@ struct SettingsView: View {
 	private func refreshExternalState() {
 		hasStoredPassword = PasswordVault.hasPassword
 		cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-		accessibilityGranted = AXIsProcessTrusted()
+		accessibilityGranted = SetupPermissionStatus.current.isReady
 	}
 
 	// MARK: - Unlocking
@@ -1720,6 +1749,12 @@ private struct FaceTile: View {
 				.frame(width: 84)
 				.focused($isEditing)
 				.onSubmit(commit)
+				.onExitCommand {
+					draft = face.name
+					isEditing = false
+				}
+				.accessibilityLabel("Name for \(face.name)")
+				.help(face.name)
 				.onChange(of: isEditing) { _, editing in if !editing { commit() } }
 				// Someone else's edit — a rename from another window, or the record
 				// reloading — should show here rather than being overwritten by a

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import SwiftUI
 import os
 
@@ -462,16 +463,34 @@ struct MenuBarContent: View {
 	@Environment(\.openWindow) private var openWindow
 	@State private var preferences = Preferences.shared
 
-	var body: some View {
-		if lockout.isLockedOut {
-			Text("Locked out — password required")
-		} else if preferences.isPaused {
-			Text("Paused until \(Self.clock.string(from: preferences.pausedUntil ?? Date()))")
-		} else if store.isEnrolled {
-			Text("Gaze is ready")
-		} else {
-			Text("No face enrolled")
+	private var menuStatus: String {
+		switch AppServices.executionPolicy {
+		case .uiReview: return "UI review — unlocking is off"
+		case .scanOnly: return "Scan-only mode — unlocking is off"
+		case .browserOnly: return "Browser approvals only"
+		case .normal: break
 		}
+		if lockout.isLockedOut { return "Locked out — password required" }
+		if !store.isEnrolled { return "No face enrolled" }
+		if preferences.isPaused {
+			return "Paused until \(Self.clock.string(from: preferences.pausedUntil ?? Date()))"
+		}
+		if AVCaptureDevice.authorizationStatus(for: .video) != .authorized { return "Camera access needed" }
+		if !PasswordReplaySafety.isEnabled { return "Mac unlocking is off" }
+		if preferences.unlockBackend == .none { return "Recognition only" }
+		let backend: UnlockBackend = switch preferences.unlockBackend {
+		case .none: NoUnlockBackend()
+		case .authPlugin: AuthPluginUnlockBackend()
+		case .keystroke: KeystrokeUnlockBackend()
+		}
+		switch backend.readiness() {
+		case .ready: return "Gaze is ready"
+		case .needsSetup, .unavailable: return "Unlock needs attention — open Settings"
+		}
+	}
+
+	var body: some View {
+		Text(menuStatus)
 
 		Divider()
 

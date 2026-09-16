@@ -1,5 +1,65 @@
 # Resume handoff — September 16, 2026
 
+## Latest Gaze-only build — 2026-09-16 08:01 UTC checkpoint
+
+The owner's forty-minute Gaze pass began at 07:21 UTC. Gaze remains the first
+release; website and Passwords work were deferred. The app-only implementation,
+validation and limits are recorded in GazeUsability/20260916/REPORT.md, with exact
+source/artifact hashes in CHECKPOINT.json.
+
+Current build: build/Gaze.app, Apple Development signed, executable SHA-256
+919e168b1633a0124f019130573ca1d3bb56a15b44d86da3e7ffb16e3f22ab14.
+Launched through script/build_and_run.sh --no-build as PID 36107 with --settings.
+No newer Swift source at verification. Full build, signature, Settings invariants,
+54 onboarding renders/policy checks, the actual shake interpolation regression,
+and six synthetic face-layout renders passed. Live authentication is untested.
+
+Changes: truthful menu readiness (root; Finn/Suki reports landed no edits), pause
+resume time and expiry refresh, direct Settings repair navigation, matching
+Accessibility/keyboard-event readiness, face-limit handling and Escape-to-cancel
+rename. Mira 3 added the optional post-setup recognition check; root refined its
+layout and truthful completion text. Odin 3 added pending status and inactive-stop
+to the camera-off preview. Rex 3 improved setup-companion resume/fade. Root fixed
+the fractional interpolation bug in ShakeEffect and its Reduce Motion handling.
+Hydra refused a further head because this request reached its three-round limit;
+root completed that remaining edit. Do not resend or repeat completed work.
+
+The owner console was checked unlocked and walk-away locking off before launch.
+No live lock, camera or credential test was performed. No security preference,
+threshold, model or website source was changed by this forty-minute pass.
+Public release still needs rights/signing and owner-supervised acceptance.
+
+Website admin work is deferred, not finalized: 65 contract + 23 browser checks
+passed and Vera's reduced-motion modal is integrated, but its final production
+rebuild and durable patch packaging remain pending. Existing localhost preview
+is port 55523 from build/website-admin-reliability. Respect the previously stopped
+account-menu, release-gallery and external-footer-link tasks.
+
+## Current task: Gaze app only, forty minutes — 07:21 to 08:01 UTC
+
+Owner explicitly deferred the website and asked for forty minutes on Gaze while
+away. Continue through 2026-09-16 08:01:01 UTC (16:01 Taipei). Priorities: setup,
+settings, daily usability, companion/animation polish. Gaze ships first; Passwords
+is later. Keep local signing, no deployment/git, no live camera/lock/credential
+experiments, unchanged recognition/PAD thresholds and security policy. Build with
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer.
+
+Hydra is operational again: Vera 3 completed the small admin reduced-motion change.
+Three new bounded app tasks are being delegated: menu readiness in GazeApp.swift;
+optional explicit Test Recognition action in SetupDoneStep.swift + SetupFlow.swift;
+and truthful simulated phases in NotchAnimationPreview.swift. Root owns SettingsView
+and integration. Do not duplicate finished search, permissions, movement-progress
+or prior onboarding work. Every head owns distinct files.
+
+Website is paused. The admin request/response suite passed 65 checks; its real-
+component browser fixture passed 23 recovery/duplicate/confirmation cases after
+replacing a premature 400ms exit-animation wait with a condition-based wait. Vera's
+modal was integrated; reduced-motion inspection found no movement/animation and
+instant close. The final production rebuild and durable source/patch packaging for
+that admin pass remain pending for later. Existing local preview on port 55523 is
+from build/website-admin-reliability (exec 98549), before Vera's source integration.
+Do not accidentally describe the entire admin pass as fully finalized.
+
 ## Active admin reliability pass — integration unfinished
 
 Root is continuing the additional-hour pass. Actual local site now has changes in
