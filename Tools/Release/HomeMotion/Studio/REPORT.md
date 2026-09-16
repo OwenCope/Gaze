@@ -1,3 +1,29 @@
+# Current reference correction — September 16, 2026
+
+This checkpoint supersedes the original geometry and media recommendations below.
+Current site exports use a 1470x956 logical screen and the production reference
+geometry: 280x128 expanded panel, 179x32 cutout. The previous 400/960 width ratio
+was 41.7%; the corrected ratio is 19.0%. All displayed footage uses the current
+3D companion. A separate 900x560 crop serves the explanatory video.
+
+The wallpaper comes from the user-provided lock-screen reference with clock,
+login identity and status icons removed. The raw screenshot is not a site asset.
+ReferenceCorrection/prepare-background.sh (sibling folder) records the cleanup.
+These remain simulated animation previews, not live authentication recordings.
+
+Both hidden and explicitly visible own-window cacheDisplay probes lost the native
+Liquid Glass material. Screen-capture preflight was false; no permission was
+requested. The old flat-face native clip has been removed from the website's
+comparison. Liquid Glass must wait for a current faithful capture; do not publish
+the old recording or the material-less diagnostic render as current appearance.
+
+Use build-studio.sh --site for the two displayed materials plus detail crop.
+--all also exports a diagnostic Liquid Glass render, which is not a site asset.
+Temporary frames are removed unless GAZE_STUDIO_KEEP_FRAMES=1 is requested.
+Current site hashes are in assets/SHASUMS.txt.
+
+## Original delivery and historical evidence
+
 # Gaze panel studio previews — Hank 3 (2026-09-16)
 
 **Simulated panel previews, not real unlock recordings.** Every frame is a

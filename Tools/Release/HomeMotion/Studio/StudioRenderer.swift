@@ -17,19 +17,18 @@
 // and not a real unlock recording.
 //
 // Usage: studio-render <framesDir> <styleRawValue> <tag> [startFrame] [frameCount]
-// Renders 240 frames (960x600, 30 fps, 8 s) of the fixed choreography.
+// Renders 240 frames (1470x956 logical canvas, 30 fps, 8 s) of the fixed choreography.
 // Diagnostics go to stderr (unbuffered) so a trap cannot swallow them.
 import AppKit
 import SwiftUI
 
 // MARK: - Studio stage
 
-/// Quiet light neutral studio stage: a soft vertical greyscale gradient
-/// with the current production capsule centred at the top, roughly 400px
-/// wide for legibility. No clock, weather, menu bar, Dock, names, files,
-/// cursor, or wallpaper.
+/// The current production panel at native screen proportions over a cleaned
+/// wallpaper reference. Clock, account identity, status icons and cursor are absent.
 struct StudioStage: View {
 	@Bindable var model: NotchCapsuleModel
+	let wallpaper: NSImage
 
 	var body: some View {
 		VStack(spacing: 0) {
@@ -47,14 +46,13 @@ struct StudioStage: View {
 			Spacer(minLength: 0)
 		}
 		.frame(width: StudioRenderer.stageWidth, height: StudioRenderer.stageHeight)
-		.background(
-			LinearGradient(
-				stops: [
-					.init(color: Color(white: 0.965), location: 0),
-					.init(color: Color(white: 0.925), location: 0.55),
-					.init(color: Color(white: 0.895), location: 1),
-				],
-				startPoint: .top, endPoint: .bottom))
+		.background {
+			Image(nsImage: wallpaper)
+				.resizable()
+				.scaledToFill()
+				.frame(width: StudioRenderer.stageWidth, height: StudioRenderer.stageHeight)
+				.clipped()
+		}
 	}
 }
 
@@ -62,15 +60,14 @@ struct StudioStage: View {
 
 @main
 enum StudioRenderer {
-	static let stageWidth: CGFloat = 960
-	static let stageHeight: CGFloat = 600
-	// Production capsule is ~280pt across on a 179pt cutout; widened here
-	// for legibility per the brief (380-420px), keeping the production
-	// cutout/inset so the shape stays the production shape.
-	static let capsuleWidth: CGFloat = 400
-	static let capsuleHeight: CGFloat = 190
+	// Logical screen and default panel geometry measured on the reference Mac.
+	// The old 400pt panel on a 960pt canvas was more than twice the native proportion.
+	static let stageWidth: CGFloat = 1470
+	static let stageHeight: CGFloat = 956
+	static let capsuleWidth: CGFloat = 280
+	static let capsuleHeight: CGFloat = 128
 	static let notchInset: CGFloat = 32
-	static let cutoutWidth: CGFloat = 180
+	static let cutoutWidth: CGFloat = 179
 
 	static let fps = 30
 	static let totalFrames = 240 // 8 seconds at 30 fps
@@ -86,6 +83,12 @@ enum StudioRenderer {
 		let frameCount = args.count > 5 ? Int(args[5]) ?? totalFrames : totalFrames
 		try FileManager.default.createDirectory(at: framesDir, withIntermediateDirectories: true)
 
+		guard let wallpaperPath = ProcessInfo.processInfo.environment["GAZE_STUDIO_WALLPAPER"],
+			let wallpaper = NSImage(contentsOfFile: wallpaperPath) else {
+			fatalError("GAZE_STUDIO_WALLPAPER must name the clean reference wallpaper")
+		}
+		let app = NSApplication.shared
+		app.setActivationPolicy(.accessory)
 		let model = NotchCapsuleModel()
 		model.style = style
 		model.shape = .attached
@@ -101,16 +104,22 @@ enum StudioRenderer {
 			}
 		}
 
-		let host = NSHostingView(rootView: StudioStage(model: model))
+		let host = NSHostingView(rootView: StudioStage(model: model, wallpaper: wallpaper))
 		host.frame = CGRect(x: 0, y: 0, width: stageWidth, height: stageHeight)
-		// Deliberately never ordered front: this window must never appear on
-		// the user's desktop. cacheDisplay renders it offscreen.
+		// Exports stay hidden. The explicit visible-probe flag shows only this
+		// owned synthetic window; neither path captures the desktop.
 		let window = NSWindow(
 			contentRect: host.frame, styleMask: [.borderless],
 			backing: .buffered, defer: false)
 		window.backgroundColor = .clear
 		window.isOpaque = false
 		window.contentView = host
+		if ProcessInfo.processInfo.environment["GAZE_STUDIO_VISIBLE_PROBE"] == "1" {
+			window.styleMask.insert(.titled)
+			window.title = "Gaze render check — simulated, camera off"
+			window.center()
+			window.orderFront(nil)
+		}
 		host.layoutSubtreeIfNeeded()
 		RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.6))
 		host.layoutSubtreeIfNeeded()

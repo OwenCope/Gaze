@@ -2,9 +2,9 @@
 # build-studio.sh — Hank 3 (Droppy Code Hydra head)
 #
 # Reproducible offline renderer for clean Gaze panel preview videos.
-# Synthetic studio media only: a 960x600 stage with the production
+# Synthetic studio media only: a 1470x956 reference stage with the production
 # NotchCapsule centred at the top. No desktop, camera, lock, Keychain,
-# enrolment, live app, or third-party art anywhere in the pipeline.
+# enrolment or live app access. The wallpaper is a cleaned user-provided reference.
 #
 # Simulated panel previews, not real unlock recordings.
 #
@@ -16,6 +16,7 @@ set -euo pipefail
 STUDIO="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$STUDIO/../../../.." && pwd)"
 ASSETS="$STUDIO/assets"
+export GAZE_STUDIO_WALLPAPER="${GAZE_STUDIO_WALLPAPER:-$ASSETS/preview-wallpaper.png}"
 export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 TARGET="$(uname -m)-apple-macos26.0"
@@ -25,6 +26,10 @@ case "$MODE" in --all|--site) ;; *) echo "Usage: $0 [--all|--site]" >&2; exit 2 
 BUILD="$(mktemp -d "${TMPDIR:-/tmp}/gaze-studio.XXXXXX")"
 FRAMES="$BUILD/frames"
 mkdir -p "$BUILD" "$FRAMES" "$ASSETS"
+cleanup() {
+  if [ "${GAZE_STUDIO_KEEP_FRAMES:-0}" != 1 ]; then rm -rf "$BUILD"; fi
+}
+trap cleanup EXIT
 
 echo "studio: compiling renderer"
 xcrun swiftc -parse-as-library -O -sdk "$SDK" -target "$TARGET" \
@@ -54,7 +59,7 @@ encode_variant() {
 	echo "studio: encoding $tag"
 	ffmpeg -hide_banner -v error -y \
 		-framerate 30 -i "$FRAMES/$tag/frame-%04d.png" \
-		-vf "scale=960:600" -c:v libx264 -pix_fmt yuv420p \
+		-vf "scale=1470:956" -c:v libx264 -pix_fmt yuv420p \
 		-crf 19 -preset medium -movflags +faststart -r 30 \
 		-an "$ASSETS/gaze-panel-$tag.mp4"
 	# Poster: settled scanning phase (t = 1.6 s).
@@ -65,10 +70,19 @@ encode_variant() {
 
 encode_variant normal
 encode_variant semi-liquid-glass
+# A closer crop for the explanatory section, from the same current animation.
+ffmpeg -hide_banner -v error -y -i "$ASSETS/gaze-panel-normal.mp4" \
+  -vf "crop=900:560:285:0" -c:v libx264 -pix_fmt yuv420p -crf 19 \
+  -movflags +faststart -an "$ASSETS/gaze-panel-detail.mp4"
+ffmpeg -hide_banner -v error -y -ss 1.6 -i "$ASSETS/gaze-panel-detail.mp4" \
+  -frames:v 1 "$ASSETS/gaze-panel-detail-poster.png"
 if [ "$MODE" = --all ]; then encode_variant liquid-glass; fi
 
 echo "studio: verifying"
-for mp4 in "$ASSETS"/gaze-panel-*.mp4; do
+TAGS=(normal semi-liquid-glass detail)
+if [ "$MODE" = --all ]; then TAGS+=(liquid-glass); fi
+for tag in "${TAGS[@]}"; do
+  mp4="$ASSETS/gaze-panel-$tag.mp4"
 	echo "--- $mp4"
 	ffprobe -hide_banner -v error \
 		-show_entries stream=width,height,avg_frame_rate,codec_name,pix_fmt,duration \
@@ -96,5 +110,9 @@ print("faststart: OK")
 EOF
 done
 ls -l "$ASSETS"
-(cd "$ASSETS" && shasum -a 256 gaze-panel-*) | tee "$ASSETS/SHASUMS.txt"
-echo "studio: frames kept at $FRAMES (outside the repo; delete when done)"
+(
+  cd "$ASSETS"
+  for tag in "${TAGS[@]}"; do shasum -a 256 "gaze-panel-$tag.mp4" "gaze-panel-$tag-poster.png"; done
+  shasum -a 256 preview-wallpaper.png
+) | tee "$ASSETS/SHASUMS.txt"
+if [ "${GAZE_STUDIO_KEEP_FRAMES:-0}" = 1 ]; then echo "studio: frames kept at $FRAMES"; fi
