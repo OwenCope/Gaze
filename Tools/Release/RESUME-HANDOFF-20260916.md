@@ -1,5 +1,56 @@
 # Resume handoff — September 16, 2026
 
+## Latest website visual correction — current native Liquid Glass capture pending
+
+The owner's clips were website previews, not the native app. The generated panel
+was over twice the native screen proportion, and the Liquid Glass option used
+older flat-face footage. Root corrected the studio to 1470x956 with a 280x128
+panel and a cleaned background from the provided reference screenshot. Normal,
+Semi glass and a close-up detail video are regenerated, integrated and checked.
+The obsolete Liquid Glass comparison is temporarily removed; a current capture
+with Gaze visible is needed. Do not substitute a material-less offscreen render.
+
+Full details: HomeMotion/ReferenceCorrection/REPORT.md. Updated helper copies only
+the selected current media. Both normal materials use the same current 3D companion
+and scene. Full build, TypeScript/lint, HTTP checks and browser inspection pass.
+Local preview: http://127.0.0.1:55523, exec 28853; logs build/website-reference-preview.
+The final build also includes the earlier admin source changes, but their durable
+patch/report packaging remains unfinished. No Gaze production source changed in
+this media correction. App artifact remains the 08:01 usability build.
+
+## Current visual-feedback correction — website preview media in progress
+
+After the Gaze-only pass, the owner supplied two website recordings and a lock-screen
+screenshot, complaining about oversize, the old companion and missing background.
+The recordings show website previews: Solid/Semi use the current 3D companion;
+Liquid glass still points to the recovered OLD flat-face native recording. Do not
+confuse these recordings with the current native app's UI.
+
+Measured reference screen: 1470x956 logical, 2x pixels; physical notch 179x32;
+production default expanded attached panel rounds to 280x128. Old studio was
+400x190 on 960x600, over twice the native screen proportion.
+
+Root updated Tools/Release/HomeMotion/Studio/StudioRenderer.swift and build-studio.sh
+to use 1470x956 with 280x128/179x32 geometry and a supplied clean wallpaper.
+Studio/assets/preview-wallpaper.png was derived from the owner's screenshot with
+clock, login name/avatar/field and status icons removed; the raw personal screenshot
+was NOT added to the site. The system default desktop URL was incorrect; do not use
+the Golden Gate image. GAZE_STUDIO_WALLPAPER points to the cleaned reference image.
+
+A new normal + semi render is running via build-studio.sh --site, unified exec
+session 17394; log build/user-visual-feedback/render.log. Wait for completion, inspect
+resulting media, then integrate the corrected assets into localhost. Website source
+and served preview have NOT yet been updated for this correction.
+
+Liquid Glass remains a real capture limitation: both hidden and visible OWN-window
+cacheDisplay probes dropped the material, leaving a floating companion. Screen
+capture preflight is false; no permission was requested. Do not ship those probes
+as faithful Liquid Glass or reuse the old flat-face clip as current appearance.
+The supplied screenshot has no Gaze panel visible. Ask for a top-of-screen capture
+with current Gaze visible (a short clip would allow replacement of the old footage).
+Finish independent size/background corrections while that reference is pending.
+No Gaze production source, camera, credentials or screen-lock state was changed.
+
 ## Latest Gaze-only build — 2026-09-16 08:01 UTC checkpoint
 
 The owner's forty-minute Gaze pass began at 07:21 UTC. Gaze remains the first
