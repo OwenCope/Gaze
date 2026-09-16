@@ -35,6 +35,11 @@ Escape focus restoration and automatic preview pausing. Native glass media fully
 decodes and has faststart. See HomeMotion/ReadySources/REPORT.md and
 HomeMotion/NativeGlassCrop/REPORT.md for evidence and recording/compositing limits.
 
+Additional homepage polish is integrated: a compact demo layout, pointer-only
+theme-icon motion, scoped feature-rail keyboard controls and larger footer links.
+The combined production build and focused desktop/mobile browser checks pass.
+See HomeMotion/SmallPolish/REPORT.md.
+
 Remaining public-release requirements: model/asset redistribution clearance (six
 groups unresolved), Developer ID/notarization when supplied, owner-supervised live
 acceptance and clean install/update checks, private Blob migration and production
