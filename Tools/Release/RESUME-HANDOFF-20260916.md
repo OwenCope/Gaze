@@ -1,5 +1,30 @@
 # Resume handoff — September 16, 2026
 
+## Active admin reliability pass — integration unfinished
+
+Root is continuing the additional-hour pass. Actual local site now has changes in
+settings-panel.tsx, testers-manager.tsx, roles-manager.tsx, the three matching API
+routes, and new src/lib/admin-response.ts. They add request serialization, validated
+acknowledgements, failure/draft recovery, labels, confirmations and safe API errors.
+Source backups: build/admin-reliability-baseline. Tools/Release/AdminReliability
+contains 65 passing request/response contract checks and a browser fixture.
+Full production build, scoped lint and five HTTP assertions pass. Preview remains
+http://127.0.0.1:55523, exec session 98549, logs build/website-admin-reliability.
+
+Browser verification is NOT finished: fixture session gaze-admin-reliability at
+127.0.0.1:18474 (server exec 16723) passed settings and tester failure checks, then
+stopped at "Tester removal: confirmed response updates the list". Inspect actual
+DOM/state before diagnosing whether this is an exit-animation timing issue or a
+product defect. browser-checks.js is the reusable driver; it uses synthetic data,
+stubbed fetch and confirm, actual components and the preview's generated CSS.
+Do not claim the admin pass complete yet. No real auth, storage or credentials used.
+
+User explicitly requested Hydra again. A one-file reduced-motion task is being
+sent using the prepared AdminReliability/ModalMotion/modal.tsx. That file targets
+src/components/ui/modal.tsx, used ONLY by these admin managers, not the stopped
+account-menu or release-gallery work. Root should not edit that target until the
+head reports. Hydra model selection is separate from root's model selection.
+
 ## Latest Hydra instruction — shared quota; retries cancelled
 
 The user confirms the free usage limit applies across all models on the provider.
