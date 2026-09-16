@@ -1,0 +1,320 @@
+--- a/src/components/notch-video.tsx
++++ b/src/components/notch-video.tsx
+@@ -3,12 +3,11 @@
+ import { useEffect, useRef, useState } from "react";
+ import { motion } from "framer-motion";
+ 
+-export type NotchStyle = "normal" | "semiGlass" | "liquidGlass";
++export type NotchStyle = "normal" | "semiGlass";
+ 
+ const CLIPS: Record<NotchStyle, string> = {
+-  normal: "/clips/normal.mp4",
+-  semiGlass: "/clips/semiLiquidGlass.mp4",
+-  liquidGlass: "/clips/liquidGlass.mp4",
++  normal: "/previews/gaze-panel-normal.mp4",
++  semiGlass: "/previews/gaze-panel-semi-liquid-glass.mp4",
+ };
+ 
+ /**
+@@ -16,6 +15,11 @@
+  * continuity between panel materials without lingering past the 220ms budget.
+  */
+ const FADE_SECONDS = 0.2;
++
++const POSTERS: Record<NotchStyle, string> = {
++  normal: "/previews/gaze-panel-normal-poster.png",
++  semiGlass: "/previews/gaze-panel-semi-liquid-glass-poster.png",
++};
+ 
+ type Intent = "auto" | "play" | "pause";
+ 
+@@ -26,37 +30,7 @@
+   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+ }
+ 
+-/**
+- * The real app, recorded.
+- *
+- * A CSS recreation can only approximate the material — the app draws
+- * `.ultraThinMaterial` and macOS 26's `glassEffect`, neither of which the web
+- * has. These are recordings of the actual panel over the actual wallpaper.
+- *
+- * All three are cross-faded rather than swapped into one `src`, because
+- * changing `src` tears the frame and restarts the sequence. That means three
+- * files, so nothing is fetched until the section is near the viewport — 13MB
+- * of demo has no business loading while someone reads the hero. A poster of
+- * the same desktop stands in until the first frame decodes, so the screen is
+- * never briefly black.
+- *
+- * Playback contract (all of it driven through video refs — CSS opacity alone
+- * never stops a clip):
+- *
+- * - Only the selected style may play; every hidden clip is paused.
+- * - The preview pauses when it leaves the actual viewport or the document is
+- *   hidden, and an explicit user pause survives style switches and re-entry.
+- * - Reduced motion starts static and pauses the moment it is enabled (a Play
+- *   pressed before that does not carry over); an explicit Play pressed under
+- *   reduced motion still plays the chosen recording, but the cross-fade stays
+- *   off. The fade also stays off on first paint and for keyboard-driven
+- *   changes — it is pointer-driven switches only.
+- * - Hidden styles load nothing (`preload="none"`); the selected clip uses
+- *   `metadata` until playback actually needs the bytes.
+- * - `play()` rejections resolve to a usable Play button, never an unhandled
+- *   promise, and a stale `play()` continuation never restarts a clip a newer
+- *   pass paused or hid (it may only confirm its own generation).
+- */
++/** Offline panel animation previews; playback never accesses a camera. */
+ export function NotchVideo({ style }: { style: NotchStyle }) {
+   const hostRef = useRef<HTMLDivElement>(null);
+   // Stable registry, not a ref: element attach callbacks may not read refs.
+@@ -216,7 +190,7 @@
+     <div ref={hostRef} className="relative h-full w-full overflow-hidden bg-black">
+       {/* eslint-disable-next-line @next/next/no-img-element */}
+       <img
+-        src="/desktop.jpg"
++        src={POSTERS[style]}
+         alt=""
+         aria-hidden
+         className="absolute inset-0 h-full w-full object-fill"
+@@ -234,7 +208,7 @@
+               }
+             }}
+             src={CLIPS[key]}
+-            poster="/desktop.jpg"
++            poster={POSTERS[key]}
+             loop
+             muted
+             playsInline
+--- a/src/components/mac-screen.tsx
++++ b/src/components/mac-screen.tsx
+@@ -7,12 +7,7 @@
+ import { cn } from "@/lib/utils";
+ 
+ /**
+- * The mockup's own geometry, with real footage of the app playing in its screen.
+- *
+- * The clips are whole-screen recordings rather than a crop of the notch. A crop
+- * has to be composited back over a still of the same desktop, and the two never
+- * line up exactly — you get a rectangle of slightly-wrong wallpaper around the
+- * panel. Recording the whole screen makes the alignment free.
++ * The mockup geometry with an offline animation of the production panel.
+  *
+  * These numbers are the mockup's own image slot, read off its 650×400 viewBox.
+  */
+@@ -29,7 +24,6 @@
+ const STYLES: { id: NotchStyle; label: string }[] = [
+   { id: "normal", label: "Normal" },
+   { id: "semiGlass", label: "Semi Liquid Glass" },
+-  { id: "liquidGlass", label: "Liquid Glass" },
+ ];
+ 
+ function Segmented({
+@@ -132,7 +126,7 @@
+ }
+ 
+ export function MacScreen({ interactive = false }: { interactive?: boolean }) {
+-  const [style, setStyle] = useState<NotchStyle>("semiGlass");
++  const [style, setStyle] = useState<NotchStyle>("normal");
+ 
+   return (
+     <div className="flex flex-col items-center gap-8">
+--- a/src/components/live-demo.tsx
++++ b/src/components/live-demo.tsx
+@@ -3,27 +3,27 @@
+     <section id="demo" aria-labelledby="demo-title" className="scroll-mt-20 bg-[var(--section-bg)] py-16 sm:py-20">
+       <div className="site-container">
+         <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
+-          <h2 id="demo-title" className="site-heading">From locked to unlocked.</h2>
++          <h2 id="demo-title" className="site-heading">See the panel in action.</h2>
+           <p id="demo-description" className="max-w-sm text-[16px] leading-relaxed text-[var(--muted-ink)]">
+-            An eight-second recording of Gaze. No camera access, no simulated recognition.
++            An animated preview of Gaze’s prompts. No camera is used.
+           </p>
+         </div>
+         <video
+           controls
+           playsInline
+           preload="none"
+-          poster="/features/unlock-poster.jpg"
+-          aria-label="Recording of Gaze recognizing a face and unlocking a Mac"
++          poster="/previews/gaze-panel-normal-poster.png"
++          aria-label="Animated preview of Gaze movement prompts and unlock feedback"
+           aria-describedby="demo-description"
+-          width={768}
+-          height={480}
++          width={960}
++          height={600}
+           className="block aspect-[8/5] w-full rounded-[20px] bg-black object-contain"
+         >
+-          <source src="/features/lock-unlock.mp4" type="video/mp4" />
+-          <a href="/features/lock-unlock.mp4">Watch the unlock recording</a>
++          <source src="/previews/gaze-panel-normal.mp4" type="video/mp4" />
++          <a href="/previews/gaze-panel-normal.mp4">Watch the panel preview</a>
+         </video>
+         <p className="mt-4 text-[13px] leading-relaxed text-[var(--muted-ink)]">
+-          The panel opens, recognizes the enrolled face, and closes after unlocking. Use the gallery below to compare panel materials.
++          This preview shows two movements, followed by the wait for macOS. In the app, you can choose one or two movements. Your password remains available.
+         </p>
+       </div>
+     </section>
+--- a/src/app/page.tsx
++++ b/src/app/page.tsx
+@@ -41,13 +41,16 @@
+                   <LiquidButton variant="solid" asChild>
+                     <Link href={DISCORD} target="_blank" rel="noreferrer">Join the Discord</Link>
+                   </LiquidButton>
+-                  <a href="#demo" className="site-link text-[17px]">Watch it unlock <span aria-hidden>›</span></a>
++                  <a href="#demo" className="site-link text-[17px]">See how it works <span aria-hidden>›</span></a>
+                 </div>
+                 <p className="mt-4 text-[12px] text-[var(--muted-ink)]">Free and open source. Currently in development.</p>
+               </>
+             }
+             product={
+-              <div className="mx-auto mt-10 max-w-[980px] sm:mt-12"><MacScreen /></div>
++              <div className="mx-auto mt-10 max-w-[980px] sm:mt-12">
++                <MacScreen />
++                <p className="mt-3 text-[12px] text-[var(--muted-ink)]">Panel animation preview</p>
++              </div>
+             }
+           />
+         </div>
+--- a/src/components/product-tour.tsx
++++ b/src/components/product-tour.tsx
+@@ -1,27 +1,10 @@
+ "use client";
+ 
+ import Image from "next/image";
+-import { useEffect, useRef } from "react";
+-
+-/**
+- * The product, one screen at a time, alternating sides.
+- *
+- * The page argues its case in prose, and the prose is good — but it goes hero, then
+- * paragraph, then paragraph. Every Mac app site worth copying goes hero, then *picture*:
+- * a short confident heading, two lines of body, and a screenshot big enough to read. The
+- * screenshot is the content; the words are the caption.
+- *
+- * Alternating sides rather than a grid of equal cards. A grid says "here are twelve
+- * things, all the same size, none of them important". Alternating rows give each one a
+- * full turn and let the eye fall down the page, which is what makes a long page feel
+- * short.
+- *
+- * Rows come in as they are reached rather than all at once — an `IntersectionObserver`
+- * adding a class, not a scroll listener, so it costs nothing while the page is idle.
+- */
+ 
+ type Shot = {
+   media: string;
++  poster?: string;
+   alt: string;
+   eyebrow: string;
+   title: string;
+@@ -30,28 +13,30 @@
+ 
+ const shots: Shot[] = [
+   {
+-    media: "/features/lock-unlock.mp4",
+-    alt: "The Gaze panel recognising a face at the macOS lock screen",
+-    eyebrow: "At the lock screen",
+-    title: "Look at it. You're in.",
++    media: "/previews/gaze-panel-normal.mp4",
++    poster: "/previews/gaze-panel-normal-poster.png",
++    alt: "Animated preview of Gaze movement prompts",
++    eyebrow: "Panel preview",
++    title: "Follow the panel.",
+     body:
+-      "A panel drops out of the notch when your Mac locks and watches for you. Recognise, unlock, gone — and if it doesn't know you, it gets out of the way and lets you type.",
++      "Gaze guides you through a small head movement and back to your starting pose. This animation shows the two-movement flow; you can also choose one in Settings.",
+   },
+   {
+     media: "/features/settings-pan.mp4",
+-    alt: "Gaze settings showing the password stored in the Secure Enclave",
++    poster: "/previews/settings-poster.png",
++    alt: "Gaze Settings with stored-password controls",
+     eyebrow: "Your password",
+     title: "Encrypted, and it stays here.",
+     body:
+-      "Held on this Mac with a key from its Secure Enclave. Never synced, never logged, never sent anywhere — and one click revokes it.",
++      "Gaze stores an encrypted copy on this Mac using a key held by its Secure Enclave. Change or revoke the saved password in Settings.",
+   },
+   {
+     media: "/features/welcome.jpg",
+     alt: "The Gaze setup flow",
+     eyebrow: "Setup",
+-    title: "Four screens, once.",
++    title: "Set it up at your pace.",
+     body:
+-      "What it does, your face, your password, one permission. Then you don't think about it again.",
++      "Enroll your face, review permissions and choose whether Gaze may unlock this Mac. You can finish skipped steps in Settings.",
+   },
+ ];
+ 
+@@ -68,37 +53,8 @@
+ }
+ 
+ function Row({ shot, flipped }: { shot: Shot; flipped: boolean }) {
+-  const ref = useRef<HTMLDivElement>(null);
+-
+-  useEffect(() => {
+-    const element = ref.current;
+-    if (!element) return;
+-    // Reduced motion gets the finished state immediately. The arrival is decoration; the
+-    // content is not.
+-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+-      element.dataset.shown = "true";
+-      return;
+-    }
+-    const observer = new IntersectionObserver(
+-      ([entry]) => {
+-        if (entry.isIntersecting) {
+-          element.dataset.shown = "true";
+-          observer.disconnect();
+-        }
+-      },
+-      { rootMargin: "-12% 0px" },
+-    );
+-    observer.observe(element);
+-    return () => observer.disconnect();
+-  }, []);
+-
+   return (
+-    <div
+-      ref={ref}
+-      data-shown="false"
+-      className="group grid items-center gap-10 data-[shown=false]:translate-y-6 data-[shown=false]:opacity-0 data-[shown=true]:translate-y-0 data-[shown=true]:opacity-100 md:grid-cols-2 md:gap-16"
+-      style={{ transition: "opacity .7s cubic-bezier(.32,.72,0,1), transform .7s cubic-bezier(.32,.72,0,1)" }}
+-    >
++    <div className="grid items-center gap-10 md:grid-cols-2 md:gap-16">
+       {/* Source order puts the words first so a screen reader and a phone both get the
+           heading before the picture; `md:order-2` does the alternating on wide screens
+           only, where there are two columns to alternate between. */}
+@@ -113,7 +69,7 @@
+       </div>
+ 
+       <div className={flipped ? "md:order-1" : ""}>
+-        <Frame media={shot.media} alt={shot.alt} />
++        <Frame media={shot.media} poster={shot.poster} alt={shot.alt} />
+       </div>
+     </div>
+   );
+@@ -126,7 +82,7 @@
+  * light page reads as a screen rather than a hole punched in the layout — and so the three
+  * rows line up even though the captures are different shapes.
+  */
+-function Frame({ media, alt }: { media: string; alt: string }) {
++function Frame({ media, poster, alt }: { media: string; poster?: string; alt: string }) {
+   const isVideo = media.endsWith(".mp4");
+ 
+   return (
+@@ -136,8 +92,9 @@
+         // and hijacks the page.
+         <video
+           src={media}
+-          autoPlay
+-          loop
++          controls
++          preload="none"
++          poster={poster}
+           muted
+           playsInline
+           aria-label={alt}

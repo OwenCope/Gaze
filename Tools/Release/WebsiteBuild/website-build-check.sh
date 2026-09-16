@@ -1,15 +1,21 @@
 #!/bin/sh
 # Build and smoke-test an isolated website copy, never the production configuration.
-# Usage: website-build-check.sh [site-dir] [out-dir] [--smoke]
+# Usage: website-build-check.sh [site-dir] [out-dir] [--smoke|--serve] [--email-ui] [--port=NUMBER]
 set -eu
 SITE_DIR=/Users/owencope/Developer/gaze-site
 OUTPUT_DIR=build/website-build-check
 SMOKE=0
+SERVE=0
+EMAIL_UI=0
+REQUESTED_PORT=0
 POSITION=0
 for argument in "$@"; do
   case "$argument" in
     --smoke) SMOKE=1 ;;
-    --help|-h) echo "Usage: $0 [site-dir] [out-dir] [--smoke]"; exit 0 ;;
+    --serve) SMOKE=1; SERVE=1 ;;
+    --email-ui) EMAIL_UI=1 ;;
+    --port=*) REQUESTED_PORT="${argument#--port=}" ;;
+    --help|-h) echo "Usage: $0 [site-dir] [out-dir] [--smoke|--serve] [--email-ui] [--port=NUMBER]"; exit 0 ;;
     --*) echo "Unknown option: $argument" >&2; exit 2 ;;
     *) POSITION=$((POSITION + 1))
        case "$POSITION" in 1) SITE_DIR="$argument" ;; 2) OUTPUT_DIR="$argument" ;; *) echo 'Too many arguments' >&2; exit 2 ;; esac ;;
@@ -45,6 +51,10 @@ rsync -a --exclude='.env*' --exclude='.npmrc' \
   --exclude='*' "$SITE_DIR/" "$BUILD_COPY/"
 # Turbopack requires dependencies inside its project root.
 rsync -a "$SITE_DIR/node_modules/" "$BUILD_COPY/node_modules/"
+if [ "$EMAIL_UI" = 1 ]; then
+  mkdir -p "$BUILD_COPY/src/app/email-ui-review"
+  cp "$(dirname "$0")/../EmailAuthHardening/ui-fixture.tsx" "$BUILD_COPY/src/app/email-ui-review/page.tsx"
+fi
 mkdir -p "$BUILD_COPY/data"
 FIXTURE_NAME="Synthetic build fixture ${BUILD_COPY##*/}"
 python3 - "$BUILD_COPY/data" "$FIXTURE_NAME" <<'PY'
@@ -69,10 +79,13 @@ tail -60 "$OUTPUT_DIR/build.log"
 [ "$STATUS" = 0 ] || exit "$STATUS"
 
 if [ "$SMOKE" = 1 ]; then
-  PORT="$(python3 - <<'PY'
-import socket
+  PORT="$(python3 - "$REQUESTED_PORT" <<'PY'
+import socket, sys
+value=sys.argv[1]
+if not value.isdecimal() or not (value == '0' or 1024 <= int(value) <= 65535):
+    raise SystemExit('Review port must be 0 (automatic) or 1024–65535')
 with socket.socket() as s:
-    s.bind(('127.0.0.1',0))
+    s.bind(('127.0.0.1',int(value)))
     print(s.getsockname()[1])
 PY
 )"
@@ -117,3 +130,8 @@ PY
   cat "$OUTPUT_DIR/smoke.log" | tee -a "$OUTPUT_DIR/serve.log"
 fi
 printf '\nPASS: isolated production build%s. Production configuration and data were not used.\n' "$( [ "$SMOKE" = 1 ] && printf ' and HTTP assertions' || true )"
+
+if [ "$SERVE" = 1 ]; then
+  printf "Review server: http://127.0.0.1:%s (synthetic data; stop this command to clean up)\n" "$PORT"
+  wait "$SERVER_PID"
+fi

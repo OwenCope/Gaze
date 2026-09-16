@@ -1,0 +1,320 @@
+--- a/src/lib/storage.ts
++++ b/src/lib/storage.ts
+@@ -1,4 +1,5 @@
+-import { get, put } from "@vercel/blob";
++import { BlobPreconditionFailedError, get, put } from "@vercel/blob";
++import { randomUUID } from "node:crypto";
+ import { promises as fs } from "node:fs";
+ import path from "node:path";
+ 
+@@ -114,6 +115,153 @@
+     addRandomSuffix: false, allowOverwrite: true, cacheControlMaxAge: 60 });
+ }
+ 
++/**
++ * Compare-and-swap mutation for the JSON metadata documents.
++ *
++ * Two admins adding different testers at the same time used to race: both
++ * read the same list, each appended their own row, and the second write
++ * silently discarded the first. This helper closes that loss for
++ * independent-record updates by retrying the read/modify/write cycle against
++ * the version that is current at write time.
++ *
++ * Blob mode (production): each attempt reads the private object with
++ * `useCache: false` and the existing explicit private credentials, requires a
++ * 200 response with valid existing content and a nonempty ETag, runs the pure
++ * `update` callback, validates the next text, and writes with
++ * `access: "private"`, `addRandomSuffix: false`, `allowOverwrite: true` and
++ * `ifMatch` set to the ETag just read. A `BlobPreconditionFailedError` from
++ * the installed SDK (checked with `instanceof`, since SDK errors inherit
++ * `Error` with name `"Error"`) means another writer won the race, so the
++ * cycle re-reads and recomputes, up to five attempts total. Only the result
++ * belonging to the successful conditional write is returned. A missing,
++ * non-200, ETag-less, corrupt, or unconfigured read never calls `update` and
++ * never writes, so an ordinary mutation cannot initialize an unmigrated
++ * store. Exhaustion throws an actionable error that names the key and the
++ * retry count without including private document content.
++ *
++ * Local mode (no Blob configuration): mutations for the same key are
++ * serialized within this process by a per-key promise queue that survives a
++ * failed predecessor, so two concurrent `mutateMetadata` calls cannot
++ * interleave their read/modify/write cycles. A missing file reads as `null`
++ * only on `ENOENT`; any other filesystem error propagates without writing.
++ * Existing and next content are both validated. Each mutation writes a unique
++ * temporary file in the same directory and renames it atomically over the
++ * target, always cleaning up the owned temp file. This queue does NOT
++ * coordinate independent local processes (two dev servers, scripts, etc.):
++ * writers in different processes can still race. No lock files are used, so
++ * there is nothing stale to delete. Blob mode is the concurrent-safe path.
++ *
++ * The production/local backend selection (`usingBlob`) and the private
++ * credential safeguards (`privateStoreOptions`) are unchanged.
++ */
++export type MetadataMutationKey =
++  | 'releases.json'
++  | 'testers.json'
++  | 'roles.json'
++  | 'settings.json';
++
++const MUTATE_MAX_ATTEMPTS = 5;
++
++const mutationGlobals = globalThis as typeof globalThis & {
++  __gazeMetadataQueues?: Map<string, Promise<void>>;
++};
++const localMutationQueues = mutationGlobals.__gazeMetadataQueues ??= new Map<string, Promise<void>>();
++const MUTATION_KEYS = new Set([KEY, TESTERS_KEY, ROLES_KEY, "settings.json"]);
++
++function diskPathForMetadataKey(key: string): string {
++  return path.join(process.cwd(), "data", key);
++}
++
++export async function mutateMetadata<T>(
++  key: 'releases.json' | 'testers.json' | 'roles.json' | 'settings.json',
++  update: (raw: string | null) => { text: string; result: T },
++): Promise<T> {
++  if (!MUTATION_KEYS.has(key)) throw new Error("Unsupported metadata document");
++  if (!usingBlob) {
++    const queueKey = diskPathForMetadataKey(key);
++    const previous = localMutationQueues.get(queueKey) ?? Promise.resolve();
++    const run = previous.catch(() => {}).then(async (): Promise<T> => {
++      let raw: string | null;
++      try {
++        raw = await fs.readFile(diskPathForMetadataKey(key), "utf8");
++      } catch (error) {
++        if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") raw = null;
++        else throw error;
++      }
++      if (raw !== null) validateMetadata(key, raw);
++      const next = update(raw);
++      validateMetadata(key, next.text);
++      const disk = diskPathForMetadataKey(key);
++      await fs.mkdir(path.dirname(disk), { recursive: true });
++      const tmp = `${disk}.${randomUUID()}.tmp`;
++      let created = false;
++      try {
++        const file = await fs.open(tmp, "wx", 0o600);
++        created = true;
++        try { await file.writeFile(next.text, "utf8"); } finally { await file.close(); }
++        await fs.rename(tmp, disk);
++      } finally {
++        if (created) await fs.unlink(tmp).catch((error: NodeJS.ErrnoException) => {
++          if (error.code !== "ENOENT") throw error;
++        });
++      }
++      return next.result;
++    });
++    // The stored tail never rejects so one failure does not wedge the queue;
++    // the returned `run` still rejects for its own caller.
++    const tail = run.then(() => {}, () => {});
++    localMutationQueues.set(queueKey, tail);
++    void tail.then(() => {
++      if (localMutationQueues.get(queueKey) === tail) localMutationQueues.delete(queueKey);
++    });
++    return run;
++  }
++
++  let attempt = 0;
++  while (true) {
++    attempt += 1;
++    const response = await get(key, { ...privateStoreOptions(), useCache: false });
++    if (!response || response.statusCode !== 200) {
++      throw new Error(
++        `Private metadata unavailable: ${key}. Complete and verify migration before using this store.`,
++      );
++    }
++    const etag = response.blob?.etag;
++    if (typeof etag !== "string" || etag.trim().length === 0) {
++      throw new Error(
++        `Private metadata unavailable: ${key} is missing a version (ETag). Refusing conditional write.`,
++      );
++    }
++    const current = await new Response(response.stream).text();
++    validateMetadata(key, current);
++    const next = update(current);
++    validateMetadata(key, next.text);
++    try {
++      await put(key, next.text, {
++        ...privateStoreOptions(),
++        contentType: "application/json",
++        addRandomSuffix: false,
++        allowOverwrite: true,
++        cacheControlMaxAge: 60,
++        ifMatch: etag,
++      });
++      return next.result;
++    } catch (error) {
++      // SDK errors inherit Error with name "Error": match by class, not by name.
++      if (error instanceof BlobPreconditionFailedError) {
++        if (attempt >= MUTATE_MAX_ATTEMPTS) {
++          throw new Error(
++            `Concurrent update conflict on ${key}: another writer updated the document; ` +
++            `tried ${MUTATE_MAX_ATTEMPTS} times. Reload and retry.`,
++          );
++        }
++        continue;
++      }
++      throw error;
++    }
++  }
++}
++
+ export async function readReleasesJson(): Promise<string | null> {
+   if (!usingBlob) {
+     try {
+--- a/src/lib/testers.ts
++++ b/src/lib/testers.ts
+@@ -1,4 +1,4 @@
+-import { readTestersJson, writeTestersJson } from "@/lib/storage";
++import { mutateMetadata, readTestersJson } from "@/lib/storage";
+ 
+ /**
+  * Who is allowed to see a private release.
+@@ -41,32 +41,43 @@
+   note?: string;
+   roles?: string[];
+ }): Promise<Tester[]> {
+-  const list = await readTesters(true);
++  // Computed once: the retryable callback below may run up to five times on a
++  // Blob precondition conflict, and every attempt must use the same values.
+   const email = clean(input.email);
+   const github = input.github?.trim().replace(/^@/, "").replace(/^https?:\/\/github\.com\//, "");
++  const note = input.note?.trim() || undefined;
++  const explicitRoles = input.roles ? [...input.roles] : undefined;
++  const nowIso = new Date().toISOString();
+ 
+-  const existing = list.findIndex((t) => t.email === email);
+-  const record: Tester = {
+-    email,
+-    roles: input.roles ?? list[existing]?.roles ?? ["tester"],
+-    github: github || undefined,
+-    note: input.note?.trim() || undefined,
+-    // Adding someone twice updates them rather than duplicating the row, and
+-    // keeps the date they were first let in.
+-    addedAt: existing >= 0 ? list[existing].addedAt : new Date().toISOString(),
+-  };
++  return mutateMetadata<Tester[]>('testers.json', (raw) => {
++    const list: Tester[] = raw ? (JSON.parse(raw) as Tester[]) : [];
++    if (!Array.isArray(list)) throw new Error("Invalid metadata list");
++    const existing = list.findIndex((t) => t.email === email);
++    const record: Tester = {
++      email,
++      roles: explicitRoles ?? list[existing]?.roles ?? ["tester"],
++      github: github || undefined,
++      note,
++      // Adding someone twice updates them rather than duplicating the row, and
++      // keeps the date they were first let in.
++      addedAt: existing >= 0 ? list[existing].addedAt : nowIso,
++    };
+ 
+-  if (existing >= 0) list[existing] = record;
+-  else list.unshift(record);
++    if (existing >= 0) list[existing] = record;
++    else list.unshift(record);
+ 
+-  await writeTestersJson(`${JSON.stringify(list, null, 2)}\n`);
+-  return list;
++    return { text: `${JSON.stringify(list, null, 2)}\n`, result: list };
++  });
+ }
+ 
+ export async function removeTester(email: string): Promise<Tester[]> {
+-  const list = (await readTesters(true)).filter((t) => t.email !== clean(email));
+-  await writeTestersJson(`${JSON.stringify(list, null, 2)}\n`);
+-  return list;
++  const target = clean(email);
++  return mutateMetadata<Tester[]>('testers.json', (raw) => {
++    const list: Tester[] = raw ? (JSON.parse(raw) as Tester[]) : [];
++    if (!Array.isArray(list)) throw new Error("Invalid metadata list");
++    const next = list.filter((t) => t.email !== target);
++    return { text: `${JSON.stringify(next, null, 2)}\n`, result: next };
++  });
+ }
+ 
+ /**
+--- a/src/lib/roles.ts
++++ b/src/lib/roles.ts
+@@ -1,4 +1,4 @@
+-import { readRolesJson, writeRolesJson } from "@/lib/storage";
++import { mutateMetadata, readRolesJson } from "@/lib/storage";
+ import { PERMISSIONS, type Permission, type Role } from "@/lib/permissions";
+ 
+ export { PERMISSIONS };
+@@ -34,8 +34,19 @@
+   }
+ }
+ 
+-async function writeRoles(list: Role[]) {
+-  await writeRolesJson(`${JSON.stringify(list, null, 2)}\n`);
++function copyDefaultRoles(): Role[] {
++  // Never hand out (or mutate) the shared DEFAULT_ROLES array: every mutation
++  // starts from a fresh copy so a failed write cannot leave defaults changed.
++  return DEFAULT_ROLES.map((r) => ({ ...r, permissions: [...r.permissions] }));
++}
++
++async function mutateRoles(update: (list: Role[]) => Role[]): Promise<Role[]> {
++  return mutateMetadata<Role[]>('roles.json', (raw) => {
++    const list: Role[] = raw ? (JSON.parse(raw) as Role[]) : copyDefaultRoles();
++    if (!Array.isArray(list)) throw new Error("Invalid role metadata");
++    const next = update(list);
++    return { text: `${JSON.stringify(next, null, 2)}\n`, result: next };
++  });
+ }
+ 
+ const slug = (name: string) =>
+@@ -47,7 +58,7 @@
+   color: string;
+   permissions: Permission[];
+ }): Promise<Role[]> {
+-  const list = await readRoles(true);
++  // Computed once: retries must reuse the same identity and values.
+   const id = input.id || slug(input.name);
+   const role: Role = {
+     id,
+@@ -55,15 +66,15 @@
+     color: input.color,
+     permissions: input.permissions.filter((p) => p in PERMISSIONS),
+   };
+-  const i = list.findIndex((r) => r.id === id);
+-  if (i >= 0) list[i] = role;
+-  else list.push(role);
+-  await writeRoles(list);
+-  return list;
++  return mutateRoles((list) => {
++    const i = list.findIndex((r) => r.id === id);
++    if (i >= 0) list[i] = { ...role, permissions: [...role.permissions] };
++    else list.push({ ...role, permissions: [...role.permissions] });
++    return list;
++  });
+ }
+ 
+ export async function removeRole(id: string): Promise<Role[]> {
+-  const list = (await readRoles(true)).filter((r) => r.id !== id);
+-  await writeRoles(list);
+-  return list;
++  const target = id;
++  return mutateRoles((list) => list.filter((r) => r.id !== target));
+ }
+--- a/src/lib/settings.ts
++++ b/src/lib/settings.ts
+@@ -1,4 +1,4 @@
+-import { readJSON, writeJSON } from "./storage";
++import { mutateMetadata, readJSON } from "./storage";
+ 
+ /**
+  * Site settings the owner can change without a deploy.
+@@ -29,7 +29,12 @@
+ }
+ 
+ export async function saveSettings(next: Partial<Settings>): Promise<Settings> {
+-  const merged = { ...(await getSettings()), ...next };
+-  await writeJSON("settings.json", merged);
+-  return merged;
++  // Captured once so retries merge the same patch against the latest stored
++  // document; concurrent patches to different keys both survive.
++  const patch: Partial<Settings> = { ...next };
++  return mutateMetadata<Settings>('settings.json', (raw) => {
++    const stored: Partial<Settings> = raw ? (JSON.parse(raw) as Partial<Settings>) : {};
++    const merged: Settings = { ...DEFAULTS, ...(stored ?? {}), ...patch };
++    return { text: JSON.stringify(merged, null, 2), result: merged };
++  });
+ }

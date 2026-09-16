@@ -11,6 +11,7 @@ struct LiveImportView: View {
 	@State private var fileSession: UUID?
 	@State private var review: PasswordCSVImport?
 	@State private var importSession: UUID?
+	@State private var wasInterruptedByLock = false
 	@State private var message: String?
 	@State private var failure: String?
 
@@ -39,6 +40,10 @@ struct LiveImportView: View {
 				Button("Show export guide") { guide.show() }.gazeButton()
 			}
 			Divider()
+			if wasInterruptedByLock {
+				Text(store.isLocked ? "The vault locked, so the import review was cleared. Choose the CSV again after unlocking." : "The vault locked, so the import review was cleared. Choose the CSV again.")
+					.font(.callout).foregroundStyle(.secondary)
+			}
 			if store.isLocked {
 				Text("Unlock to choose your export.").foregroundStyle(.secondary)
 				Button(store.busy ? "Waiting for macOS…" : "Unlock Passwords") { Task { await store.unlock() } }
@@ -69,7 +74,7 @@ struct LiveImportView: View {
 					}
 				}.padding(20).glassSurface()
 				HStack {
-					Button("Choose another file") { clearReview(); fileSession = store.sessionID; choosingFile = true }.gazeButton()
+					Button("Choose another file") { wasInterruptedByLock = false; clearReview(); fileSession = store.sessionID; choosingFile = true }.gazeButton()
 					Spacer()
 					Button("Import \(plan.entries.count) passwords", action: commit)
 						.gazeButton(.primary).keyboardShortcut(.defaultAction).disabled(plan.entries.isEmpty || store.busy)
@@ -79,7 +84,7 @@ struct LiveImportView: View {
 						.font(.callout).foregroundStyle(.secondary)
 				}
 			} else {
-				Button("Choose CSV file…") { failure = nil; message = nil; fileSession = store.sessionID; choosingFile = true }
+				Button("Choose CSV file…") { wasInterruptedByLock = false; failure = nil; message = nil; fileSession = store.sessionID; choosingFile = true }
 					.gazeButton(.primary).keyboardShortcut(.defaultAction).disabled(PasswordsBuild.isUIReview)
 			}
 			if let message {
@@ -98,7 +103,7 @@ struct LiveImportView: View {
 			catch CocoaError.userCancelled { }
 			catch { failure = "The export could not be opened. Choose a valid local CSV file and try again." }
 		}
-		.onChange(of: store.sessionID) { _, _ in clearReview(); fileSession = nil; choosingFile = false }
+		.onChange(of: store.sessionID) { _, _ in wasInterruptedByLock = wasInterruptedByLock || review != nil || choosingFile; clearReview(); fileSession = nil; choosingFile = false }
 		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
 			if !store.busy { store.lock() }
 		}
@@ -106,9 +111,9 @@ struct LiveImportView: View {
 		.onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)) { _ in store.lock() }
 		.onReceive(DistributedNotificationCenter.default().publisher(for: .init("com.apple.screenIsLocked"))) { _ in store.lock() }
 		.onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
-			if (notification.object as? NSWindow)?.title == "Import passwords" { clearReview(); fileSession = nil; guide.close() }
+			if (notification.object as? NSWindow)?.title == "Import passwords" { wasInterruptedByLock = false; clearReview(); fileSession = nil; guide.close() }
 		}
-		.onDisappear { clearReview(); fileSession = nil; guide.close() }
+		.onDisappear { wasInterruptedByLock = false; clearReview(); fileSession = nil; guide.close() }
 	}
 
 	private func read(_ url: URL) throws {
@@ -141,6 +146,7 @@ struct LiveImportView: View {
 			let count = try store.importEntries(review.entries)
 			if count > 0, let firstImportedID { store.showEntry(firstImportedID) }
 			clearReview()
+			wasInterruptedByLock = false
 			message = "Imported \(count) passwords. Check them in your vault before removing the CSV."
 		} catch { failure = error.localizedDescription }
 	}

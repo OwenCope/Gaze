@@ -106,11 +106,35 @@ struct SettingsView: View {
 	@State private var lockoutPassword = ""
 	@State private var accessibilityGranted = AXIsProcessTrusted()
 	@State private var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+	/// The settings search field. Blank means no search: the panes show as before.
+	@State private var searchQuery = ""
+	/// The section a search result asked to reveal.
+	///
+	/// Set together with the destination pane and the cleared query; a `.task(id:)`
+	/// on the detail scroll view scrolls to it after layout, then clears it.
+	/// Navigation only — it never reads the vault or flips a setting.
+	@State private var pendingSearchSection: SettingsSearchItem?
 
 	@Environment(\.openWindow) private var openWindow
 
 	var body: some View {
-		detail
+		Group {
+			// A search replaces the panes while it is nonempty, rather than filtering
+			// rows in savedApp: the panes are per-subject groups, and a filtered
+			// subset of rows would orphan controls from the footers that explain them.
+			if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+				detail
+			} else {
+				searchResults
+			}
+		}
+			.searchable(text: $searchQuery, placement: .toolbar, prompt: "Find a setting")
+			.onChange(of: pane) { _, _ in searchQuery = "" }
+			.onSubmit(of: .search) {
+				if let first = SettingsSearchItem.results(for: searchQuery).first {
+					selectSearchResult(first)
+				}
+			}
 			// The pane switcher lives in the window's toolbar, which is where macOS puts
 			// one. `.principal` centres it between the traffic lights and the trailing
 			// edge — the same slot Finder's view switcher and Xcode's segmented controls
@@ -195,7 +219,8 @@ struct SettingsView: View {
 	// MARK: - Detail
 
 	private var detail: some View {
-		ScrollView {
+		ScrollViewReader { proxy in
+			ScrollView {
 			VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 				// No page header here any more.
 				//
@@ -222,22 +247,22 @@ struct SettingsView: View {
 				// three, and split one subject across two panes.
 				case .face:
 					if lockout.isLockedOut { lockoutSection }
-					hero
-					unlockSection
-					permissionsSection
-					securitySection
+					hero.id("hero")
+					unlockSection.id("unlockSection")
+					permissionsSection.id("permissionsSection")
+					securitySection.id("securitySection")
 					if store.isEnrolled { manageSection }
 				case .general:
-					behaviourSection
-					onboardingSection
-					updatesSection
-					appearanceSection
+					behaviourSection.id("behaviourSection")
+					onboardingSection.id("onboardingSection")
+					updatesSection.id("updatesSection")
+					appearanceSection.id("appearanceSection")
 				case .notch:
-					NotchSettingsSection(settings: settings)
+					NotchSettingsSection(settings: settings).id("NotchSettingsSection")
 				case .credits:
-					creditsSection
+					creditsSection.id("creditsSection")
 				case .about:
-					aboutSection
+					aboutSection.id("aboutSection")
 					DisclosureGroup("Credits & Acknowledgements") { creditsSection }
 				}
 
@@ -259,6 +284,74 @@ struct SettingsView: View {
 			.padding(.bottom, 26)
 		}
 		.scrollIndicators(.never)
+			// Scrolls to a search result's section after the pane switch lays out,
+			// so the anchor exists when it scrolls. Keyed by the destination rather
+			// than delayed by a fixed interval; unanimated, and cleared on arrival.
+			.task(id: pendingSearchSection?.id) {
+				guard let target = pendingSearchSection else { return }
+				proxy.scrollTo(target.section, anchor: .top)
+				pendingSearchSection = nil
+			}
+		}
+	}
+
+	/// The search results, replacing the panes while the query is nonempty.
+	///
+	/// One restrained row per match — title and subtitle, nothing more. Each row
+	/// only navigates: it switches to the result's pane, clears the query, and
+	/// asks the detail scroll view to reveal the matching section. Selecting a
+	/// result never reads the vault, toggles a setting, or opens a permission
+	/// prompt or enrolment flow.
+	private var searchResults: some View {
+		let matches = SettingsSearchItem.results(for: searchQuery)
+		return ScrollView {
+			VStack(alignment: .leading, spacing: 0) {
+				if matches.isEmpty {
+					Text("No settings match \"\(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines))\".")
+						.font(Typography.detail)
+						.foregroundStyle(Theme.secondaryLabel)
+						.padding(.horizontal, Theme.rowInset)
+						.padding(.vertical, 14)
+					Button("Clear search") { searchQuery = "" }
+						.gazeButton()
+						.padding(.horizontal, Theme.rowInset)
+				} else {
+					ForEach(matches) { item in
+						Button { selectSearchResult(item) } label: {
+							VStack(alignment: .leading, spacing: 3) {
+								Text(item.title)
+									.font(Typography.control)
+									.foregroundStyle(Theme.label)
+								Text(item.subtitle)
+									.font(Typography.detail)
+									.foregroundStyle(Theme.secondaryLabel)
+							}
+							.frame(maxWidth: .infinity, alignment: .leading)
+							.padding(.horizontal, Theme.rowInset)
+							.padding(.vertical, 10)
+						}
+						.buttonStyle(.plain)
+						if item.id != matches.last?.id {
+							RowDivider(inset: 0)
+						}
+					}
+				}
+
+				Spacer(minLength: 0)
+			}
+			.frame(maxWidth: Self.contentWidth, alignment: .leading)
+			.frame(maxWidth: .infinity)
+			.padding(.horizontal, 22)
+			.padding(.top, 18)
+			.padding(.bottom, 26)
+		}
+		.scrollIndicators(.never)
+	}
+
+	private func selectSearchResult(_ item: SettingsSearchItem) {
+		if let next = SettingsPane(rawValue: item.pane) { pane = next }
+		searchQuery = ""
+		pendingSearchSection = item
 	}
 
 	// MARK: - Overview

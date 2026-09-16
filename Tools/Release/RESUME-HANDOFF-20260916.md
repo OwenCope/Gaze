@@ -1,7 +1,86 @@
 # Resume handoff — September 16, 2026
 
+## Completed homepage revision — 2026-09-16 05:01 UTC
+
+The repeated Hydra retries were automatically stopped for inactivity, with no
+changes landed. Root completed the remaining work directly; no stopped worktree
+was recovered. The user explicitly stopped earlier account-menu/gallery work,
+which remains untouched.
+
+The switcher now sits below the MacBook, hover tilt is removed, FAQ/mobile nav
+have reversible disclosure motion with instant keyboard/reduced-motion paths,
+and Liquid glass uses actual recorded panel pixels over a reconstructed clean
+wallpaper backdrop. It is labelled recorded appearance. Native media is 960x600,
+30fps, 134 frames/4.466667 seconds, faststart and full-decode verified.
+
+Six current site sources and a reproducible patch are stored in
+HomeMotion/ReadySources; native media and recipes in HomeMotion/NativeGlassCrop.
+Media/apply-assets.sh copies the added files. Full production build, TypeScript,
+scoped lint and five synthetic HTTP assertions pass. Browser checks cover 1440px,
+390px and 320px, dark mode, reduced motion, FAQ reversal and Escape focus recovery.
+No new app build, camera, lock test, credential access or deployment occurred.
+
+Final local preview: http://127.0.0.1:55523. Exec session 60392 keeps it running;
+logs: build/website-home-final. Preserve this server. The newer checkpoint
+supersedes pending-head/server statements below. Public release gates remain in
+READINESS.md; this is local readiness, not public launch approval.
+
+## Current checkpoint — 2026-09-16 04:33 UTC
+
+Latest owner direction: keep working until ready; localhost only, no deployment.
+The owner wants the material switcher BELOW the Mac prop, no product hover tilt,
+stronger Apple-style interaction motion (especially FAQ), and genuine Liquid Glass
+where recoverable. Four retry heads own only new folders: ControlsRetry (Suki 2),
+FAQRetry (Rex 2), NavRetry (Zola 2), GlassSourceRetry (Ada 3). Their reports are
+pending. Do not edit their targets until delivery. Earlier Lena 2 account-menu and
+Bo 2 gallery tasks remain explicitly stopped; leave them alone.
+
+Vera 2 integration is complete locally across the five notes files. Root corrected
+success acknowledgement validation, conflict retention through retries, reload's
+in-flight guard and recovery wording. Final patch/source copies are synchronized
+and reproduce the saved pre-versioning baseline with zero fuzz. Current notes,
+metadata concurrency and privacy checks pass; full-site TypeScript and scoped lint
+pass. The legacy notes-route harness now uses the versioned document API and passes
+18 cases. Browser fixture checks passed; detailed evidence is in
+NotesVersioning/BROWSER-RESULT.md. Real services and admin authentication were not
+used. Fixture/browser session closed, generated bundles removed.
+
+Owned stale preview servers on 54525, 55442, 56537 and 57355 and fixtures 18471,
+18472, 18473 were stopped. The disposable native-status browser profile was removed.
+The isolated production build and all five HTTP assertions passed. Exec session
+29784 keeps the preview at http://127.0.0.1:55523 running; logs are in
+build/website-notes-final. Preserve it and rebuild after the requested UI integration.
+
+Gaze PID6006 and both current executable hashes were checked; see READINESS.md.
+Public signing is intentionally deferred, not a reason to stop useful local work.
+Public release still needs model/asset rights, real acceptance, migration/service
+wiring and distribution signing. Do not claim the experimental model is shippable.
+
+The chronological notes below retain older checkpoints and PIDs; this section
+supersedes them.
+
 The owner warned that the connection may drop. This records the active task and
 remaining integration work; it is not a launch approval.
+
+## New full two-hour work window
+
+Latest owner direction: keep building locally with Apple Development signing;
+prepare for publication when Developer ID is added, improve both apps and make
+gaze-site feel polished and Apple-like. Assess/trial model training if worthwhile.
+The owner is in class and will not assist; do not wait for replies to continue
+independent work. Do not use missing public signing as a reason to stop local work.
+
+Window recorded just after this instruction: 2026-09-16 00:25:16 UTC to
+02:25:16 UTC (08:25:16–10:25:16 Taipei). The owner explicitly requested the full
+two hours. Continue useful implementation, integration and verification throughout
+this window, across Hydra reports/connection interruptions. Do not claim that
+public release gates are closed merely because the work window ends.
+
+Initial work split: a bounded Apple-style website implementation; website email
+authentication abuse/correctness hardening; an isolated model experiment if data
+and evaluation justify it. The lead handles app follow-ups, metadata migration
+preparation, integration audits and combined checks. New models remain outside
+Resources; never replace the working model or thresholds without evaluation.
 
 ## Website production/privacy follow-up
 
@@ -218,3 +297,254 @@ reviewed website fixes, run focused tests plus the combined app build, and refre
 artifact hashes. The owner is back and may help with a short supervised live test
 when the exact candidate is ready. Keep progress updates concise. When reporting
 heads, start each part with the head's name and a plain statement of its user impact.
+
+## 00:42 UTC integration in progress
+
+Finn/Mira/Odin latest reports received. Root read model report/runner, website
+polish patch, and email auth store/route/authorize. NOT applied yet. Mandatory
+root corrections identified in Odin before integration:
+- First counter CAS currently uses allowOverwrite:true without ifMatch when
+  absent: concurrent initial requests undercount. Must create-if-absent then
+  retry on BlobAlreadyExistsError; require a nonempty ETag on existing reads.
+- getProductionChallengeStore creates a fresh local memory store every call,
+  breaking local send->verify and limits. Use one explicitly dev-only instance.
+- NODE_ENV=production without Vercel/Blob currently selects local-dev; refuse.
+- Non-200 Blob reads/corrupt counters currently become missing/count zero;
+  fail closed instead. Add realistic SDK concurrency fixtures, not memory only.
+- Config enabled check accepts store ID without required OIDC. Align with
+  private metadata configuration policy. Remove unchecked SDK type cast.
+Finn runner lacks mkdir for new output directory and pins no calibration hash;
+report contains incorrect abbreviated model hash suffix. Correct tooling/docs
+without rerunning an already-used test split. Current time window ends 02:25 UTC.
+
+## 00:53 UTC checkpoint — latest site/app integration
+
+Suki/Rex landed. Root reviewed their files. Corrected import notice to OR its
+prior flag so another session change does not erase it; navigation 36 checks
+and full Passwords UI/layout compile pass. Protected local Passwords rebuilt
+at canonical build/browser-integration/Gaze Passwords.app with existing profile;
+new executable SHA256 cc1751f3406e31f5b4e87e433544557c4a26aab484a6666a044655c9385b0e92.
+Build ran its local verifier successfully. NOT relaunched yet.
+
+Mira polish APPLIED LOCALLY to gaze-site; root added tabindex=-1 to skip-link
+hero destination. Auth APPLIED LOCALLY after root fixes: conditional first counter
+create; true SDK instanceof handling (SDK errors have name Error); require nonempty
+ETag; reject corrupt/non-200 counters; shared dev-only instance; non-development
+production refuses memory; proper private OIDC/separate credential configuration;
+AUTH_SECRET gating; expiry is exclusive; no plaintext code in flow output;
+server-only import guards; reject control characters in email; safe local callback
+helper; explicit client labels, recover from signIn throw, duplicate-submit guard,
+resend affordance, mail timeout. New modules safe-callback.ts/email-challenge-store.ts.
+74 functional checks +21 real-SDK-class concurrency checks +30 actual HTTP-route/
+callback checks pass (synthetic transport only). Tests --current supported for the
+first two; test-route.mjs always uses current site. Node module-type warnings are
+expected from direct TS tests; don't change site package type just to silence them.
+
+Combined isolated next build passes plus /,/releases,/api/latest,/dl,/admin smoke.
+Runner gained --serve (implies smoke, keeps owned synthetic server until interrupt).
+Currently exec session 11188 is holding review server http://127.0.0.1:50510;
+log build/website-combined-review.log. Most recent control-char email validation
+was edited after this build; final rebuild needed after all remaining changes.
+No production data/config used. agent-browser installed temporarily via npx;
+Chrome install exec session 70834 is downloading/retrying (log
+build/browser-install-review.log). Browser session name gaze-site-review-20260916,
+allowed domains 127.0.0.1,localhost. Native BrowserOS MCP unavailable, native CUA
+known startup failure; isolated CLI browser intended for local visuals only.
+
+Finn tooling corrected: checkout-relative inputs; mkdir new output before compile;
+pinned calibration SHA256 51bfe97274f2cc861fd4f14daf1b94c8799000487f55c05a44bc02302da32a52;
+wrong abbreviated model hash suffix fixed. Syntax check only; no test split rerun.
+
+Still root-owned: refresh auth/polish patches after final fixes and rewrite reports
+(they still describe original proposals); visual browser review; website FAQ copy
+currently inaccurately says camera only active when locked despite opt-in walk-away;
+private-metadata migration preparation; final local app verification/handoff. Keep
+working through 02:25:16 UTC, do not treat this checkpoint as task completion.
+
+## 01:11 UTC checkpoint — continuing to 02:25:16 UTC
+
+Owner explicitly said run website on localhost and DO NOT DEPLOY. Keep at least
+one local preview server running for the owner. Main preview still 127.0.0.1:50510
+(exec 11188, older isolated build). Additional synthetic email UI test build is
+127.0.0.1:51376 (exec 52773, log build/website-email-ui-review.log); it adds an
+email-ui-review route ONLY to the temp copy, not real site source. Runner gained
+--email-ui and --serve flags. No real mail/provider credentials in either server.
+
+BrowserOS MCP/native CUA unavailable, but agent-browser works using the installed
+BrowserOS neo executable with an isolated default profile:
+npx --yes agent-browser --session gaze-site-review-20260916 --executable-path
+'/Applications/BrowserOS neo.app/Contents/MacOS/BrowserOS neo'
+--allowed-domains 127.0.0.1,localhost open <local-url>.
+Website session has desktop/mobile/light/dark/reduced-motion checks, no overflow
+or broken images, skip link focus confirmed main-content, mobile Escape restores
+menu-button focus. Screenshots build/website-visual-20260916/. Chrome download
+attempt timed out three times; no need to retry, installed BrowserOS works.
+New session gaze-email-ui-20260916 is being prepared for mocked client error tests.
+
+Zola SettingsSearch and Pip 2 receipt audited. Root adjusted search scroll anchor
+to top, tab changes clear query, Touch ID subtitle says macOS confirmation.
+40 index tests pass; full real Gaze build passes (build/gaze-settings-search-build.log),
+NOT relaunched yet. Root fixed receipt NaN/Infinity acceptance, adds ctime/path
+identity/read-error checks and publishes complete synced receipt via exclusive
+hardlink; 14 tests pass. Docs need final corrections (14 vs 11, atomic output).
+
+Ivo 2 Markdown patch APPLIED LOCALLY. Dependency candidate had zero changed/removed
+existing entries and 20 additions; npm install --ignore-scripts --offline succeeded.
+Root replaced fixture regex scanner with real htmlparser2 parsing and added
+run-current.cjs. 56 tests pass; full website tsc and lint pass. Current release
+view model additionally filters download through releaseDownload so placeholders
+aren't shown as buttons (eight tests; separate download-presentation.patch).
+No changes to stored release records.
+
+Root updated actual website FAQ/content/How-it-works/Security copy for 1/2 movement
+flow, extra optional camera use, portrait storage, password decryption and offline
+recognition vs online updates. New artifact Tools/Release/WebsiteCopy/. These newer
+changes plus Markdown are in 51376 build; download presentation may postdate it.
+Need final combined rebuild without --email-ui and keep owner preview available.
+
+Latest reports mention Walter 2 still working on an owner-queued task; scope not
+provided to root. Do not take over/wait on it. Integrate its eventual report.
+Auth report rewritten with root corrections; patches synced then. Markdown report
+still needs current install/test/full-build update, polish report needs visual
+update, handoff needs final hashes. No new model trained/promoted, no live vault,
+locks/camera/authentication, public upload/config/migration/deployment performed.
+
+## 01:57 UTC — homepage motion integrated; studio media still pending
+
+User now explicitly asks for Emi/Apple-style main-page motion and reference to
+Droppy/Droppy Code/Launch Me. Lux 2 inspected getdroppycode.app and getdroppy.app;
+Launch Me remains unidentified (optional URL question sent). Root corrected the
+report's missing-poster claim: LiveDemo already has a poster. No copied assets/code.
+
+Tova 2 and Gus 2 patches APPLIED LOCALLY. Root fixes: intro late-paint budget now
+250ms, storage write probe, cancel WAAPI on reduced-motion change, reset springs,
+neutral tilt over media controls/on keyboard; preview play-attempt counter makes
+manual Play retryable after a failed play() promise. Full combined production
+build/lint passed. Current owner preview http://127.0.0.1:54525 (exec 71764);
+older 50510/51376 owned servers are being stopped. Keep a localhost preview up;
+NO DEPLOY. Root's latest analytics-on-Vercel-only layout edit still needs next build.
+
+Browser session gaze-home-final-20260916 (installed BrowserOS neo binary, isolated
+profile; allowed domains localhost/127.0.0.1) verified fresh intro played+flag,
+reload skipped:seen, two rejected Play attempts both retry, reduced-motion stops
+all preview videos, 390px dark has zero overflow. Screenshots in
+build/website-visual-20260916/. CLI screencast produced blank frames, so its
+home-motion.webm/contact sheets are NOT evidence of a captured entrance.
+Root retains runtime and resting-state evidence only.
+
+Walter 2's ignored output disappeared when its worktree went away. Root recovered
+his exact Settings export from Desktop master (20.8–25.8s, crop768x480 at70,68,
+30fps CRF19 faststart/no audio). Viewed midpoint: complete text/window/controls.
+Full decode passes, 92,655 bytes. Applied site's public/features/settings-pan.mp4;
+tracked durable copy+recipe Tools/Release/HomeMotion/Media/. Original backup in
+build/website-video-backups/. Existing poor unlock/hero clips NOT yet replaced.
+
+Hank 3 is STILL WORKING on NEW studio preview videos using real shared renderers,
+synthetic states and clean background, without camera/desktop/credentials. Owns
+Tools/Release/HomeMotion/Studio/ only; final media must land tracked (ignored files
+would disappear). Do not take over or repeat his rendering work. On report: root
+must audit source/media, apply usable assets, label as SIMULATED PANEL PREVIEW
+rather than real unlock footage, update LiveDemo/ProductTour/NotchVideo posters and
+copy, do final site build/browser check, preserve running localhost server.
+
+Gaze build with search: SHA256 a9e160c5d684749e5b545e32044f96ab304aa7d2e9f4224e99113ed13b4b0773,
+built09:08:51 Taipei, NOT reloaded. Prior PID75024 no longer exists. Protected
+Passwords build SHA256 cc1751f3406e31f5b4e87e433544557c4a26aab484a6666a044655c9385b0e92.
+No new real lock/camera/vault acceptance was performed. Original two-hour minimum
+window ends02:25:16 UTC; continue through that and finish required media integration.
+
+Still root bookkeeping: sync auth cumulative patch from current source after recent
+request timeout/busy-finally/error-copy changes; update Markdown report with real
+56-check parser fixture + successful offline npm install/build; update website visual
+and readiness docs/hashes. Hero/Preview original proposals are preserved with root-
+integration.patch files containing root corrections. Metadata receipt docs now state
+14 tests and atomic no-overwrite publication. No public signing/provisioning needed now;
+model rights/live acceptance remain unresolved for eventual public release.
+
+## Additional hour authorized at 02:14 UTC
+
+Owner said 'work for 1hr more'. Extend the prior 02:25:16 UTC finish window to
+03:25:16 UTC (11:25 Taipei). Preserve localhost-only/no-deploy, local signing,
+no camera/lock/credential tests, no git operations. Continue meaningful work.
+
+Hank 3 landed StudioRenderer/build-studio/assets. Root audited actual PNG/video
+frames and fixed an offscreen Metal compositing artifact by fading the overlay
+in after expansion and omitting it in compact phases. Rebuilt normal+semi via
+--site; real Liquid Glass offscreen is not faithful and is NOT used by site.
+Hash files now relative/portable. Site public/previews uses normal+semi clips,
+settled-scanning posters; old desktop footage no longer referenced by home/tour.
+LiveDemo, ProductTour, MacScreen, NotchVideo, homepage labels updated to simulated
+panel preview; product videos user-controlled, no scroll reveal; written visual
+alternative + optional VTT captions added. Source copies/patches need final sync.
+
+Latest preview is http://127.0.0.1:55523 (exec 99126, build/website-owner-preview.log),
+full production build + HTTP smoke pass. 54525 and 55442 older owned servers still
+exist; stop only those verified temp-copy listeners after final preview is chosen.
+Browser gaze-home-final-20260916 currently checks final site. Mobile/dark/reduced:
+zero overflow, zero old clips, no video playing; /features videos are controls=true,
+autoplay=false, paused=true. Final axe: 0 violations, 1 incomplete contrast check.
+Video range HTTP206 works; VTT HTTP200 text/vtt; fixture /email-ui-review HTTP404.
+VITALS exec57011 may still have output to collect; never claim the blank CLI
+screencast as captured animation. Runtime intro played/skip flags verified.
+
+Gaze restarted safely with owner session unlocked and walkAwayLock=0:
+script/build_and_run.sh --no-build verified SHA a9e160c5d684749e5b545e32044f96ab304aa7d2e9f4224e99113ed13b4b0773,
+PID6006. nm finds SettingsSearchItem; no newer Swift source. CLI accessibility
+inspection permission is false; no prompt requested. Protected Passwords remains
+built SHA cc1751f3406e31f5b4e87e433544557c4a26aab484a6666a044655c9385b0e92,
+old running PID51873 was left alone. No camera test, real lock or vault unlock.
+
+New extra-hour priorities being delegated: atomic concurrent metadata updates;
+atomic release renaming + editor overlap handling; truthful ReadmeEditor saved
+state while typing during a request. Root owns preview refinements (e.g. use a
+settled poster in reduced-motion auto mode), integration/audits and final docs.
+All new heads deliver patches under separate Tools/Release folders, actual site
+read-only; producer/consumer mutateMetadata contract is explicit in briefs.
+At 02:38 UTC Walter 3/Ada 2/Otto 2 (actual reported names, despite briefs Ada3/Otto3) all landed. Their patches applied locally to gaze-site. Root corrections so far: metadata uses shared global per-path queue, runtime key allowlist, exclusive UUID temp files mode0600 (does not delete an uncreated file), whitespace ETag refusal/no unsafe cast; API requires real object input, strict previousTag (including rejecting null/blank/non-string), validates dates/notes/arrays/flags, uses releaseDownload policy for attached builds; Notes requires {ok:true} before Saved; composer requires expected returned tag, disables fieldset during save and keeps guard through navigation. Typecheck passed. Metadata concurrency --current passes; 18 combined current API/store/real-CAS fixture checks pass; adapted old MetadataPrivacy harness to actual mutateMetadata contract, --current passes.
+New media refinement: reduced-motion auto mode shows POSTERS instead of paused initial-video frame; explicit user pause still retains their frame. Homepage now enables existing two-material selector (Solid/Semi glass), min44px targets; selector skips motion for keyboard/reduced-motion. Not yet final visual check after this addition.
+Root currently running ReadmeEditor fixture port18471 (exec86302) with updated component and added unconfirmed-200 response driver; corrected serve.py to always serve its fixture directory. Browser session gaze-readme-review-20260916. Root plans actual Composer fixture, since head had only pattern simulation. Additional server http://127.0.0.1:56537 (exec62783) has applied editing changes before latest chooser tweaks. Owner preview still55523; keep at least one local server, no deploy. Work extended through03:25:16 UTC.
+
+## Another hour authorized at 03:16 UTC
+
+Owner again said 'work for 1 more hour to improve'. Extend work window through
+04:25:16 UTC (12:25 Taipei), adding an hour to the previously promised endpoint.
+Still localhost only, no deploy/publication, no real lock/camera/vault/fill tests,
+no git commands/commits/branches; use Hydra for delegation and root audits.
+
+Current build at http://127.0.0.1:55523 is the latest integrated local preview;
+exec72173, build/website-final.log, full build+HTTP smoke passed. It includes
+plain visible reading-page sections (legacy scroll reveals removed at the two
+call sites), exact10%-visible preview playback threshold, captions on the product
+preview, readable admin error/status colors. Last tsc/lint passed. Global goal
+is NOT complete merely because the old three-hour window was nearly over.
+
+Three next-stage bounded jobs planned: keyboard/session-safe account menu;
+native modal/focus handling in the USED ReleaseGallery (not unused Lightbox);
+optimistic version checks for tester notes so stale tabs cannot overwrite newer
+saved text. These are new follow-ups beyond the completed atomic independent-
+catalog updates and rename work. Producer/consumer metadata CAS is already local.
+
+Root still must finish artifact/doc sync and final visual checks, and clean up
+ONLY owned obsolete local servers/fixtures/disposable browser profile. Completed
+extra-hour evidence: metadata concurrency current suite; release current contract
+suite; 18 actual storage/store/API+SDK-stub cases; 11 notes-route cases; actual
+browser A/B notes race, HTTP200-unconfirmed refusal, release conflict retention,
+upload/save serialization and retained attachment in successful rename. Root added
+strict API inputs/acks, exclusive local temp writes/global queues, and runtime key
+allowlisting. Main website material selector now exposed (Solid/Semi glass), 44px
+controls, high-contrast backing; clips synchronize positions when switched and
+reduced-motion auto mode uses static posters. Motion selector/SSR visual checks
+remain useful before final finish.
+
+REAL native status success at 02:51–02:52: action popup → current registered helper
+→ existing signed Passwords service returned Connected to Gaze Passwords. No
+credentials accessed. Normal extension-tab request correctly refused by sender.tab.
+No guard weakened. See Tools/GazePasswords/Release/BROWSER-STATUS-SMOKE-20260916.md.
+Disposable profile path is stored in build/passwords-status-profile-path.txt;
+browser session gaze-passwords-status-20260916 closed. Original registration still
+matches the copied bytes. Never present this as Fill/Save/face-approval acceptance.
+
+Main Gaze remains running PID6006, verified SHA a9e160c5d684749e5b545e32044f96ab304aa7d2e9f4224e99113ed13b4b0773,
+with search symbol135 matches and no newer Swift sources. Passwords current artifact
+cc1751f3406e31f5b4e87e433544557c4a26aab484a6666a044655c9385b0e92; existing old process51873
+left intact. CLI Accessibility permission false, no prompt requested.

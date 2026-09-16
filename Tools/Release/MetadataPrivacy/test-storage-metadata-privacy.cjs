@@ -436,6 +436,13 @@ const PRIV_ENV = {
     const failingStorage = {};
     for (const name of ["readReleasesJson", "readRolesJson", "readTestersJson"]) failingStorage[name] = async () => { throw new Error("synthetic read failure"); };
     for (const name of ["writeReleasesJson", "writeRolesJson", "writeTestersJson"]) failingStorage[name] = async () => { writes++; };
+    failingStorage.mutateMetadata = async (key, update) => {
+      const methods = { "releases.json": ["readReleasesJson", "writeReleasesJson"], "roles.json": ["readRolesJson", "writeRolesJson"], "testers.json": ["readTestersJson", "writeTestersJson"] };
+      const [read, write] = methods[key];
+      const next = update(await failingStorage[read]());
+      await failingStorage[write](next.text);
+      return next.result;
+    };
     const readers = {};
     for (const name of ["store", "roles", "testers"]) {
       const file = path.join(tmp, "src/lib", name + ".ts");

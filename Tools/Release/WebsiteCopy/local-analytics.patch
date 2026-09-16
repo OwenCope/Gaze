@@ -1,0 +1,14 @@
+--- a/src/app/layout.tsx
++++ b/src/app/layout.tsx
+@@ -66,10 +66,7 @@
+             {children}
+           </ThemeProvider>
+         </SessionProvider>
+-        {/* Counts a page view. No cookie and no cross-site identifier — a
+-            visitor is a hash of the request that resets every day, which is
+-            why this needs no consent banner and cannot follow anyone. */}
+-        <Analytics />
++        {process.env.VERCEL === "1" && <Analytics />}
+       </body>
+     </html>
+   );
