@@ -42,6 +42,12 @@ theme-icon motion, scoped feature-rail keyboard controls and larger footer links
 The combined production build and focused desktop/mobile browser checks pass.
 See HomeMotion/SmallPolish/REPORT.md.
 
+The owner now reports a successful basic unlock on the current Gaze candidate.
+That smoke check is passed by owner report; broader negative/fallback, wake/relock
+and clean-install/update acceptance are still pending. The owner also reports
+GPL-3.0 licensing for the recognition model; the exact source URL and weight
+coverage are being confirmed. See ModelClearance/OWNER-REPORT-20260916.md.
+
 Remaining public-release requirements: model/asset redistribution clearance (six
 groups unresolved), Developer ID/notarization when supplied, owner-supervised live
 acceptance and clean install/update checks, private Blob migration and production
