@@ -17,6 +17,10 @@ IDENTITY="$(gaze_signing_identity "${DIST:-0}" "${GAZE_SIGNING_IDENTITY:-}" "$ID
 DEFAULT_OUTPUT="$ROOT/build/Gaze.app"
 SIGNING_FLAGS=(--options runtime)
 if [ "${DIST:-}" = "1" ]; then
+	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || {
+		echo "Release model/asset clearance is incomplete; the existing app was not replaced." >&2
+		exit 1
+	}
 	DEFAULT_OUTPUT="$ROOT/build/release/Gaze.app"
 	SIGNING_FLAGS+=(--timestamp)
 fi

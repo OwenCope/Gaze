@@ -64,6 +64,7 @@ struct SetupFlow: View {
 	@State private var isReturning = false
 
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+	@Environment(\.openWindow) private var openWindow
 
 	var body: some View {
 		Group {
@@ -112,7 +113,10 @@ struct SetupFlow: View {
 					// A partial first-run setup offers Settings as a second step, never a
 					// redirect: Done still just closes. Opening the window enables nothing
 					// and requests nothing on its own.
-					onOpenSettings: purpose == .onboarding ? { AppActivation.openSettings?() } : nil
+					onOpenSettings: purpose == .onboarding ? {
+						AppActivation.bringToFront(userInitiated: true)
+						openWindow(id: "settings")
+					} : nil
 				)
 			}
 		}

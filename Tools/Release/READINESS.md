@@ -1,6 +1,43 @@
 # Gaze release gates
 
-## Current local candidate — September 15, 2026, 21:53
+## Current integration checkpoint — September 16, 2026
+
+The combined app builds and is running from this checkout as PID 75024.
+Executable mtime: 2026-09-16 07:48:31; SHA-256
+`74e63dc41e9f7a4b6d61b693e90f824dcee6b8490e8b29bd25a4ad4a5f9c0b4d`.
+No Swift source was newer at verification. This remains an Apple Development build.
+
+Implemented and checked in this pass:
+
+- Movement progress for two-step checks and neutral "Waiting for macOS" feedback;
+  return captions remain hidden normally and accessible/reduced-motion cues remain.
+- Retained-password controls in recognition-only mode, persistent accessible face
+  actions, accurate protection/model availability copy, and Resume in Settings.
+- Setup opens on movement teaching; partial setup has a direct Settings route;
+  password setup explains updating Gaze after a Mac password change.
+- Release verifier/preflight and model/asset clearance gates. The lead fixed coverage
+  of precompiled models, package metadata and newly added asset files; clearance
+  remains unresolved for six artifact groups. DIST=1 refuses unresolved clearance.
+- Website download changes applied locally, with shared validation of HTTPS public
+  Blob build URLs and DMG/ZIP filenames. Invalid, placeholder and ambiguous targets
+  are omitted from the feed; restricted/private/draft data is not exposed.
+
+Passed: combined main build; companion/guidance integration suite; 54 onboarding
+renders and policy checks; Settings source checks; 23 signing/wiring + 29 release
+verifier + 12 preflight fixtures; 15 clearance tests; staged/current download tests,
+feed privacy tests and website TypeScript check. Source/render tests are not a live
+VoiceOver, lock/unlock or recognition-accuracy result.
+
+Still OPEN: owner-supervised live acceptance, Developer ID/notarization, model/asset
+rights, clean install/update and production website deployment. A fresh anonymous
+request to `https://gazeunlock.com/api/latest` still returned HTTP 404 on September 16.
+The local website changes have not been deployed and no shipping artifact uploaded.
+The owner has pending questions about model evidence and one normal live unlock test.
+
+Details and logs: `RESUME-HANDOFF-20260916.md`,
+`UpdateDeployment/UPDATE-DOWNLOAD-DEPLOYMENT.md`, `ModelClearance/README.md`.
+
+## Previous local candidate — September 15, 2026, 21:53
 
 **NOT launch-ready.** The Hydra investigation and integration are complete locally;
 owner validation, model/asset permissions, release signing and the deployed update

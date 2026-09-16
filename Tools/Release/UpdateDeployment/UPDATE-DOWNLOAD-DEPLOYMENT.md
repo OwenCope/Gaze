@@ -1,3 +1,35 @@
+# Website download integration — lead checkpoint
+
+The audited patch is now applied locally to `/Users/owencope/Developer/gaze-site`.
+No deployment, upload or release-record change has occurred. Changes are
+`src/app/api/latest/route.ts`, `src/app/dl/[file]/route.ts`, and shared policy
+`src/lib/release-download.ts`. The staged patch has been updated to match.
+
+Lead corrections: only HTTPS public Vercel Blob build URLs are accepted, with no
+userinfo, custom port, query or fragment. Filenames must be bounded single-segment
+DMG/ZIP names. The feed and download endpoint use the same policy, and the feed
+omits invalid/placeholder/ambiguous links so the app can use its releases-page
+fallback. Private/draft/restricted data stays hidden before storage reads.
+
+Staged and --current route tests pass with real NextResponse and synthetic storage;
+site `tsc --noEmit --incremental false` passes. The original privacy harness has
+also been updated for the shared policy and passes. These are not live Vercel or
+Blob availability tests. A real cleared artifact is still needed before an update
+can be offered with a working download.
+
+Important limits: a 302 response is followed by the browser, not by the app's feed
+fetcher. Deleting the download route alone is NOT a safe rollback: existing feed
+links would simply 404 in the browser; revert the feed mapping with the route.
+Public Blob URLs already disclosed are not revoked by this metadata visibility
+gate. The production API/domain/storage deployment still requires verification.
+
+Use `node Tools/Release/UpdateDeployment/test-update-download.cjs --current` after
+application. Omit --current only against an unmodified pre-download website route.
+
+---
+
+## Original staged proposal (superseded where noted above)
+
 # Same-origin download endpoint — staged website patch (Ivo)
 
 Gap (from `Tools/Release/UPDATE-FEED-INTEGRATION-20260915.md` §5): the seed feed

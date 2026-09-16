@@ -296,6 +296,11 @@ struct SettingsView: View {
 				// over "Test Recognition" — left a ragged left edge between them. Matching
 				// their widths is what makes them read as a pair.
 				VStack(alignment: .trailing, spacing: 6) {
+					if settings.isPaused {
+						Button("Resume Gaze") { settings.resume() }
+							.gazeButton(.primary, size: .large)
+							.frame(maxWidth: .infinity)
+					}
 					Button {
 						if store.isEnrolled { SetupRequest.begin() } else { SetupRequest.beginOnboarding() }
 						AppActivation.bringToFront()
@@ -570,7 +575,7 @@ struct SettingsView: View {
 		VStack(spacing: 0) {
 			SettingRow(
 				title: "Stored account password",
-				detail: "Kept from Unlock my Mac. Nothing can unlock with it in this mode.",
+				detail: "Kept from Unlock my Mac. Gaze won't use it to unlock in this mode.",
 				symbol: "key.fill"
 			) {
 				HStack(spacing: 6) {
@@ -745,7 +750,7 @@ struct SettingsView: View {
 			SettingToggle(
 				title: "Reject photos held up to the camera",
 				symbol: "eye.trianglebadge.exclamationmark.fill",
-				isEnabled: Liveness.isAvailable,
+				isEnabled: SpoofDetector.isAvailable,
 				isOn: bind(\.livenessEnabled))
 
 			RowDivider()
@@ -854,7 +859,7 @@ struct SettingsView: View {
 	/// its leading and its line height, which left an unexplained gap under the group.
 	private var securityFooter: String? {
 		var notes: [String] = []
-		if !Liveness.isAvailable { notes.append("No anti-spoof model is installed.") }
+		if !SpoofDetector.isAvailable { notes.append("The photo-rejection model is unavailable.") }
 		if !BiometricGate.isAvailable { notes.append("This Mac has no Touch ID sensor.") }
 		return notes.isEmpty ? nil : notes.joined(separator: " ")
 	}
@@ -1489,12 +1494,7 @@ private struct FaceTile: View {
 	var remove: () -> Void
 
 	@State private var hovering = false
-	/// Keyboard / VoiceOver focus on either overlay action.
-	///
-	/// The buttons below only exist while `controlsVisible` is true, so focus
-	/// itself must keep them visible: tabbing from the name field to an action
-	/// clears `isEditing`, and without these the focused button would vanish
-	/// from under the focus ring.
+	/// Keep actions in the focus/accessibility tree even before the pointer arrives.
 	@FocusState private var portraitFocused: Bool
 	@FocusState private var removeFocused: Bool
 	/// The name being typed, committed on Return or when focus leaves.
@@ -1576,7 +1576,7 @@ private struct FaceTile: View {
 			// A camera badge on hover or keyboard focus, because a context menu nobody
 			// right-clicks is a feature nobody finds. Bottom-leading so it cannot
 			// collide with the remove button in the opposite corner.
-			if controlsVisible {
+			Group {
 				Button(action: choosePortrait) {
 					Image(systemName: "camera.fill")
 						.font(.system(size: 10, weight: .semibold))
@@ -1588,6 +1588,9 @@ private struct FaceTile: View {
 				.help("Choose a photo for \(face.name)")
 				.accessibilityLabel("Choose a photo for \(face.name)")
 				.focused($portraitFocused)
+				.opacity(controlsVisible ? 1 : 0)
+				.allowsHitTesting(controlsVisible)
+				.accessibilityHidden(false)
 				.offset(x: -46, y: 46)
 				.transition(.opacity)
 			}
@@ -1595,7 +1598,7 @@ private struct FaceTile: View {
 			// On hover *or* keyboard focus: a control that only exists `if hovering`
 			// is in no accessibility tree and unreachable by Tab. Pointer visuals
 			// are unchanged; focus joins the same reveal condition.
-			if controlsVisible {
+			Group {
 				Button(action: remove) {
 					Image(systemName: "minus.circle.fill")
 						.font(.system(size: 17))
@@ -1606,6 +1609,9 @@ private struct FaceTile: View {
 				.help("Remove \(face.name)")
 				.accessibilityLabel("Remove \(face.name)")
 				.focused($removeFocused)
+				.opacity(controlsVisible ? 1 : 0)
+				.allowsHitTesting(controlsVisible)
+				.accessibilityHidden(false)
 				.offset(x: 7, y: -7)
 				.transition(.scale.combined(with: .opacity))
 			}
@@ -1628,6 +1634,10 @@ private struct FaceTile: View {
 				.onChange(of: face.name) { _, name in if !isEditing { draft = name } }
 		}
 		.onHover { hovering = $0 }
+		.accessibilityElement(children: .contain)
+		.accessibilityLabel("Enrolled face, \(face.name)")
+		.accessibilityAction(named: Text("Remove \(face.name)"), remove)
+		.accessibilityAction(named: Text("Choose a photo for \(face.name)"), choosePortrait)
 	}
 
 	/// When the overlay actions exist at all.
@@ -1728,6 +1738,7 @@ private struct AddFaceTile: View {
 		}
 		.buttonStyle(.plain)
 		.onHover { hovering = $0 }
+
 		.animation(.easeOut(duration: 0.15), value: hovering)
 	}
 }

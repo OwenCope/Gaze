@@ -41,7 +41,7 @@ forbid 'Recognise your face without entering a password.' \
 	"old hero copy implying lock-screen recognition is gone"
 need 'if settings.unlockBackend == .none, hasStoredPassword {' \
 	"retained-password note gated on .none with an existing stored password"
-need 'Nothing can unlock with it in this mode.' \
+need "Gaze won't use it to unlock in this mode." \
 	"retained note states unlock stays off"
 need 'private var retainedPasswordRow: some View {' \
 	"retained row reuses the existing Change / Revoke actions"
@@ -77,7 +77,13 @@ need 'Movements to unlock this Mac' \
 	"movement-count row untouched"
 need 'Lock when I walk away' \
 	"walk-away row untouched"
-need 'isEnabled: Liveness.isAvailable,' \
-	"anti-spoof enablement untouched (separate finding)"
+need 'isEnabled: SpoofDetector.isAvailable,' \
+	"photo-rejection availability matches the enforced Spoof model"
+need 'Button("Resume Gaze") { settings.resume() }' \
+	"paused Settings offers the existing resume action"
+need 'accessibilityAction(named: Text("Remove \(face.name)"), remove)' \
+	"face removal remains an accessibility action before hover"
+forbid 'if controlsVisible {' \
+	"focusable overlay buttons remain in the hierarchy"
 
 exit "$fail"

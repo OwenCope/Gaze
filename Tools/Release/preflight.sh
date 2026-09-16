@@ -9,9 +9,16 @@
 # keys or the network, launches the app, or changes any setting. A local
 # Apple Development build is reported as local-only information, never
 # failed as a release candidate. Test hooks: GAZE_PREFLIGHT_IDENTITIES
+# Use --build-tools-only for a clearly labelled tool check without clearance.
 # (when set, even empty, replaces `security find-identity` output) and
 # GAZE_PREFLIGHT_RESOURCES (replaces Resources/ as the metadata source).
 set -uo pipefail
+TOOLS_ONLY=0
+case "${1:-}" in
+	"") ;;
+	--build-tools-only) TOOLS_ONLY=1 ;;
+	*) echo 'Usage: preflight.sh [--build-tools-only]' >&2; exit 2 ;;
+esac
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RESOURCES="${GAZE_PREFLIGHT_RESOURCES:-$ROOT/Resources}"
 BUNDLE_ID=com.gazeunlock.Gaze
@@ -20,10 +27,11 @@ ok() { echo "ok: $*"; }
 missing() { echo "missing: $*" >&2; MISSING=$((MISSING + 1)); }
 note() { echo "note: $*"; }
 
-for tool in codesign security xcrun spctl stapler; do
+for tool in codesign security xcrun spctl python3; do
 	command -v "$tool" >/dev/null 2>&1 && ok "tool $tool" || missing "tool $tool is not on PATH (install the Xcode command line tools)"
 done
 xcrun --find notarytool >/dev/null 2>&1 && ok "tool notarytool via xcrun" || missing "notarytool is not available via xcrun (notarization cannot run here)"
+xcrun --find stapler >/dev/null 2>&1 && ok "tool stapler via xcrun" || missing "stapler is not available via xcrun"
 
 PLIST="$RESOURCES/Info.plist"
 if [ -f "$PLIST" ]; then
@@ -76,8 +84,13 @@ for candidate in "$ROOT/build/release/Gaze.app" "$ROOT/build/Gaze.app"; do
 	fi
 done
 
+if [ "$TOOLS_ONLY" = 0 ]; then
+	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || missing "model/asset clearance evidence is incomplete; see Tools/Release/ModelClearance/OWNER-TEMPLATE.md"
+else
+	note 'Build-tools-only check: model/asset clearance is NOT checked; this is not permission to distribute.'
+fi
 if [ "$MISSING" = 0 ]; then
-	echo "PREFLIGHT PASS: distribution prerequisites present; build with DIST=1 GAZE_SIGNING_IDENTITY=\"Developer ID Application: ...\" bash build.sh, then notarize, staple and run bash Tools/Release/verify.sh build/release/Gaze.app"
+	echo "PREFLIGHT PASS: checked prerequisites present (build-tools-only=$TOOLS_ONLY); a signed/notarized artifact and live acceptance are still required."
 else
 	echo "PREFLIGHT FAIL: $MISSING missing distribution prerequisite(s); local Apple Development builds are unaffected" >&2
 	echo "Next steps for the owner: provision a Developer ID Application certificate, run DIST=1 GAZE_SIGNING_IDENTITY=\"Developer ID Application: ...\" bash build.sh, notarize and staple the release bundle, then validate it with bash Tools/Release/verify.sh build/release/Gaze.app. Do not upload until model redistribution rights are recorded (Tools/Release/READINESS.md)." >&2
