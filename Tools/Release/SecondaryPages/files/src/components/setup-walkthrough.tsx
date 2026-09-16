@@ -8,7 +8,7 @@ const steps = [
     title: "Make it yours",
     label: "Enroll",
     body: "Enroll your face from a few angles, review camera access, then choose whether to enable automatic unlocking. You can finish skipped steps in Settings.",
-    image: "/product/setup-welcome.webp",
+    image: "/product/setup-welcome-detail.webp",
     alt: "Native preview of Gaze’s welcome screen during setup",
     caption: "Setup gives you control over what you enable.",
   },
@@ -25,7 +25,7 @@ const steps = [
     title: "Back to what you were doing",
     label: "Unlock",
     body: "Once the configured recognition and movement checks pass, Gaze submits your saved Mac password and waits for macOS. Your password and Touch ID remain available. After a restart, sign in normally so Gaze can start.",
-    image: "/product/setup-how.webp",
+    image: "/product/setup-how-detail.webp",
     alt: "Native setup preview explaining Gaze’s local recognition and saved password",
     caption: "Setup preview. Change or revoke your saved password later in Settings.",
   },
@@ -90,7 +90,7 @@ export function SetupWalkthrough() {
                     <track kind="captions" src="/previews/gaze-panel-preview.vtt" srcLang="en" label="Panel prompts" />
                   </video>
                 ) : (
-                  <Image src={step.image} alt={step.alt} width={1352} height={845} className="h-full w-full object-contain" />
+                  <Image unoptimized src={step.image} alt={step.alt} width={1352} height={845} className="h-full w-full object-contain" />
                 )}
               </div>
               <figcaption className="mt-4 text-sm leading-relaxed text-[var(--muted-ink)]">{step.caption}</figcaption>

@@ -1,5 +1,53 @@
 # Resume handoff — September 16, 2026
 
+## Latest owner feedback — gallery style and preview pacing
+
+After the image-resolution correction the owner said the Mac preview was too fast
+and the picture gallery was not Apple-style. Otto 4 replaced the thumbnail strip
+and thick padded frame with an editorial split, fixed dark image stage, four text
+segments, 400ms pointer crossfade and instant keyboard/reduced-motion changes.
+Native dialog behavior and lossless pixel caps remain. Root slowed only the hero
+NotchVideo playback to 0.6 (8s source -> 13.3s cycle) and labelled it Slowed preview.
+This is a website pacing choice, not a change to app recognition or model behavior.
+
+Current local runner is exec11541 on port55523, output build/website-gallery-pacing-final.
+The build, TypeScript, lint and five HTTP assertions pass. Final browser checks pass, including pointer crossfade, instant keyboard switching,
+dynamic reduced-motion changes, mobile fit and dialog focus. Root corrected the
+initial Framer preference-change issue by using CSS transitions cancelled by the
+media query. See GalleryPacing/REPORT.md and BROWSER-CHECKS.json. This supersedes the
+preview-quality runner below. Preserve all source changes/mirrors. No deployment.
+
+The broader WholeSiteReview findings (draft publication intent, unsaved-editor
+recovery, text contrast and content/navigation gaps) remain open. The screenshot
+feedback took priority; do not describe those findings as already fixed.
+
+
+## Newer whole-site audit and image-quality correction — September 16
+
+The owner requested another complete review. Findings are saved in
+WholeSiteReview/REPORT.md, ADMIN.md and VISITOR.md. Important OPEN problems:
+existing draft Save changes sends draft:false; unsaved tester notes were observed
+lost after ordinary admin navigation; small faint labels fail contrast; clip
+descriptions are discarded; upload progress is in the wrong card; mobile People
+nav is mostly outside the viewport. These were reviewed, NOT fixed. The planned
+next pass should start with publication intent and draft recovery, then contrast
+and duplicate homepage/media structure. No real Save/Publish/upload was used.
+
+The owner then rejected blurry Meet Gaze imagery. Ada 4 restored all four original
+full-resolution lossless WebPs. Root added lossless native-pixel detail crops that
+exclude uncapturable glass action rows, stopped Next recompression on large setup
+images, and capped image display to Retina-appropriate size. Script/provenance and
+hashes: PreviewImageQuality/. This does NOT fix native glass rendering itself or
+claim a faithful screenshot of those missing controls. Website captions now say
+setup detail. Other app source and security settings were not changed.
+
+The current rebuilding/review runner is exec 7436, localhost port55523, logs
+build/website-preview-quality (secret-free, synthetic admin configuration). It
+supersedes exec9820 below. Match the final browser check in PreviewImageQuality
+before claiming the image fix verified. Existing website source copies/hashes
+remain in SecondaryPages/. No deployments or git status/diff operations.
+
+
 ## Latest checkpoint — whole website pass, 2026-09-16 10:20 UTC
 
 This section supersedes the historical task/status sections below.
