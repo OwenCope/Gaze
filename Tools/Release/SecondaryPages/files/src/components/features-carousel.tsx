@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import { features } from "@/lib/content";
 
 const SHOTS: Record<string, { src: string; alt: string }> = {
-  Recognition: { src: "/product/setup-movement.webp", alt: "Native preview of Gaze’s movement practice" },
+  Recognition: { src: "/product/setup-movement-detail.webp", alt: "Native preview of Gaze’s movement practice" },
   "The notch panel": { src: "/previews/gaze-panel-detail-poster.png", alt: "Rendered preview of the current Gaze panel" },
-  "Where it keeps things": { src: "/product/setup-how.webp", alt: "Native setup preview explaining recognition and saved passwords" },
-  "Staying out of the way": { src: "/product/setup-welcome.webp", alt: "Gaze’s current welcome screen preview" },
+  "Where it keeps things": { src: "/product/setup-how-detail.webp", alt: "Native setup preview explaining recognition and saved passwords" },
+  "Staying out of the way": { src: "/product/setup-welcome-detail.webp", alt: "Gaze’s current welcome screen preview" },
 };
 
 export function FeaturesCarousel() {
@@ -77,7 +77,7 @@ export function FeaturesCarousel() {
                 <h3 className="text-[24px] font-semibold leading-tight tracking-[-0.025em]">{feature.title}</h3>
                 <p className="mt-4 text-[16px] leading-relaxed text-[var(--muted-ink)]">{feature.description}</p>
               </div>
-              {shot && <div className="relative mt-auto aspect-[4/3] bg-[var(--section-bg)]"><Image src={shot.src} alt={shot.alt} fill sizes="(max-width: 480px) 84vw, 400px" className="object-contain p-4" /></div>}
+              {shot && <div className="relative mt-auto aspect-[4/3] bg-[var(--section-bg)]"><Image unoptimized={shot.src.startsWith("/product/")} src={shot.src} alt={shot.alt} fill sizes="(max-width: 480px) 84vw, 400px" className="object-contain p-4" /></div>}
             </article>
           );
         })}

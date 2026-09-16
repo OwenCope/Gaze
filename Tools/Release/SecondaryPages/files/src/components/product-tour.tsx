@@ -20,7 +20,7 @@ const shots: Shot[] = [
       "This website preview shows how the lock-screen panel guides you through the configured movement prompts before Gaze unlocks your Mac.",
   },
   {
-    media: "/product/setup-how.webp",
+    media: "/product/setup-how-detail.webp",
     alt: "Native setup preview explaining Gaze’s local recognition and password storage",
     eyebrow: "Your choices",
     title: "Know what you’re turning on.",
@@ -28,7 +28,7 @@ const shots: Shot[] = [
       "Setup explains what Gaze stores and how unlocking works. Choose recognition-only mode or enable automatic unlocking after reviewing the permissions.",
   },
   {
-    media: "/product/setup-companion.webp",
+    media: "/product/setup-companion-detail.webp",
     alt: "Native preview of Gaze’s companion introduction during setup",
     eyebrow: "Setup",
     title: "Set it up at your pace.",
@@ -105,6 +105,7 @@ function Frame({ media, poster, alt, embedded = false }: { media: string; poster
         </video>
       ) : (
         <Image
+          unoptimized
           src={media}
           alt={alt}
           width={1352}

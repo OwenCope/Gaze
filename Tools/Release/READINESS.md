@@ -2,6 +2,12 @@
 
 ## Current local checkpoint — September 16, 2026
 
+Latest UI follow-up: lossless native-detail imagery, a fixed-stage segmented gallery
+and 0.6-speed hero preview are integrated. Current local build logs are
+build/website-gallery-pacing-final. WholeSiteReview/REPORT.md records newly found OPEN
+editor publication/draft-recovery and contrast issues; this is not website launch
+sign-off. See GalleryPacing/REPORT.md and PreviewImageQuality/REPORT.md.
+
 Website update: public and private page layouts are now unified, old gallery media
 is replaced with current labelled setup previews, and Credits is revised after
 owner feedback. Production build, TypeScript, scoped lint and synthetic local
