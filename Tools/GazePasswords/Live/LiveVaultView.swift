@@ -156,7 +156,21 @@ struct LiveVaultView: View {
 			}.padding([.top, .horizontal], 16)
 			VaultSearchField(placeholder: store.collection == .codes ? "Search codes" : "Search passwords", text: $store.query)
 				.focused($searchFocused).padding(.horizontal, 16)
-				.onSubmit { store.selectedID = store.entries.first?.id; searchFocused = false }
+				.onKeyPress { press in
+					guard searchFocused, press.modifiers.isEmpty else { return .ignored }
+					if press.key == .upArrow {
+						store.moveSelection(by: -1)
+						return .handled
+					} else if press.key == .downArrow {
+						store.moveSelection(by: 1)
+						return .handled
+					}
+					return .ignored
+				}
+				.onSubmit {
+					if store.selected == nil { store.selectedID = store.entries.first?.id }
+					searchFocused = false
+				}
 			List(selection: $store.selectedID) {
 				ForEach(store.entries) { entry in
 					HStack(spacing: store.collection == .codes ? 8 : 12) {

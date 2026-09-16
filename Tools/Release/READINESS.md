@@ -1,41 +1,50 @@
 # Gaze release gates
 
-## Current integration checkpoint — September 16, 2026
+## Current local checkpoint — 2026-09-16 04:33 UTC
 
-The combined app builds and is running from this checkout as PID 75024.
-Executable mtime: 2026-09-16 07:48:31; SHA-256
-`74e63dc41e9f7a4b6d61b693e90f824dcee6b8490e8b29bd25a4ad4a5f9c0b4d`.
-No Swift source was newer at verification. This remains an Apple Development build.
+Local development builds are available. Public release is not approved. The owner
+requested localhost only and deferred Developer ID signing; nothing was deployed
+or uploaded.
 
-Implemented and checked in this pass:
+- Gaze: `build/Gaze.app`, executable SHA-256
+  `a9e160c5d684749e5b545e32044f96ab304aa7d2e9f4224e99113ed13b4b0773`.
+  Running process 6006 was checked September 16. This Apple Development build
+  includes Settings search and the previously checked challenge/progress work.
+- Gaze Passwords: `build/browser-integration/Gaze Passwords.app`, executable SHA-256
+  `cc1751f3406e31f5b4e87e433544557c4a26aab484a6666a044655c9385b0e92`.
+  Local protected build and verification passed. The real browser action popup
+  reached the native service using the status-only path; no credentials accessed.
+- Website: the requested homepage revision is integrated and running at
+  `http://127.0.0.1:55523` with synthetic data and no production secrets. The full
+  production build, TypeScript, scoped lint and all five HTTP assertions pass.
+  The switcher is below the laptop, hover tilt is removed, FAQ/mobile navigation
+  animate, and Liquid glass uses a clean crop of the existing native recording.
 
-- Movement progress for two-step checks and neutral "Waiting for macOS" feedback;
-  return captions remain hidden normally and accessible/reduced-motion cues remain.
-- Retained-password controls in recognition-only mode, persistent accessible face
-  actions, accurate protection/model availability copy, and Resume in Settings.
-- Setup opens on movement teaching; partial setup has a direct Settings route;
-  password setup explains updating Gaze after a Mac password change.
-- Release verifier/preflight and model/asset clearance gates. The lead fixed coverage
-  of precompiled models, package metadata and newly added asset files; clearance
-  remains unresolved for six artifact groups. DIST=1 refuses unresolved clearance.
-- Website download changes applied locally, with shared validation of HTTPS public
-  Blob build URLs and DMG/ZIP filenames. Invalid, placeholder and ambiguous targets
-  are omitted from the feed; restricted/private/draft data is not exposed.
+The integrated website includes private metadata configuration, conditional catalog
+mutations, atomic release renames, version-checked tester notes, bounded email-code
+attempts/replay protection, sanitized Markdown and validated download destinations.
+Current notes, concurrency and privacy suites pass against synthetic SDK/filesystem
+fixtures. Notes browser tests passed draft retention, acknowledgement advancement,
+conflict/cancel recovery, duplicate submission and scoped shortcuts. Full-site
+TypeScript and lint of the latest integrated files pass. These are not production
+service or live administrator acceptance results.
 
-Passed: combined main build; companion/guidance integration suite; 54 onboarding
-renders and policy checks; Settings source checks; 23 signing/wiring + 29 release
-verifier + 12 preflight fixtures; 15 clearance tests; staged/current download tests,
-feed privacy tests and website TypeScript check. Source/render tests are not a live
-VoiceOver, lock/unlock or recognition-accuracy result.
+The homepage revision passed desktop/mobile interaction checks, including rapid
+FAQ reversal, immediate keyboard/reduced-motion changes, closed-content inertness,
+Escape focus restoration and automatic preview pausing. Native glass media fully
+decodes and has faststart. See HomeMotion/ReadySources/REPORT.md and
+HomeMotion/NativeGlassCrop/REPORT.md for evidence and recording/compositing limits.
 
-Still OPEN: owner-supervised live acceptance, Developer ID/notarization, model/asset
-rights, clean install/update and production website deployment. A fresh anonymous
-request to `https://gazeunlock.com/api/latest` still returned HTTP 404 on September 16.
-The local website changes have not been deployed and no shipping artifact uploaded.
-The owner has pending questions about model evidence and one normal live unlock test.
+Remaining public-release requirements: model/asset redistribution clearance (six
+groups unresolved), Developer ID/notarization when supplied, owner-supervised live
+acceptance and clean install/update checks, private Blob migration and production
+OAuth/email wiring. The development Passwords profile expires September 20, 2026
+at 23:51 UTC. No model or recognition threshold was changed; the experimental
+ObjectPrint candidate was not promoted (47/100 test spoof accepts).
 
-Details and logs: `RESUME-HANDOFF-20260916.md`,
-`UpdateDeployment/UPDATE-DOWNLOAD-DEPLOYMENT.md`, `ModelClearance/README.md`.
+Details: `RESUME-HANDOFF-20260916.md`, `NotesVersioning/BROWSER-RESULT.md`,
+`../GazePasswords/Release/BROWSER-STATUS-SMOKE-20260916.md`,
+`MetadataPrivacy/METADATA-PRIVACY-HANDOFF.md`, `ModelClearance/README.md`.
 
 ## Previous local candidate — September 15, 2026, 21:53
 

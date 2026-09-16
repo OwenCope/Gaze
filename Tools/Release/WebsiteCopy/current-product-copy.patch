@@ -1,0 +1,170 @@
+--- a/src/components/faqs.tsx
++++ b/src/components/faqs.tsx
+@@ -14,12 +14,12 @@
+   {
+     id: "photo",
+     q: "Could someone unlock it with a photo of me?",
+-    a: "Possibly, and that is the honest answer. It reads a flat image, so it has no way to tell a face from a good photograph of one. That is why it is a convenience rather than a lock.",
++    a: "Possibly. Gaze uses movement prompts and spoof checks, but a regular camera can still be fooled by a photograph or replay. Your Mac password remains the fallback.",
+   },
+   {
+     id: "offline",
+     q: "Does it need an internet connection?",
+-    a: "Never. There is no account, no server, and nothing leaves your Mac. It works on a plane.",
++    a: "Face recognition works offline and needs no Gaze account. Checking for updates or opening links uses the internet. Your face data stays on your Mac.",
+   },
+   {
+     id: "glasses",
+@@ -34,7 +34,7 @@
+   {
+     id: "battery",
+     q: "Is it going to eat my battery?",
+-    a: "The camera only opens once the screen is locked, and closes the moment you are in. When you are using your Mac it is doing nothing at all.",
++    a: "Unlock scanning stops when your Mac unlocks. Setup, recognition tests and Passwords approvals also use the camera. If you enable walk-away locking, Gaze periodically checks the camera while your Mac is idle.",
+   },
+ ];
+ 
+--- a/src/lib/content.ts
++++ b/src/lib/content.ts
+@@ -16,12 +16,12 @@
+     title: "Recognition",
+     when: "On-device",
+     description:
+-      "Enrollment captures you from a range of angles, and a match has to hold for two seconds before it acts. That threshold is the difference between a glance and a deliberate look.",
++      "Enrollment captures your face from several angles. To unlock, look at the camera and follow the movement prompts. Two movements are the default; you can choose one in Settings.",
+     items: [
+       "Multi-angle enrollment, about a minute",
+-      "Two-second hold before it unlocks",
++      "One or two guided movements before unlocking",
+       "Retries after a failure instead of giving up",
+-      "No account, no server, nothing uploaded",
++      "On-device recognition without a Gaze account",
+     ],
+   },
+   {
+@@ -42,11 +42,11 @@
+     title: "Where it keeps things",
+     when: "Secure Enclave",
+     description:
+-      "Your faceprint is a list of numbers, not a photograph, and it is sealed with a key generated inside your Mac that never leaves it. Copied to another Mac, the files are useless.",
++      "Recognition templates are encrypted using a key held by your Mac’s Secure Enclave. They stay on your Mac. Optional profile pictures are saved separately as local images.",
+     items: [
+-      "No images kept, only measurements",
++      "Encrypted recognition measurements",
+       "Sealed to this Mac's Secure Enclave",
+-      "A mode that stores no password at all",
++      "Recognition-only mode with automatic unlocking off",
+       "Your password still works, always",
+     ],
+   },
+@@ -55,9 +55,9 @@
+     title: "Staying out of the way",
+     when: "By design",
+     description:
+-      "The camera only opens once the screen is locked and closes the moment you are in. When you are using your Mac it is doing nothing at all.",
++      "Gaze lives in the menu bar and stops unlock scanning when you are back in. Walk-away locking is optional, and you can pause recognition whenever you need to.",
+     items: [
+-      "Nothing running while you work",
++      "Optional camera checks for walk-away locking",
+       "Gives up quietly rather than nagging",
+       "Follows your Mac's light and dark",
+       "Free, and the source is there to read",
+--- a/src/app/how-it-works/page.tsx
++++ b/src/app/how-it-works/page.tsx
+@@ -12,12 +12,12 @@
+   {
+     icon: "lock" as const,
+     title: "Lock your screen",
+-    body: "A panel drops out of the notch and the camera opens. It only opens once you’re locked out, never while you’re working.",
++    body: "With automatic unlocking enabled, Gaze opens the camera and shows a panel when macOS locks. Your password remains available.",
+   },
+   {
+     icon: "eye" as const,
+-    title: "Look at it",
+-    body: "The match has to hold for two seconds, so a deliberate look gets you in and someone walking past doesn’t.",
++    title: "Follow the prompt",
++    body: "Look at the camera, follow the head movement and return to your starting pose. Gaze asks for two movements by default, then submits your saved password when its checks pass.",
+   },
+ ];
+ 
+@@ -28,7 +28,7 @@
+   },
+   {
+     claim: "A photo may be enough",
+-    body: "It reads a flat image, so it can tell you from other people — but not from a good photograph of you.",
++    body: "Movement and spoof checks add hurdles, but a regular camera can still be fooled by photos or replay. Gaze does not provide Face ID’s depth sensing.",
+   },
+   {
+     claim: "An easier way in",
+@@ -50,11 +50,11 @@
+       <section id="how" className="scroll-mt-24 px-6 pb-24 pt-20">
+         <div className="mx-auto max-w-[1080px]">
+           <h1 className="max-w-[20ch] text-balance text-[clamp(2.5rem,6vw,4rem)] font-bold leading-[1.03] tracking-[-0.035em]">
+-            Three steps, then you forget it’s there
++            A familiar way back to your Mac.
+           </h1>
+           <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-[var(--muted-ink)]">
+-            Setup happens once. After that the only time you notice it is when your
+-            MacBook is already unlocked and you haven’t touched anything.
++            Enroll your face, choose whether to enable automatic unlocking, and follow
++            the panel’s prompts. You can change these choices in Settings.
+           </p>
+ 
+           {/* Three across, with the number set large and quiet. The old version
+--- a/src/app/security/page.tsx
++++ b/src/app/security/page.tsx
+@@ -6,15 +6,19 @@
+ const facts = [
+   {
+     label: "Your faceprint",
+-    body: "Measurements taken from your face, not a photograph — and not a hash, because recognition has to judge how close two faces are and a hash can only say identical or not. Encrypted with a key from your Mac's Secure Enclave.",
++    body: "Gaze saves recognition measurements on your Mac, encrypted using a key held by its Secure Enclave. Camera frames are processed locally.",
+   },
+   {
+     label: "Your password",
+-    body: "Encrypted on your Mac and it stays that way. It is only filled in when the camera recognizes you, and Touch ID keeps working exactly as it did.",
++    body: "If you enable automatic unlocking, Gaze stores an encrypted copy of your Mac login password. It decrypts and submits that password after the configured recognition and movement checks pass.",
+   },
+   {
+     label: "Your face isn't the key",
+-    body: "It decides when the password gets filled in. It doesn't decrypt anything — the key comes from your Mac, not from your face.",
++    body: "Recognition decides when Gaze may submit your saved password. Your face is not an encryption key. You can use recognition-only mode without enabling automatic unlocking.",
++  },
++  {
++    label: "Optional portraits",
++    body: "Pictures you choose for face tiles are saved as local image files, separately from encrypted recognition templates. They are not uploaded or used to recognize you.",
+   },
+ ];
+ 
+@@ -35,8 +39,8 @@
+             Where your face and password go
+           </h1>
+           <p className="mt-5 max-w-lg text-[17px] leading-relaxed text-[var(--muted-ink)]">
+-            Nothing is uploaded and there is no account. The interesting question is what
+-            happens on your own machine, so here it is.
++            Recognition runs on your Mac without a Gaze account. Here is what the app
++            stores, and the limits of unlocking with an ordinary camera.
+           </p>
+ 
+           {/* Plain columns, the same treatment as the caveat under the steps.
+@@ -54,7 +58,19 @@
+               </Reveal>
+             ))}
+           </div>
+-
++          <div className="mt-16 max-w-2xl border-t border-[var(--hairline)] pt-10">
++            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Convenience, with limits.</h2>
++            <p className="mt-3 text-[17px] leading-relaxed text-[var(--muted-ink)]">
++              Gaze uses a regular camera. Movement prompts and spoof checks can still be fooled;
++              they do not provide Face ID&rsquo;s depth sensing. Your Mac password remains available.
++              After a restart, sign in normally so Gaze can start.
++            </p>
++            <p className="mt-4 text-[17px] leading-relaxed text-[var(--muted-ink)]">
++              Camera use also includes setup, recognition tests and Passwords approvals.
++              Optional walk-away locking checks for your presence while the Mac is idle.
++              You control these features in Settings.
++            </p>
++          </div>
+         </div>
+       </section>
+ 

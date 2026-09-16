@@ -1,0 +1,26 @@
+--- a/src/components/notch-video.tsx
++++ b/src/components/notch-video.tsx
+@@ -82,6 +82,7 @@
+   const [intent, setIntent] = useState<Intent>("auto");
+   /** Whether the selected clip is currently playing — synced from the element. */
+   const [isPlaying, setIsPlaying] = useState(false);
++  const [playAttempt, setPlayAttempt] = useState(0);
+   /** Last input modality, for gating the cross-fade to pointer switches. */
+   const [pointerDriven, setPointerDriven] = useState(false);
+ 
+@@ -204,9 +205,12 @@
+         },
+       );
+     }
+-  }, [clips, style, shouldPlay]);
+-
+-  const toggle = () => setIntent(isPlaying ? "pause" : "play");
++  }, [clips, style, shouldPlay, playAttempt]);
++
++  const toggle = () => {
++    setIntent(isPlaying ? "pause" : "play");
++    if (!isPlaying) setPlayAttempt((attempt) => attempt + 1);
++  };
+ 
+   return (
+     <div ref={hostRef} className="relative h-full w-full overflow-hidden bg-black">

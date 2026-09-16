@@ -92,6 +92,23 @@ final class LocalPasswordStore: ObservableObject {
 		revealedID = nil
 	}
 
+	func moveSelection(by offset: Int) {
+		guard !isLocked else { return }
+		guard offset == 1 || offset == -1 else { return }
+		let visible = entries
+		guard !visible.isEmpty else { return }
+		if let current = selectedID, let index = visible.firstIndex(where: { $0.id == current }) {
+			let next = min(max(index + offset, 0), visible.count - 1)
+			let nextID = visible[next].id
+			guard nextID != current else { return }
+			selectedID = nextID
+			revealedID = nil
+		} else {
+			selectedID = visible.first?.id
+			revealedID = nil
+		}
+	}
+
 	private func reconcileSelection(preferred: UUID? = nil) {
 		let visible = entries
 		let identifier = preferred ?? selectedID

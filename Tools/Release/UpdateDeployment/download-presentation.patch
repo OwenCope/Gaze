@@ -1,0 +1,17 @@
+--- a/src/lib/releases.ts
++++ b/src/lib/releases.ts
+@@ -1,4 +1,5 @@
+ import { renderMarkdown } from "./render-markdown";
++import { releaseDownload } from "./release-download";
+ import { readAll, type StoredRelease } from "./store";
+ 
+ export interface Contributor {
+@@ -72,7 +73,7 @@
+     prerelease: r.prerelease,
+     draft: r.draft,
+     private: Boolean(r.private),
+-    download: r.download,
++    download: releaseDownload(r.download) ?? undefined,
+   };
+ }
+ 

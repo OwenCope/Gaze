@@ -139,3 +139,12 @@ No drafts/private records exposed, no arbitrary-URL proxy, no app origin
 loosening, no artifacts fabricated, no Vercel/production state touched, no
 commits or branches. Production release data and the feed route deployment
 (from the earlier stages) remain the lead's calls.
+
+## View-model integration correction (local only)
+
+Release/tester pages now pass their displayed download through the same
+`releaseDownload` policy as the feed. Placeholder URLs, invalid sizes/names and
+unsafe destinations no longer appear as working Download buttons. Stored records
+are unchanged; the admin editor still reads the raw record. Valid tester downloads
+retain their stored Blob URL rather than using the public-only /dl route.
+`test-download-presentation.cjs` exercises the current view model: eight checks.
