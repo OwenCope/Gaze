@@ -1,12 +1,13 @@
 #!/bin/sh
 # Build and smoke-test an isolated website copy, never the production configuration.
-# Usage: website-build-check.sh [site-dir] [out-dir] [--smoke|--serve] [--email-ui] [--port=NUMBER]
+# Usage: website-build-check.sh [site-dir] [out-dir] [--smoke|--serve] [--email-ui] [--admin-ui] [--port=NUMBER]
 set -eu
 SITE_DIR=/Users/owencope/Developer/gaze-site
 OUTPUT_DIR=build/website-build-check
 SMOKE=0
 SERVE=0
 EMAIL_UI=0
+PREVIEW_ADMIN=""
 REQUESTED_PORT=0
 POSITION=0
 for argument in "$@"; do
@@ -14,8 +15,9 @@ for argument in "$@"; do
     --smoke) SMOKE=1 ;;
     --serve) SMOKE=1; SERVE=1 ;;
     --email-ui) EMAIL_UI=1 ;;
+    --admin-ui) PREVIEW_ADMIN="preview@example.test" ;;
     --port=*) REQUESTED_PORT="${argument#--port=}" ;;
-    --help|-h) echo "Usage: $0 [site-dir] [out-dir] [--smoke|--serve] [--email-ui] [--port=NUMBER]"; exit 0 ;;
+    --help|-h) echo "Usage: $0 [site-dir] [out-dir] [--smoke|--serve] [--email-ui] [--admin-ui] [--port=NUMBER]"; exit 0 ;;
     --*) echo "Unknown option: $argument" >&2; exit 2 ;;
     *) POSITION=$((POSITION + 1))
        case "$POSITION" in 1) SITE_DIR="$argument" ;; 2) OUTPUT_DIR="$argument" ;; *) echo 'Too many arguments' >&2; exit 2 ;; esac ;;
@@ -55,9 +57,24 @@ if [ "$EMAIL_UI" = 1 ]; then
   mkdir -p "$BUILD_COPY/src/app/email-ui-review"
   cp "$(dirname "$0")/../EmailAuthHardening/ui-fixture.tsx" "$BUILD_COPY/src/app/email-ui-review/page.tsx"
 fi
+if [ -n "$PREVIEW_ADMIN" ]; then
+  (cd "$BUILD_COPY" && env -i PATH="$PATH" node --input-type=module - "$OUTPUT_DIR/admin-cookie.json" <<'JS'
+import { encode } from 'next-auth/jwt';
+import { writeFileSync } from 'node:fs';
+const value = await encode({
+  token: { sub: 'preview@example.test', email: 'preview@example.test', name: 'Local preview' },
+  secret: 'build-check-synthetic-not-a-secret',
+  salt: 'authjs.session-token',
+  maxAge: 4 * 60 * 60,
+});
+writeFileSync(process.argv[2], JSON.stringify({ name: 'authjs.session-token', value }), { mode: 0o600 });
+JS
+  )
+fi
+
 mkdir -p "$BUILD_COPY/data"
 FIXTURE_NAME="Synthetic build fixture ${BUILD_COPY##*/}"
-python3 - "$BUILD_COPY/data" "$FIXTURE_NAME" <<'PY'
+python3 - "$BUILD_COPY/data" "$FIXTURE_NAME" "$PREVIEW_ADMIN" <<'PY'
 import json, sys
 from pathlib import Path
 root=Path(sys.argv[1])
@@ -67,13 +84,17 @@ root=Path(sys.argv[1])
     'images':[], 'videos':[], 'contributors':[], 'prerelease':False, 'draft':False
 }]))
 (root/'settings.json').write_text(json.dumps({'releasesRequireSignIn':False}))
+if sys.argv[3]:
+    (root/'testers.json').write_text(json.dumps([{'email':'tester@example.test','roles':['tester'],'note':'Synthetic design fixture','addedAt':'2026-01-01T00:00:00.000Z'}]))
+    (root/'roles.json').write_text(json.dumps([{'id':'tester','name':'Tester','color':'#34C759','permissions':['viewPrivate']}]))
+    (root/'readme.md').write_text('## Installing\n\nThis is a synthetic design preview. No downloadable build is attached.\n\n## What to test\n\n- Check the page layout on desktop and mobile.\n- All preview data can be discarded.\n')
 PY
 
 # Do not inherit Blob/OAuth/email credentials, Vercel flags, NODE_OPTIONS or .env.
 STATUS=0
 (cd "$BUILD_COPY" && env -i PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" \
   NODE_ENV=production CI=1 NEXT_TELEMETRY_DISABLED=1 \
-  AUTH_SECRET=build-check-synthetic-not-a-secret AUTH_TRUST_HOST=true \
+  AUTH_SECRET=build-check-synthetic-not-a-secret AUTH_TRUST_HOST=true ADMIN_EMAILS="$PREVIEW_ADMIN" \
   ./node_modules/.bin/next build) >"$OUTPUT_DIR/build.log" 2>&1 || STATUS=$?
 tail -60 "$OUTPUT_DIR/build.log"
 [ "$STATUS" = 0 ] || exit "$STATUS"
@@ -91,7 +112,7 @@ PY
 )"
   (cd "$BUILD_COPY" && exec env -i PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" \
     NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 \
-    AUTH_SECRET=build-check-synthetic-not-a-secret AUTH_TRUST_HOST=true \
+    AUTH_SECRET=build-check-synthetic-not-a-secret AUTH_TRUST_HOST=true ADMIN_EMAILS="$PREVIEW_ADMIN" \
     ./node_modules/.bin/next start --hostname 127.0.0.1 -p "$PORT") >"$OUTPUT_DIR/serve.log" 2>&1 &
   SERVER_PID=$!
   ATTEMPT=0

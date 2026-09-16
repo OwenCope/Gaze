@@ -29,19 +29,19 @@ export default async function Credits() {
   return (
     <main
       id="top"
-      className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased"
+      className="credits-page min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased"
     >
       <TopNav />
-      <section className="px-6 pb-8 pt-16">
-        <div className="mx-auto max-w-[1080px]">
-          <p className="text-[13px] font-medium uppercase tracking-[0.08em] text-[var(--faint-ink)]">
+      <section className="px-6 pb-12 pt-12 sm:pt-14">
+        <div className="mx-auto max-w-[640px] text-center">
+          <p className="text-[13px] font-medium uppercase tracking-[0.08em] text-[var(--muted-ink)]">
             Credits
           </p>
-          <h1 className="mt-3 text-balance text-[clamp(2.5rem,6vw,4rem)] font-bold leading-[1.04] tracking-[-0.04em]">
-            Made with a little help.
+          <h1 className="mt-4 text-balance text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-[1.12] tracking-[-0.035em]">
+            The people behind Gaze.
           </h1>
-          <p className="mt-4 max-w-[38rem] text-[18px] leading-[1.6] text-[var(--muted-ink)]">
-            The people, projects, and ideas behind Gaze.
+          <p className="mx-auto mt-4 max-w-[34rem] text-[17px] leading-[1.6] text-[var(--muted-ink)]">
+            The projects we learned from, and the people who helped make it happen.
           </p>
         </div>
       </section>

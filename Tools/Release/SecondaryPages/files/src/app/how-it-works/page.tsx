@@ -1,3 +1,4 @@
+import { PageIntro } from "@/components/page-intro";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { TopNav } from "@/components/top-nav";
@@ -13,11 +14,7 @@ export default function HowItWorksPage() {
   return (
     <main className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased">
       <TopNav />
-      <header className="site-container py-16 sm:py-20">
-        <p className="mb-5 text-base font-medium text-[var(--muted-ink)]">How it works</p>
-        <h1 className="max-w-[17ch] text-balance text-[clamp(2.5rem,6vw,4rem)] font-semibold leading-[1.05] tracking-[-0.035em]">A familiar way back to your Mac.</h1>
-        <p className="mt-6 max-w-[38rem] text-lg leading-relaxed text-[var(--muted-ink)]">A little setup. A look at the camera. A guided movement. Here’s what happens along the way.</p>
-      </header>
+      <PageIntro eyebrow="How it works" title="From setup to your next unlock." description="Enroll your face, choose your settings, and practice the movement prompts before you try them at the lock screen." />
       <SetupWalkthrough />
       <section className="bg-[var(--surface)] py-16 sm:py-20" aria-labelledby="limits-heading">
         <div className="site-container grid gap-10 md:grid-cols-[0.8fr_1.2fr] md:gap-20">

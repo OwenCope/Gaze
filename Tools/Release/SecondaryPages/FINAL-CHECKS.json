@@ -1,0 +1,65 @@
+[
+  {
+    "path": "/admin",
+    "heading": "Dashboard",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "path": "/credits",
+    "heading": "The people behind Gaze.",
+    "width": 320,
+    "scrollWidth": 320
+  },
+  {
+    "path": "/admin",
+    "heading": "Dashboard",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "path": "/credits",
+    "heading": "The people behind Gaze.",
+    "width": 390,
+    "scrollWidth": 390
+  },
+  {
+    "path": "/admin",
+    "heading": "Dashboard",
+    "width": 1470,
+    "scrollWidth": 1470
+  },
+  {
+    "path": "/credits",
+    "heading": "The people behind Gaze.",
+    "width": 1470,
+    "scrollWidth": 1470
+  },
+  {
+    "path": "/admin/new",
+    "field": "INPUT",
+    "outline": "2px",
+    "tools": [
+      [
+        44,
+        44
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        44,
+        44
+      ]
+    ]
+  }
+]
