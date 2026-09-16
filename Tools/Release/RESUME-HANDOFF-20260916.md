@@ -1,5 +1,23 @@
 # Resume handoff — September 16, 2026
 
+## Owner acceptance/licence update — 2026-09-16 09:21 UTC
+
+The owner confirms basic unlocking works on the current build. Record that basic
+smoke check as OWNER-REPORTED PASS for candidate 919e168b…22ab14; do not continue
+saying it has never been tried. Broader negative/fallback and installation tests
+remain open. Gaze Passwords is a separate later release, not a blocker for Gaze.
+
+The owner reports the recognition model is GPL 3.0 and can point to it. A question
+for the exact repository/model-download URL is pending. Next: inspect the linked
+licence and model distribution, establish coverage for the actual bundled weights,
+and prepare the applicable notices/source arrangement. Do not change the project's
+licence or mark model clearance complete merely from the short report. Evidence:
+ModelClearance/OWNER-REPORT-20260916.md.
+
+No DesktopWallpaper source change has been made yet in the current shipping pass;
+its stale-result/concurrency fix was being considered when the owner clarified.
+The existing candidate remains running. Localhost-only and no-deployment still apply.
+
 ## Latest website visual correction — current native Liquid Glass capture pending
 
 The owner's clips were website previews, not the native app. The generated panel
