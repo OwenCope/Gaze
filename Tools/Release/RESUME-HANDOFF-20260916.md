@@ -1,5 +1,19 @@
 # Resume handoff — September 16, 2026
 
+## Latest Hydra instruction — shared quota; retries cancelled
+
+The user confirms the free usage limit applies across all models on the provider.
+Switching from Muse Spark 1.3 Free to Muse 1.2 Free does not avoid that shared quota.
+The user cancelled the retry ("nvm that wont work"). Leave Hydra stopped until the
+quota resets or the user explicitly chooses another available access option. Do
+not recommend another model on the same exhausted quota as a fix.
+
+Kai 3 was stopped by the user and landed nothing. Its optional external-footer-link
+hint was NOT integrated; leave that task and its worktree alone unless requested.
+Tools/Release/HomeMotion/FooterLinkHint contains only the prepared baseline, not a
+completed change. The earlier completed homepage/small-polish work remains saved
+and integrated. This note supersedes earlier suggestions to switch free models.
+
 ## Hydra quota diagnosis — user-provided screenshot
 
 The user supplied a screenshot with Muse Spark 1.3 Free selected and the message:
