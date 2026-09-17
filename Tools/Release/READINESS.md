@@ -4,8 +4,9 @@ Latest native app checkpoint: [AppReadiness/20260917/HOUR-REPORT.md](AppReadines
 The candidate at `build/gaze-hour-20260917/Gaze.app` adds camera-failure retry,
 readable release notes, background lesson pausing and truthful login-item recovery
 to the earlier wallpaper/updater fixes. The SDK 26.5 build, signature/resource checks,
-onboarding/enrollment suites and isolated UI checks pass. It has not been launched;
-the owner-tested `build/Gaze.app` remains unchanged. Public release still needs
+onboarding/enrollment suites and isolated UI checks pass. A later direct launch
+opened Settings successfully and displayed Gaze is ready; the owner-tested
+`build/Gaze.app` file remains unchanged. Public release still needs
 owner acceptance, supported-Mac installation/update checks, distribution rights,
 Developer ID/notarization and deployed update-service acceptance. Website work is paused.
 

@@ -249,9 +249,9 @@ struct SettingsView: View {
 				// where macOS puts explanatory prose.
 				switch pane {
 				// Everything about unlocking with your face, in the order it becomes
-				// relevant: whether it works, what it does when it recognises you, what it
-				// needs permission to do that, how strict it is about accepting you, and
-				// whose face it knows.
+				// relevant: whether it works, whose face it knows, what it does when it
+				// recognises you, what it needs permission to do that, and how strict it
+				// is about accepting you.
 				//
 				// Permissions and Hardening used to sit on General, which put the camera
 				// permission three panes away from the camera and the anti-spoof switch
@@ -262,15 +262,15 @@ struct SettingsView: View {
 				case .face:
 					if lockout.isLockedOut { lockoutSection }
 					hero.id("hero")
+					if store.isEnrolled { manageSection }
 					unlockSection.id("unlockSection")
 					permissionsSection.id("permissionsSection")
 					securitySection.id("securitySection")
-					if store.isEnrolled { manageSection }
 				case .general:
 					behaviourSection.id("behaviourSection")
-					onboardingSection.id("onboardingSection")
-					updatesSection.id("updatesSection")
 					appearanceSection.id("appearanceSection")
+					updatesSection.id("updatesSection")
+					onboardingSection.id("onboardingSection")
 				case .notch:
 					NotchSettingsSection(settings: settings).id("NotchSettingsSection")
 				case .credits:
@@ -422,7 +422,7 @@ struct SettingsView: View {
 							revealSettingsSection(accessibilityGranted ? "unlockSection" : "permissionsSection")
 						}
 						.gazeButton(.primary, size: .large)
-					} else {
+					} else if !store.isEnrolled {
 						Button {
 							if store.isEnrolled { SetupRequest.begin() } else { SetupRequest.beginOnboarding() }
 							AppActivation.bringToFront()

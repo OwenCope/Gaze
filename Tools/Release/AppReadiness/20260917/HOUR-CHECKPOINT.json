@@ -60,7 +60,7 @@
     }
   },
   "legacyModelBundled": false,
-  "productionAppLaunched": false,
+  "productionAppLaunched": true,
   "validation": {
     "onboardingScreens": 54,
     "enrollmentChecks": 54,
@@ -81,14 +81,24 @@
     "Tools/OnboardingRegression/LessonMotionTests.swift": "dcdff1a0fb003ce1a6e80c570ea4f4861c345958b418353c6cd181f2ddce5e79",
     "Tools/OnboardingRegression/LessonSceneProbe.swift": "a65dd015cea4fc195b43c86215a4f59c96e6041ccdad9f3ef8eafa395c75b7ae",
     "Tools/OnboardingRegression/scene-probe.sh": "d4944b62b0cd9e3a248feb9def8eb3de8b1d6c3ffc4b59de818beb9a29165389",
-    "Tools/Release/READINESS.md": "a666cd15252045b6dee8a0bd2c12acc1dd7ab1ff5be4ff482d19444e16cfdd9a",
+    "Tools/Release/READINESS.md": "aa3b58af613e97f08bdfb721fd0faf9eaba3ef382a6cea990e4440563c51ad5b",
     "Tools/Release/AppReadiness/20260917/HOUR-PASS.md": "c1520c529ab642c80ecd995fca8c3b1c9cff010c4d0533691c2dd2eb6a6873f6",
-    "Tools/Release/AppReadiness/20260917/HOUR-REPORT.md": "76b1a16055176f1578c61013f292c0d04c801c700363d43951ee17988527468b",
+    "Tools/Release/AppReadiness/20260917/HOUR-REPORT.md": "e62baaab4b41b7fb4dc6b29ee7078b910f19ee7d6e400306c086b2da341dc258",
     "Tools/SettingsInteractionRegression/CaptureTests.swift": "508e32383d8818cac80e992e1f5fe688c0a5b8f575798f0e36ee9a2eca78dff4",
     "Tools/SettingsInteractionRegression/README.md": "8409fa8aeb329b0e751da8c7f858571318fb1ed9c06b7818a425506687bdb50c",
     "Tools/SettingsInteractionRegression/ServiceStubs.swift": "2d7352aa04d0ab79e17218aee9d043e27b1a09c46ef972c3ae84552fb9bc0aea",
     "Tools/SettingsInteractionRegression/Tests.swift": "989a89e1e9a3e2e2bed77b989ee01e49a1c8ba2db46f513fc27f87d4ab60a71a",
     "Tools/SettingsInteractionRegression/generate.py": "60771e49560e764a6ba9631386814efbfec61ac7b2c02da6407db4129034d030",
     "Tools/SettingsInteractionRegression/run.sh": "37c15b806f2d2bf6cbd5366ad7a19ee87c49aa5f410d6ee2b6b48cf4c5dab35f"
+  },
+  "launchFollowup": {
+    "recordedUTC": "2026-09-17T02:18:29.085142+00:00",
+    "pid": 99638,
+    "arguments": [
+      "--settings"
+    ],
+    "visibleWindow": "Gaze Settings",
+    "readinessLabel": "Gaze is ready",
+    "liveUnlockTestPerformed": false
   }
 }
