@@ -1,0 +1,43 @@
+{
+  "startedUTC": "2026-09-17T08:44:06+00:00",
+  "recordedUTC": "2026-09-17T09:39:44.859831+00:00",
+  "elapsedMinutes": 58.8,
+  "app": {
+    "path": "/Users/owencope/Developer/FaceID/build/Gaze.app",
+    "sha256": "84c1015c041ddea1c570c218f9f333773169695f9b7e04b1b68e6907201871b5",
+    "runningPID": 31687,
+    "signature": "Apple Development; deep strict verified",
+    "backup": "/Users/owencope/Developer/FaceID/build/Gaze.before-full-ux-20260917.app"
+  },
+  "website": {
+    "canonical": "/Users/owencope/Developer/gaze-site",
+    "files": {
+      "src/components/page-intro.tsx": "f1777460d4fd4440d67b337d1206d7a7f4c72bd680a7e504454deb90c071bba3",
+      "src/components/page-links.tsx": "5e4fb21a445be3d876d82bdc1075de47cb358ab3010d37e61837704e0e9455fb",
+      "src/components/release-card.tsx": "209c8d1edd3d83b531fc8be8e8a66c4a0d2d06cc745283c4c073a2770c8fd7ca",
+      "src/app/not-found.tsx": "574e837891af384421100f8d7c44930904cf0486b7443666d37746d110163ba5",
+      "src/app/admin/page.tsx": "a9214682190c47b4aa0e946bcb24ae65b899d56289565953006ef241d886ad66",
+      "src/app/signin/page.tsx": "519b60256e6bc510d8c3025c9cabe9df6e54dbb9a6f6518e485ee54bdbf5f534",
+      "src/components/email-sign-in.tsx": "3175a414db2a7f85a2c344544a52afad497f5a49b80257d083a7723c07cd71b4"
+    },
+    "preview": "http://127.0.0.1:55524",
+    "previewData": "synthetic; auth/email simulated; writes blocked",
+    "deployed": false
+  },
+  "validation": {
+    "siteTypes": "pass",
+    "siteLint": "pass after root effect fix",
+    "siteRouteChecks": 15,
+    "emailComponentScenarios": 8,
+    "liveWindowCapture": "blocked by ScreenCaptureKit SCStreamErrorDomain -3811",
+    "onboardingOffscreenScreens": 54,
+    "displayPacingRun": false
+  },
+  "completedUTC": "2026-09-17T09:42:55.480451+00:00",
+  "nativeSources": {
+    "Sources/App/SettingsView.swift": "4dab22cf3807debf3aae0d6ef247651c01f4f5ceabb0f1b89c0fbf8be389501e",
+    "Sources/App/NotchSettings.swift": "a411f2cd1f42f6a76c5adb6e430b25aee8b801d253ea24ba23a8412471f516cd",
+    "Sources/Setup/SetupScaffold.swift": "a6d0ffc569fb7c7dd314ea3fc2d1932bf353d6825c0daa7197bd6ea8f40408e3",
+    "Sources/Enrollment/RecognitionTestPanel.swift": "d45fb79f9586b9ac98b57430d6d35774d1bdb9f19f1a8d3b595912a69aa799bb"
+  }
+}

@@ -446,7 +446,7 @@ struct SettingsView: View {
 						.gazeButton(size: .large)
 					}
 				}
-				.frame(width: 132)
+				.frame(width: 168)
 			}
 			.padding(.horizontal, Theme.rowInset)
 			.padding(.vertical, 14)
@@ -865,7 +865,7 @@ struct SettingsView: View {
 	}
 
 	private var securitySection: some View {
-		SettingsSection(title: "Hardening", footer: securityFooter,
+		SettingsSection(title: "Security checks", footer: securityFooter,
 			info: "Choose which checks Gaze requires before unlocking. Movement verification asks for a random action each time. Password and Touch ID remain available on the lock screen.") {
 			SettingToggle(
 				title: "Only trust the built-in camera",

@@ -1,0 +1,41 @@
+{
+  "recordedUTC": "2026-09-17T09:15:13.933654+00:00",
+  "site": "/Users/owencope/Developer/gaze-site",
+  "files": [
+    {
+      "path": "src/components/page-intro.tsx",
+      "before": "e2927ea66e93019b3c46ab5625c21463c19bce0db71e2c3c0179d07f1344d8ac",
+      "after": "f1777460d4fd4440d67b337d1206d7a7f4c72bd680a7e504454deb90c071bba3"
+    },
+    {
+      "path": "src/components/page-links.tsx",
+      "before": "35f1f8cba39fe860ce27724b4090c8839219abe4708d4eecdc9687c405cd81d1",
+      "after": "5e4fb21a445be3d876d82bdc1075de47cb358ab3010d37e61837704e0e9455fb"
+    },
+    {
+      "path": "src/components/release-card.tsx",
+      "before": "dbce80be326f1e8b52fe47615058e77942ebe459abacb41c3f5947156c02b789",
+      "after": "209c8d1edd3d83b531fc8be8e8a66c4a0d2d06cc745283c4c073a2770c8fd7ca"
+    },
+    {
+      "path": "src/app/not-found.tsx",
+      "before": "65d91f162a5ea4fb56b00c214bb0fcd2431c02ce43945f2392869be785f338c6",
+      "after": "574e837891af384421100f8d7c44930904cf0486b7443666d37746d110163ba5"
+    },
+    {
+      "path": "src/app/admin/page.tsx",
+      "before": "09a1c8c56b0bc38734c028a936eaee41db4bc5bd7ec3f18881dd27165672fc89",
+      "after": "a9214682190c47b4aa0e946bcb24ae65b899d56289565953006ef241d886ad66"
+    },
+    {
+      "path": "src/app/signin/page.tsx",
+      "before": "83f1215c7bddb2aecf8b7d54f7bebdd4692406e6dd1656b1e9f73cd63d8851a6",
+      "after": "519b60256e6bc510d8c3025c9cabe9df6e54dbb9a6f6518e485ee54bdbf5f534"
+    },
+    {
+      "path": "src/components/email-sign-in.tsx",
+      "before": "ce57c4f828b046e95111c04df6c24bad4cc5f28de38eee8d1458ac668db265af",
+      "after": "ef83f4c9aa03dd0d75400337a18c4666f2020088ee920ea0cf50ea90dce83fa7"
+    }
+  ]
+}
