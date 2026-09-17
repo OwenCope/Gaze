@@ -63,7 +63,12 @@ signin.write_text(source.replace(provider_line, 'email: true,'))
 
 layout = preview / 'src/app/layout.tsx'
 source = layout.read_text()
-layout.write_text(source.replace('</body>', '<div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:9999,padding:"5px 12px",background:"#202020",color:"#fff",fontSize:12,textAlign:"center"}}>Local UX preview · sample data · email simulated · writes disabled</div></body>'))
+assert '<LapsePanel />' in source
+# Review without the developer overlay: drop only the panel element and its
+# import. No banner or other visible warning is added.
+source = source.replace('import { LapsePanel } from "@/components/lapse-panel";\n', '')
+source = source.replace('        <LapsePanel />\n', '')
+layout.write_text(source)
 
 data = preview / 'data'
 data.mkdir(exist_ok=True)
@@ -83,7 +88,7 @@ for name, value in {'releases.json': releases, 'testers.json':[{'email':'preview
 manifest = {
     'canonical':str(site), 'preview':str(preview),
     'purpose':'UI layout/interaction only; simulated auth, email and data; mutation routes blocked',
-    'overrides':list(overrides)+['src/app/signin/page.tsx providers.email', 'src/app/layout.tsx preview banner'],
+    'overrides':list(overrides)+['src/app/signin/page.tsx providers.email', 'src/app/layout.tsx LapsePanel omitted (import and element)'],
     'sourceHashes':{str(p.relative_to(site/'src')):hashlib.sha256(p.read_bytes()).hexdigest() for p in (site/'src').rglob('*') if p.is_file()},
 }
 (preview.parent/'site-preview-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

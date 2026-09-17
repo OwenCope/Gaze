@@ -1,0 +1,42 @@
+--- a/src/components/notch-video.tsx
++++ b/src/components/notch-video.tsx
+@@ -15,7 +15,7 @@
+  * continuity between panel materials without lingering past the 220ms budget.
+  */
+ const FADE_SECONDS = 0.2;
+-const PREVIEW_RATE = 0.6;
++const PREVIEW_RATE = 0.25;
+ 
+ const POSTERS: Record<NotchStyle, string> = {
+   normal: "/previews/gaze-panel-normal-poster.png",
+@@ -257,16 +257,15 @@
+         type="button"
+         onClick={toggle}
+         aria-label={isPlaying ? "Pause preview" : "Play preview"}
+-        className="absolute right-3 top-3 flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-white/25 bg-black/60 px-3 text-[13px] font-medium text-white backdrop-blur-[14px] backdrop-saturate-[1.7] transition-colors hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
++        className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white backdrop-blur-[14px] backdrop-saturate-[1.7] transition-colors hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+       >
+-        <svg aria-hidden width="11" height="12" viewBox="0 0 11 12" fill="currentColor">
++        <svg aria-hidden width="14" height="14" viewBox="0 0 11 12" fill="currentColor">
+           {isPlaying ? (
+             <path d="M0 0h3.7v12H0zM7.3 0H11v12H7.3z" />
+           ) : (
+             <path d="M0 0l11 6-11 6z" />
+           )}
+         </svg>
+-        <span aria-hidden>{isPlaying ? "Pause" : "Play"}</span>
+       </button>
+     </div>
+   );
+--- a/src/components/mac-screen.tsx
++++ b/src/components/mac-screen.tsx
+@@ -108,9 +108,6 @@
+       {interactive && (
+         <div className="flex flex-col items-center gap-3">
+           <Segmented value={style} onChange={setStyle} options={STYLES} label="Preview material" />
+-          <p className="text-[12px] text-[var(--muted-ink)]">
+-            Slowed panel preview · camera off
+-          </p>
+         </div>
+       )}
+     </div>
