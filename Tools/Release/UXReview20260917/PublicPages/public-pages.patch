@@ -1,0 +1,127 @@
+--- a/src/components/page-intro.tsx
++++ b/src/components/page-intro.tsx
+@@ -12,10 +12,10 @@
+   children?: ReactNode;
+ }) {
+   return (
+-    <header className="site-container pb-12 pt-12 sm:pb-14 sm:pt-16">
++    <header className="site-container pb-14 pt-14 sm:pb-16 sm:pt-20">
+       <p className="mb-4 text-sm font-medium text-[var(--muted-ink)]">{eyebrow}</p>
+-      <h1 className="max-w-[22ch] text-balance text-[clamp(2.125rem,4.5vw,3.25rem)] font-semibold leading-[1.08] tracking-[-0.035em]">{title}</h1>
+-      <p className="mt-5 max-w-[38rem] text-[17px] leading-relaxed text-[var(--muted-ink)] sm:text-lg">{description}</p>
++      <h1 className="max-w-[22ch] text-balance text-[clamp(2.5rem,6vw,4rem)] font-semibold leading-[1.06] tracking-[-0.035em]">{title}</h1>
++      <p className="mt-5 max-w-[42ch] text-[17px] leading-[1.55] text-[var(--muted-ink)] sm:text-[19px]">{description}</p>
+       {children}
+     </header>
+   );
+--- a/src/components/page-links.tsx
++++ b/src/components/page-links.tsx
+@@ -19,11 +19,16 @@
+           <a href="https://discord.gg/BFgKT5YJH" target="_blank" rel="noreferrer" className="site-link mt-3 text-sm">Questions or feedback? Ask on Discord</a>
+         </div>
+         <nav aria-label="More pages">
+-          <ul className="grid gap-x-10 gap-y-4 sm:grid-cols-2">
++          <ul className="grid gap-x-10 sm:grid-cols-2">
+             {PAGES.filter((page) => page.href !== current).map((page) => (
+-              <li key={page.href}>
+-                <Link href={page.href} className="site-link font-medium">{page.label} <span aria-hidden>→</span></Link>
+-                <p className="text-sm text-[var(--muted-ink)]">{page.blurb}</p>
++              <li key={page.href} className="border-b border-[var(--hairline)]">
++                <Link href={page.href} className="flex min-h-20 w-full items-center gap-6 py-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]">
++                  <span className="min-w-0 flex-1">
++                    <span className="block text-[18px] font-semibold tracking-[-0.02em]">{page.label}</span>
++                    <span className="mt-1 block text-[14px] leading-relaxed text-[var(--muted-ink)]">{page.blurb}</span>
++                  </span>
++                  <span aria-hidden className="shrink-0">→</span>
++                </Link>
+               </li>
+             ))}
+           </ul>
+--- a/src/components/release-card.tsx
++++ b/src/components/release-card.tsx
+@@ -19,15 +19,17 @@
+         <div className="flex items-start gap-4">
+           {!cover && <AppIcon size={64} className="size-12 shrink-0" />}
+           <div>
+-            <h2 className="text-balance text-[clamp(1.5rem,3vw,2rem)] font-semibold leading-tight tracking-[-0.025em]">{release.name}</h2>
++            <h2 className="text-balance text-[clamp(1.5rem,3vw,2rem)] font-semibold leading-tight tracking-[-0.025em]">
++              <Link href={`/releases/${encodeURIComponent(release.tag)}`} className="rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]">{release.name}</Link>
++            </h2>
+             {release.excerpt && <p className="mt-3 max-w-[65ch] text-[17px] leading-relaxed text-[var(--muted-ink)]">{release.excerpt}</p>}
+           </div>
+         </div>
+         {cover && (
+-          <div className="mt-6 overflow-hidden rounded-[20px] bg-[var(--surface)] ring-1 ring-[var(--hairline)]">
++          <Link href={`/releases/${encodeURIComponent(release.tag)}`} aria-label={`Open release ${release.tag}`} className="mt-6 block overflow-hidden rounded-[20px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]">
+             {/* eslint-disable-next-line @next/next/no-img-element */}
+             <img src={cover.src} alt={cover.alt} loading={index === 0 ? "eager" : "lazy"} width={1200} height={750} className="aspect-[16/10] w-full object-contain" />
+-          </div>
++          </Link>
+         )}
+         <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+           <Link href={`/releases/${encodeURIComponent(release.tag)}`} className="site-link font-medium" aria-label={`Read release notes for ${release.tag}`}>Read release notes <span aria-hidden>→</span></Link>
+--- a/src/app/not-found.tsx
++++ b/src/app/not-found.tsx
+@@ -1,32 +1,38 @@
+ import Link from "next/link";
+ import { AppIcon } from "@/components/app-icon";
++import { TopNav } from "@/components/top-nav";
++import { PageLinks } from "@/components/page-links";
+ 
+ export default function NotFound() {
+   return (
+-    <main className="flex min-h-dvh items-center justify-center bg-[var(--background)] px-6 py-16 text-[var(--foreground)] antialiased">
+-      <div className="flex w-full max-w-[440px] flex-col items-center text-center">
+-        <AppIcon size={64} className="size-16" />
+-        <p className="mt-6 text-[13px] font-medium tracking-[0.04em] text-[var(--muted-ink)]">
+-          404
+-        </p>
+-        <h1 className="mt-3 text-balance text-[clamp(2rem,7vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
+-          This page isn&rsquo;t here.
+-        </h1>
+-        <p className="mt-5 max-w-[38ch] text-[17px] leading-[1.6] text-[var(--muted-ink)]">
+-          The link may have changed, or this page may not be available.
+-        </p>
+-        <div className="mt-8 flex flex-col items-center gap-2">
+-          <Link
+-            href="/"
+-            className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--action-fill)] px-6 py-2.5 text-[15px] font-medium text-white transition-opacity hover:opacity-90 active:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]"
+-          >
+-            Back to Gaze
+-          </Link>
+-          <Link href="/releases" className="site-link text-[15px]">
+-            View releases
+-          </Link>
++    <div className="flex min-h-dvh flex-col bg-[var(--background)] text-[var(--foreground)] antialiased">
++      <TopNav />
++      <main className="flex flex-1 items-center justify-center px-6 pb-16 pt-28 sm:pt-32">
++        <div className="flex w-full max-w-[440px] flex-col items-center text-center">
++          <AppIcon size={64} className="size-16" />
++          <p className="mt-6 text-[13px] font-medium tracking-[0.04em] text-[var(--muted-ink)]">
++            404
++          </p>
++          <h1 className="mt-3 text-balance text-[clamp(2rem,7vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
++            This page isn&rsquo;t here.
++          </h1>
++          <p className="mt-5 max-w-[38ch] text-[17px] leading-[1.6] text-[var(--muted-ink)]">
++            The link may have changed, or this page may not be available.
++          </p>
++          <div className="mt-8 flex flex-col items-center gap-2">
++            <Link
++              href="/"
++              className="inline-flex min-h-11 items-center justify-center rounded-full bg-[var(--action-fill)] px-6 py-2.5 text-[15px] font-medium text-white transition-opacity hover:opacity-90 active:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]"
++            >
++              Back to Gaze
++            </Link>
++            <Link href="/releases" className="site-link text-[15px]">
++              View releases
++            </Link>
++          </div>
+         </div>
+-      </div>
+-    </main>
++      </main>
++      <PageLinks current="/404" />
++    </div>
+   );
+ }

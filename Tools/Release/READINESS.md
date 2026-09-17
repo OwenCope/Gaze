@@ -1,5 +1,15 @@
 # Gaze release gates
 
+Latest app + website UX pass: [UXReview20260917/RESULT.md](UXReview20260917/RESULT.md).
+The new app is now installed and running from the normal `build/Gaze.app` path;
+the previous owner-tested bundle is backed up as `Gaze.before-full-ux-20260917.app`.
+Seven website source files were updated and a sample-data preview is available at
+http://127.0.0.1:55524. Build, signature, type/lint, route and component checks pass.
+Final live visual acceptance was blocked by window-capture errors; the production
+website was not deployed. See that report for remaining UX and release gates.
+
+Previous checkpoint:
+
 Latest native app checkpoint: [AppReadiness/20260917/HOUR-REPORT.md](AppReadiness/20260917/HOUR-REPORT.md).
 The candidate at `build/gaze-hour-20260917/Gaze.app` adds camera-failure retry,
 readable release notes, background lesson pausing and truthful login-item recovery
