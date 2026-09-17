@@ -101,20 +101,8 @@ else
 	echo "  ! no FaceEmbedding model — using landmark-geometry fallback"
 fi
 
-# Optional legacy texture model. LockWatcher uses Spoof.mlmodelc through
-# AntiSpoofGate; the presence of Liveness.mlmodelc does not enable that gate.
-# Redistribution still depends on the rights to these weights.
-if [ -d "$ROOT/Resources/Liveness.mlmodelc" ]; then
-	echo "→ Using prebuilt anti-spoof model"
-	cp -R "$ROOT/Resources/Liveness.mlmodelc" "$STAGE/Contents/Resources/"
-	echo "  ✓ Liveness.mlmodelc (prebuilt)"
-elif [ -d "$ROOT/Resources/Liveness.mlpackage" ]; then
-	echo "→ Compiling anti-spoof model"
-	xcrun coremlc compile "$ROOT/Resources/Liveness.mlpackage" "$STAGE/Contents/Resources" >/dev/null
-	echo "  ✓ Liveness.mlmodelc"
-else
-	echo "  – no optional legacy Liveness model; lock-screen photo checks use Spoof"
-fi
+# The unused legacy Liveness texture model is excluded from app bundles.
+# Lock-screen photo rejection uses the separate Spoof model below.
 
 # The face-spoof OBJECT detector (Roboflow, trained by scripts/train_spoof.swift). Spots a
 # held phone/screen/printed photo in frame — a different signal from the passive texture

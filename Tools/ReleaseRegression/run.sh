@@ -44,3 +44,4 @@ console.log('PASS: 23 release identity and build-wiring checks; synthetic identi
 NODE
 bash "$ROOT/Tools/ReleaseRegression/verify-artifact.sh"
 bash "$ROOT/Tools/ReleaseRegression/preflight-checks.sh"
+bash "$ROOT/Tools/ReleaseRegression/source-archive.sh"

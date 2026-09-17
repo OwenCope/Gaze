@@ -24,6 +24,8 @@ trap 'rm -rf "$STAGE"' EXIT
 # nobody gave.
 EXCLUDE=(
 	"Resources/FaceEmbedding.mlpackage/"
+	"Resources/Liveness.mlmodelc/"
+	"Resources/Liveness.mlpackage/"
 )
 
 echo "→ Collecting tracked files"
@@ -49,8 +51,7 @@ cat >> "$STAGE/src/NOTICE.md" <<'NOTICE'
 
 # What is not in this archive
 
-Two things above are missing from the archive specifically, and the app will
-build without them.
+The following resources are excluded from the archive. The app builds without them.
 
 ## The recognition model
 
@@ -65,10 +66,16 @@ The animations in setup are Aviorrok's, licensed to this app alone and
 explicitly not for redistribution. `SetupMark` substitutes system symbols when
 the framework is absent, so setup works and simply looks plainer.
 
+## Legacy texture model
+
+`Resources/Liveness.mlmodelc` and `Resources/Liveness.mlpackage` are excluded.
+The current app does not use this model. Photo rejection uses the separate
+Spoof detector, and movement challenges do not depend on the legacy weights.
+
 ## What that means for building
 
-`./build.sh` states which of these it found and carries on without either. The
-app you get is the app minus those two things, not a broken one.
+`./build.sh` builds with the available resources and reports a missing recognition
+model. The legacy texture model is excluded from app bundles too.
 NOTICE
 
 echo "→ Packing"
@@ -81,7 +88,7 @@ rm -f "$OUT"
 # the things that must not be in it rather than trusted to be right.
 echo "→ Checking"
 leaked=""
-for pattern in "FaceIDKit" "mlpackage" "Frameworks/"; do
+for pattern in "FaceIDKit" "mlpackage" "Frameworks/" "Resources/Liveness.mlmodelc/"; do
 	if unzip -l "$OUT" | grep -qi "$pattern"; then
 		echo "  ✗ $pattern is in the archive" >&2
 		leaked=1
