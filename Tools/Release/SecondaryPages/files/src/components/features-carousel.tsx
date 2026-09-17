@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { features } from "@/lib/content";
 
-const SHOTS: Record<string, { src: string; alt: string }> = {
-  Recognition: { src: "/product/setup-movement-detail.webp", alt: "Native preview of Gaze’s movement practice" },
-  "The notch panel": { src: "/previews/gaze-panel-detail-poster.png", alt: "Rendered preview of the current Gaze panel" },
-  "Where it keeps things": { src: "/product/setup-how-detail.webp", alt: "Native setup preview explaining recognition and saved passwords" },
-  "Staying out of the way": { src: "/product/setup-welcome-detail.webp", alt: "Gaze’s current welcome screen preview" },
+const SHOTS: Record<string, { src: string; alt: string; width: number; height: number }> = {
+  Recognition: { src: "/product/setup-movement-detail.webp", alt: "Native preview of Gaze’s movement practice", width: 1072, height: 481 },
+  "The notch panel": { src: "/previews/gaze-panel-detail-poster.png", alt: "Rendered preview of the current Gaze panel", width: 900, height: 560 },
+  "Where it keeps things": { src: "/product/setup-how-detail.webp", alt: "Native setup preview explaining recognition and saved passwords", width: 1200, height: 765 },
+  "Staying out of the way": { src: "/product/setup-welcome-detail.webp", alt: "Gaze’s current welcome screen preview", width: 1280, height: 700 },
 };
 
 export function FeaturesCarousel() {
@@ -72,12 +72,25 @@ export function FeaturesCarousel() {
         {features.map((feature) => {
           const shot = SHOTS[feature.title];
           return (
-            <article key={feature.title} className="flex w-[min(84vw,400px)] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] bg-[var(--surface)]">
-              <div className="px-7 pt-8 pb-6">
+            <article key={feature.title} className="flex w-[min(84vw,400px)] shrink-0 snap-start flex-col gap-6">
+              <div className="px-0 pt-0 pb-0">
                 <h3 className="text-[24px] font-semibold leading-tight tracking-[-0.025em]">{feature.title}</h3>
                 <p className="mt-4 text-[16px] leading-relaxed text-[var(--muted-ink)]">{feature.description}</p>
               </div>
-              {shot && <div className="relative mt-auto aspect-[4/3] bg-[var(--section-bg)]"><Image unoptimized={shot.src.startsWith("/product/")} src={shot.src} alt={shot.alt} fill sizes="(max-width: 480px) 84vw, 400px" className="object-contain p-4" /></div>}
+              {shot && (
+                <div className="mt-auto">
+                  <Image
+                    unoptimized={shot.src.startsWith("/product/")}
+                    src={shot.src}
+                    alt={shot.alt}
+                    width={shot.width}
+                    height={shot.height}
+                    sizes="(max-width: 480px) 84vw, 400px"
+                    className="h-auto w-full rounded-xl"
+                    style={{ maxWidth: shot.width / 2 }}
+                  />
+                </div>
+              )}
             </article>
           );
         })}

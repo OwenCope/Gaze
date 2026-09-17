@@ -25,3 +25,6 @@ dataset-subset/
 
 # Per-session agent scratch, not project configuration.
 .claude/
+
+# Generated browser fixture bundle
+Tools/Release/AdminReliability/fixture/app.js

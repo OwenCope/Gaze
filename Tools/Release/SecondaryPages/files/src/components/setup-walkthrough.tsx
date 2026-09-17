@@ -75,7 +75,7 @@ export function SetupWalkthrough() {
           aria-labelledby={`${id}-tab-${index}`}
           hidden={selected !== index}
           tabIndex={0}
-          className="walkthrough-panel rounded-[28px] bg-[var(--surface)] p-6 shadow-[var(--card-shadow)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)] sm:p-10"
+          className="walkthrough-panel focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]"
         >
           <div className="grid items-center gap-8 md:grid-cols-[0.8fr_1.2fr] md:gap-12">
             <div>
@@ -84,13 +84,13 @@ export function SetupWalkthrough() {
               <p className="mt-5 text-[17px] leading-relaxed text-[var(--muted-ink)]">{step.body}</p>
             </div>
             <figure>
-              <div className="aspect-[16/10] overflow-hidden rounded-2xl bg-[var(--background)] ring-1 ring-[var(--hairline)]">
+              <div className="aspect-[16/10]">
                 {step.video && selected === index ? (
-                  <video src={step.video} poster={step.image} controls muted playsInline preload="none" aria-label={step.alt} className="h-full w-full object-contain">
+                  <video src={step.video} poster={step.image} controls muted playsInline preload="none" aria-label={step.alt} className="h-full w-full rounded-xl object-contain">
                     <track kind="captions" src="/previews/gaze-panel-preview.vtt" srcLang="en" label="Panel prompts" />
                   </video>
                 ) : (
-                  <Image unoptimized src={step.image} alt={step.alt} width={1352} height={845} className="h-full w-full object-contain" />
+                  <Image unoptimized src={step.image} alt={step.alt} width={1352} height={845} className="h-full w-full rounded-xl object-contain" />
                 )}
               </div>
               <figcaption className="mt-4 text-sm leading-relaxed text-[var(--muted-ink)]">{step.caption}</figcaption>

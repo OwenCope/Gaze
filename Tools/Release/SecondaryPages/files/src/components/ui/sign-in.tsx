@@ -10,7 +10,7 @@ export function SignInPage({
   providers,
   callbackUrl,
   title = "Sign in to Gaze",
-  description = "Access releases and your tester account. The Gaze app’s local recognition does not require an account.",
+  description = "Access releases and your tester account.",
 }: {
   providers: { google: boolean; github: boolean; email: boolean };
   callbackUrl: string;
@@ -38,6 +38,9 @@ export function SignInPage({
           </h1>
           <p className="mt-4 leading-relaxed text-[var(--muted-ink)]">
             {description}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-[var(--muted-ink)]">
+            This sign-in is for the website. The Mac app’s local recognition needs no account.
           </p>
 
           <div className="mt-9 space-y-3">

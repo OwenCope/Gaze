@@ -19,6 +19,8 @@ export default async function ReadmePage() {
   if (!session.user.isAdmin) redirect("/");
 
   const { text: readme, version: readmeVersion } = await readReadmeDocument();
+  const email = session.user.email?.toLowerCase();
+  const draftKey = email ? `gaze.readmeDraft.v1:${email}` : undefined;
 
   return (
     <main
@@ -38,7 +40,12 @@ export default async function ReadmePage() {
           </p>
 
           <div className="mt-10">
-            <ReadmeEditor initial={readme} initialVersion={readmeVersion} />
+            <ReadmeEditor
+              key={draftKey}
+              initial={readme}
+              initialVersion={readmeVersion}
+              draftKey={draftKey}
+            />
           </div>
         </div>
       </section>

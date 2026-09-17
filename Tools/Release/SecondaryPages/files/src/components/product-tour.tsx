@@ -2,6 +2,8 @@ import Image from "next/image";
 
 type Shot = {
   media: string;
+  width: number;
+  height: number;
   poster?: string;
   alt: string;
   eyebrow: string;
@@ -12,6 +14,8 @@ type Shot = {
 const shots: Shot[] = [
   {
     media: "/previews/gaze-panel-detail.mp4",
+    width: 900,
+    height: 560,
     poster: "/previews/gaze-panel-detail-poster.png",
     alt: "Website preview of the Gaze unlock panel and movement prompts",
     eyebrow: "Unlock preview",
@@ -21,6 +25,8 @@ const shots: Shot[] = [
   },
   {
     media: "/product/setup-how-detail.webp",
+    width: 1200,
+    height: 765,
     alt: "Native setup preview explaining Gaze’s local recognition and password storage",
     eyebrow: "Your choices",
     title: "Know what you’re turning on.",
@@ -29,6 +35,8 @@ const shots: Shot[] = [
   },
   {
     media: "/product/setup-companion-detail.webp",
+    width: 1420,
+    height: 700,
     alt: "Native preview of Gaze’s companion introduction during setup",
     eyebrow: "Setup",
     title: "Set it up at your pace.",
@@ -42,7 +50,7 @@ export function ProductTour() {
     <section id="tour" className="scroll-mt-20 px-6 pb-16 pt-2">
       <div className="mx-auto max-w-[1080px]">
         <article>
-          <Frame media={shots[0].media} poster={shots[0].poster} alt={shots[0].alt} />
+          <Media shot={shots[0]} />
           <div className="mt-8 grid gap-5 md:grid-cols-2 md:gap-12">
             <div>
               <p className="text-[14px] font-medium text-[var(--faint-ink)]">{shots[0].eyebrow}</p>
@@ -68,7 +76,7 @@ export function ProductTour() {
 
 function TourPanel({ shot }: { shot: Shot }) {
   return (
-    <article className="flex flex-col rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 md:p-8">
+    <article className="flex min-w-0 flex-col">
       <div>
         <p className="text-[14px] font-medium text-[var(--faint-ink)]">{shot.eyebrow}</p>
         <h2 className="mt-3 text-balance text-[clamp(1.75rem,3.6vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
@@ -79,40 +87,41 @@ function TourPanel({ shot }: { shot: Shot }) {
         </p>
       </div>
       <div className="mt-8">
-        <Frame media={shot.media} poster={shot.poster} alt={shot.alt} embedded />
+        <Media shot={shot} />
       </div>
     </article>
   );
 }
 
-function Frame({ media, poster, alt, embedded = false }: { media: string; poster?: string; alt: string; embedded?: boolean }) {
-  const isVideo = media.endsWith(".mp4");
+function Media({ shot }: { shot: Shot }) {
+  if (shot.media.endsWith(".mp4")) {
+    return (
+      <video
+        src={shot.media}
+        width={shot.width}
+        height={shot.height}
+        controls
+        preload="none"
+        poster={shot.poster}
+        muted
+        playsInline
+        aria-label={shot.alt}
+        className="mx-auto block h-auto w-full max-w-[900px] rounded-xl"
+      >
+        <track kind="captions" src="/previews/gaze-panel-preview.vtt" srcLang="en" label="Panel prompts" />
+      </video>
+    );
+  }
 
   return (
-    <div className={`aspect-[16/10] overflow-hidden bg-[var(--surface)] ${embedded ? "rounded-[16px] border border-[var(--hairline)]" : "rounded-[24px] border border-[var(--hairline)] p-2 sm:p-3"}`}>
-      {isVideo ? (
-        <video
-          src={media}
-          controls
-          preload="none"
-          poster={poster}
-          muted
-          playsInline
-          aria-label={alt}
-          className={`h-full w-full object-contain ${embedded ? "" : "rounded-[16px]"}`}
-        >
-          {media.startsWith("/previews/gaze-panel-") && <track kind="captions" src="/previews/gaze-panel-preview.vtt" srcLang="en" label="Panel prompts" />}
-        </video>
-      ) : (
-        <Image
-          unoptimized
-          src={media}
-          alt={alt}
-          width={1352}
-          height={845}
-          className={`h-full w-full object-contain ${embedded ? "" : "rounded-[16px]"}`}
-        />
-      )}
-    </div>
+    <Image
+      unoptimized
+      src={shot.media}
+      alt={shot.alt}
+      width={shot.width}
+      height={shot.height}
+      style={{ maxWidth: shot.width / 2 }}
+      className="block h-auto w-full rounded-xl"
+    />
   );
 }
