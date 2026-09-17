@@ -25,6 +25,13 @@ candidate by owner report, not by an automated lock-screen test.
   recognition/security thresholds remain unchanged. Clearance stays fail-closed;
   the unresolved legacy inventory entry was not deleted or marked cleared.
 
+- Remy connected the companion preview to the existing blurred desktop image.
+  Reopening it refreshes the image; missing images retain the neutral fallback.
+  This is a simulated preview, not a live lock-screen recording.
+- Nova 4 aligned the Accessibility permission row with the existing combined
+  permission readiness state. The Camera button now says “Open Settings,” matching
+  its action. Permission requests and authentication behavior are unchanged.
+
 ## Verification
 
 - The original version probe reproduced three incorrect comparisons: stable
@@ -40,11 +47,18 @@ candidate by owner report, not by an automated lock-screen test.
 - `Tools/ReleaseRegression/run.sh` passes 23 identity/build checks, 29 artifact
   verifier checks, 12 preflight checks, and the new synthetic archive check.
   Mock signing tools in that suite do not establish a real distribution signature.
+- Nova 4 reports the Settings UX regression and Swift parse checks passed;
+  Remy reports the preview parse passed. Root rebuilt both changes together in
+  the full app. The earlier updater/packaging suites were not rerun for these UI edits.
 - Fresh optimized app build passes with no compiler warnings/errors in its log.
   Deep strict codesign verification passes, with hardened runtime and the same
   Apple Development designated requirement as the preceding candidate.
-- All five FaceEmbedding files and all twelve Spoof files match the previous
-  bundle byte for byte. Neither legacy Liveness model format is bundled. Source
+- All five FaceEmbedding files and eleven of twelve Spoof files match the prior
+  bundle byte for byte, including the weights. The remaining coremldata.bin differs
+  only in the order of two training metadata entries: iterations=60 and Create ML
+  version=27.0.0. Their values and every other byte are identical. The Spoof source
+  hash matches the clearance inventory. See compiled-model-comparison.json in the
+  build directory. Neither legacy Liveness model format is bundled. Source
   hashes stayed stable through the build, and no Swift source is newer than its
   executable. `CHECKPOINT.json` records source and resource fingerprints.
 
@@ -53,15 +67,16 @@ candidate by owner report, not by an automated lock-screen test.
 `build/gaze-readiness-20260917/Gaze.app`
 
 Executable SHA-256:
-`041b6d864443671babcab54011de3b3f8a76ba449cdc6915add0e4885c4ba747`
+`58e9d70675bd2f2b8eddca4ca21a2a1be512720fdad3e81f3d1217584b544f7b`
 
-Built September 17 at 00:19:11 UTC, using the installed macOS 27 SDK with a
+Built September 17 at 01:09:25 UTC, using the installed macOS 27 SDK with a
 macOS 26 deployment target, arm64. This is not a macOS 26 runtime acceptance test.
 The candidate was not launched. The owner-tested `build/Gaze.app` was preserved
 with SHA-256 `919e168b1633a0124f019130573ca1d3bb56a15b44d86da3e7ffb16e3f22ab14`;
 the existing process still points at that older bundle.
 
-Logs and head evidence: `build/gaze-readiness-20260917/`.
+Latest combined build log: `build/gaze-readiness-20260917/ui-build.log`.
+Earlier regression logs and head evidence remain in that directory.
 No live lock, camera, credential, enrollment, or authentication trial was performed.
 
 ## Remaining launch gates

@@ -7,6 +7,7 @@ struct NotchAnimationPreview: View {
 	@State private var playback: Task<Void, Never>?
 	@State private var isPlaying = false
 	@State private var selectedPhase: PreviewPhase = .scanning
+	@State private var wallpaper = DesktopWallpaper.shared
 
 	private enum PreviewPhase: String, CaseIterable, Identifiable {
 		case locked = "Locked"
@@ -34,7 +35,7 @@ struct NotchAnimationPreview: View {
 	var body: some View {
 		VStack(spacing: 0) {
 			NotchPreviewCanvas(model: model, widthAdjust: settings.notchWidthAdjust,
-				heightAdjust: settings.notchHeightAdjust)
+				heightAdjust: settings.notchHeightAdjust, wallpaper: wallpaper.image)
 				.frame(height: 280)
 				.accessibilityElement(children: .ignore)
 				.accessibilityLabel("Notch preview: \(selectedPhase.rawValue)")
@@ -57,6 +58,7 @@ struct NotchAnimationPreview: View {
 			.padding(.vertical, 12)
 		}
 		.onAppear {
+			wallpaper.load()
 			syncAppearance()
 			model.phase = selectedPhase.phase
 			model.isExpanded = true

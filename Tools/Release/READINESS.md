@@ -3,7 +3,8 @@
 Latest native app checkpoint: [AppReadiness/20260917/REPORT.md](AppReadiness/20260917/REPORT.md).
 The separate candidate at `build/gaze-readiness-20260917/Gaze.app` includes wallpaper
 race/retry fixes, correct release-version ordering, reliable update-check timestamps,
-and omission of the unused legacy model. Offline regressions, the full build, and
+omission of the unused legacy model, a wallpaper-backed companion preview, and
+consistent permission labels. Offline regressions, the full build, and
 actual signature/resource checks pass. It has not been launched; the owner-tested
 `build/Gaze.app` remains unchanged. Public release still needs the acceptance,
 distribution-rights and signing steps listed in that report. Website work is paused.

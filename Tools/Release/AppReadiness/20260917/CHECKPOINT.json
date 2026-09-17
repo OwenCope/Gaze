@@ -1,5 +1,5 @@
 {
-  "recordedUTC": "2026-09-17T00:20:02.421014+00:00",
+  "recordedUTC": "2026-09-17T01:11:51.368854+00:00",
   "status": "local candidate built and verified; not launched or ready for public distribution",
   "files": {
     "Sources/App/ReleaseUpdateChecker.swift": "e34b60ca058281854a990a51fd1a022bd6cd727be6e6711ba07b53a3d22286ea",
@@ -13,14 +13,17 @@
     "Tools/AppReadinessRegression/Tests.swift": "b10d79876201cff31f8fa55227f3169774b9e5db79bacd3fc0dffcc11a0c696d",
     "Tools/AppReadinessRegression/ThemeStub.swift": "c5170a4d880f1d3cdc8b10e41f7ad8f93ff8147498494a73294e24d516775f61",
     "Tools/AppReadinessRegression/README.md": "36046dacbfefa7243fb10222811ce65fec2324a18fb4d136931b5453ad371fab",
-    "Tools/Release/AppReadiness/20260917/REPORT.md": "4f3a7854ac8b00b36eaa522a0e4ed485d2795ae7ab912b4c09e905d936ab1df0",
-    "Tools/Release/READINESS.md": "07e79fbb5a7f8746d1bbf5540b82f031edb6227c8456b7175f671fcb9e0270da"
+    "Tools/Release/AppReadiness/20260917/REPORT.md": "ccea7d9bbabdc449c8ac7bd4c1273b3384db91846cc1782fbe2e2f1b6dc2d551",
+    "Tools/Release/READINESS.md": "842850784394c44155a98ff036d1fdcdd4863172b41c8afe42409871da957986",
+    "Sources/App/SettingsView.swift": "25a2580d8ffd1ad99c35e7382ee203c241762098ec2a1671bbf2d0afcbaf48ee",
+    "Sources/App/NotchAnimationPreview.swift": "b79b2219d1316d5881bad5a64fa6c124f32881fc71bae65a1a6b995c3242e165",
+    "Resources/Spoof.mlmodel": "e4037752e867f72f3acf5525cbd2fc08d6c6b240e0df4aeeeea10fad9fc9e76f"
   },
   "binary": {
     "path": "build/gaze-readiness-20260917/Gaze.app/Contents/MacOS/Gaze",
-    "sha256": "041b6d864443671babcab54011de3b3f8a76ba449cdc6915add0e4885c4ba747",
+    "sha256": "58e9d70675bd2f2b8eddca4ca21a2a1be512720fdad3e81f3d1217584b544f7b",
     "bytes": 4690016,
-    "modifiedUTC": "2026-09-17T00:19:11.268824+00:00"
+    "modifiedUTC": "2026-09-17T01:09:25.314109+00:00"
   },
   "signature": {
     "deepStrictVerification": true,
@@ -43,7 +46,7 @@
     "Spoof": {
       "files": {
         "analytics/coremldata.bin": "2599742b0e94d7a5929c7a3e944b8f58081dd7c3a5ec1274608d405331a695a4",
-        "coremldata.bin": "375e46392912f7f89959745588f371a520ad26c3a80ceda77612104b5920ebb0",
+        "coremldata.bin": "72c2781b4aca6d0f060e203feaa9c873568606625dacc273d96e1f75636fb53a",
         "metadata.json": "e3aa369713e961398de3b7b52c58c9e961cd4e81d1692958f56a2e7486042b6b",
         "model0/coremldata.bin": "6d6eb2f4c10cba8ee9b04baf4d54091c1d3d2d7ac51fb43f6ca27c15288cd475",
         "model1/analytics/coremldata.bin": "0d2c230472e729f7d652cdcaafb57b35013eb43679e5568e56f3a59eb36feb33",
@@ -55,12 +58,22 @@
         "model1/neural_network_optionals/coremldata.bin": "5931bd536c4550294a212c6fc8d3c1bee75da817980ba0b671c8603dafb36238",
         "model2/coremldata.bin": "ed7d012a6f9344c5e99e85f5fd0c7d88cf3a902c427a122061bc5b961ae157f7"
       },
-      "matchesPreviousBundle": true,
-      "differingFiles": []
+      "matchesPreviousBundle": false,
+      "differingFiles": [
+        "coremldata.bin"
+      ],
+      "metadataOrderOnlyEvidence": "build/gaze-readiness-20260917/compiled-model-comparison.json"
     }
   },
   "legacyModelBundled": false,
   "newerSwiftSources": [],
   "baselineBinarySHA256": "919e168b1633a0124f019130573ca1d3bb56a15b44d86da3e7ffb16e3f22ab14",
-  "appLaunched": false
+  "appLaunched": false,
+  "previousCandidate": {
+    "path": "build/gaze-readiness-20260917/Gaze.app/Contents/MacOS/Gaze",
+    "sha256": "041b6d864443671babcab54011de3b3f8a76ba449cdc6915add0e4885c4ba747",
+    "bytes": 4690016,
+    "modifiedUTC": "2026-09-17T00:19:11.268824+00:00"
+  },
+  "buildLog": "build/gaze-readiness-20260917/ui-build.log"
 }
