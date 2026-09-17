@@ -1,8 +1,10 @@
 # Gaze native app follow-up — September 17, 2026
 
 The new local candidate is `build/gaze-hour-20260917/Gaze.app`. It is ready for
-owner-supervised testing, not public distribution. The running, owner-tested
-`build/Gaze.app` was preserved and was not relaunched.
+owner-supervised testing, not public distribution. The owner-tested `build/Gaze.app` file was preserved. After the owner reported
+that the link would not open, root launched this candidate with `--settings` and
+confirmed the exact process path and visible “Gaze is ready” window. No live
+recognition or unlock test was initiated.
 
 ## What changed
 
@@ -91,3 +93,9 @@ Public release still needs model/artwork distribution rights, Developer ID signi
 and notarization, plus deployed update-feed/download acceptance when website work
 resumes. The six asset-clearance groups remain unresolved. Nothing was published,
 committed or pushed, and no production camera, lock or credential trial was run.
+
+## Open-link follow-up
+
+At 2026-09-17T02:18:29.085142+00:00, the candidate was revealed in Finder and launched directly
+with --settings. Its process path was verified (PID 99638). Settings opened
+and displayed Gaze is ready. This establishes startup, not live unlock acceptance.

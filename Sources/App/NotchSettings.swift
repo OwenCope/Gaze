@@ -35,24 +35,21 @@ struct NotchSettingsSection: View {
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-			NotchAppearancePreview(settings: settings)
+		NotchAppearancePreview(settings: settings)
 
-			SettingsSection {
-				DisclosureGroup("What Gaze’s expressions mean", isExpanded: $expressionsExpanded) {
-					GazeExpressionGuide(compact: true, movementCount: settings.unlockMovementCount.rawValue)
-						.padding(.vertical, 12)
-				}
-				.padding(Theme.rowInset)
-			}
-
-			SettingsSection(title: "Appearance", info: styleFooter) {
-				SettingRow(title: "Panel") {
-					NotchChoiceMenu(title: "Panel", valueLabel: settings.panelShape.title, selection: $settings.panelShape) {
-						ForEach(Preferences.PanelShape.allCases, id: \.self) { shape in
-							Text(shape.title).tag(shape)
-						}
+		SettingsSection(title: "Appearance", info: styleFooter) {
+			SettingRow(title: "Panel") {
+				Picker("Panel", selection: $settings.panelShape) {
+					ForEach(Preferences.PanelShape.allCases, id: \.self) { shape in
+						Text(shape.title).tag(shape)
 					}
 				}
+				.pickerStyle(.segmented)
+				.labelsHidden()
+				.controlSize(.regular)
+				.frame(width: 330)
+				.accessibilityLabel("Panel")
+			}
 
 				if settings.panelShape == .attached {
 					RowDivider(inset: Theme.rowInset)
@@ -69,13 +66,18 @@ struct NotchSettingsSection: View {
 
 				if !isOnEar {
 					RowDivider(inset: Theme.rowInset)
-					SettingRow(title: "Material") {
-						NotchChoiceMenu(title: "Material", valueLabel: materialTitle(settings.notchStyle), selection: $settings.notchStyle) {
-							ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
-								Text(materialTitle(style)).tag(style)
-							}
+				SettingRow(title: "Material") {
+					Picker("Material", selection: $settings.notchStyle) {
+						ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
+							Text(materialTitle(style)).tag(style)
 						}
 					}
+					.pickerStyle(.segmented)
+					.labelsHidden()
+					.controlSize(.regular)
+					.frame(width: 330)
+					.accessibilityLabel("Material")
+				}
 					if settings.notchStyle == .semiLiquidGlass {
 						RowDivider(inset: Theme.rowInset)
 						NotchAdjustmentRow(
@@ -88,8 +90,16 @@ struct NotchSettingsSection: View {
 				}
 			}
 
-			sizeControls
+		sizeControls
+
+		SettingsSection {
+			DisclosureGroup("What Gaze’s expressions mean", isExpanded: $expressionsExpanded) {
+				GazeExpressionGuide(compact: true, movementCount: settings.unlockMovementCount.rawValue)
+					.padding(.vertical, 12)
+			}
+			.padding(Theme.rowInset)
 		}
+	}
 		.onChange(of: settings.panelShape, initial: true) { _, shape in
 			if shape == .island && settings.glyphPlacement != .centred {
 				settings.glyphPlacement = .centred
@@ -187,12 +197,13 @@ private struct NotchAppearancePreview: View {
 				wallpaper: wallpaper.image,
 				background: Color(nsColor: .windowBackgroundColor))
 				.frame(height: 252)
+				.clipShape(.rect(cornerRadius: 12))
 				.allowsHitTesting(false)
 				.accessibilityElement(children: .ignore)
 				.accessibilityLabel("Notch appearance preview")
 				.accessibilityValue(previewDescription)
 			HStack {
-				Text("Live preview")
+				Text("Appearance preview")
 					.font(Typography.groupTitle)
 				Spacer()
 				Label("Camera off", systemImage: "video.slash")
@@ -201,13 +212,6 @@ private struct NotchAppearancePreview: View {
 			}
 			.padding(.horizontal, Theme.rowInset)
 			.padding(.vertical, 12)
-			.background(Theme.surfaceRaised)
-		}
-		.clipShape(.rect(cornerRadius: Theme.cornerRadius))
-		.overlay {
-			RoundedRectangle(cornerRadius: Theme.cornerRadius)
-				.strokeBorder(Theme.separator, lineWidth: 0.5)
-				.allowsHitTesting(false)
 		}
 		.onChange(of: settings.panelShape) { _, _ in syncAppearance() }
 		.onChange(of: settings.notchStyle) { _, _ in syncAppearance() }
@@ -242,7 +246,7 @@ private struct NotchAdjustmentRow: View {
 			Text(title)
 				.font(Typography.row)
 				.frame(width: 104, alignment: .leading)
-			Slider(value: Binding(get: { value }, set: { value = min(range.upperBound, max(range.lowerBound, ($0 / step).rounded() * step)) }), in: range)
+			Slider(value: Binding(get: { value }, set: { value = min(range.upperBound, max(range.lowerBound, ($0 / step).rounded() * step)) }), in: range, step: step)
 				.controlSize(.small)
 				.tint(Theme.label.opacity(0.85))
 				.accessibilityLabel(title)
