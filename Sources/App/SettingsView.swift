@@ -499,10 +499,11 @@ struct SettingsView: View {
 	/// it is giving somebody your login. That has to be said where faces are added,
 	/// not buried in a document nobody opens.
 	private var manageSection: some View {
-		SettingsSection(
-			title: store.faces.count == 1 ? "Enrolled face" : "Enrolled faces",
-			footer: manageFooter
-		) {
+		VStack(alignment: .leading, spacing: 8) {
+			Text(store.faces.count == 1 ? "Enrolled face" : "Enrolled faces")
+				.font(Typography.groupTitle)
+				.foregroundStyle(Theme.secondaryLabel)
+				.padding(.horizontal, 4)
 			// Tiles in a row, the way Touch ID & Password lists fingerprints.
 			//
 			// Apple has already answered this exact question — several enrolments of
@@ -510,7 +511,7 @@ struct SettingsView: View {
 			// not a list of rows. A tile is the size of the thing it represents, the
 			// name sits under it where a name belongs, and adding one is a tile in the
 			// same row rather than a button somewhere else in the pane.
-			HStack(alignment: .top, spacing: 16) {
+			HStack(alignment: .top, spacing: 12) {
 				ForEach(store.faces) { face in
 					// Touched so the tile redraws when a picture is chosen.
 					//
@@ -544,8 +545,16 @@ struct SettingsView: View {
 
 				Spacer(minLength: 0)
 			}
+			.frame(maxWidth: .infinity)
 			.padding(.horizontal, Theme.rowInset)
-			.padding(.vertical, 16)
+			.padding(.vertical, 8)
+			if !manageFooter.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+				Text(manageFooter)
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+					.fixedSize(horizontal: false, vertical: true)
+					.padding(.horizontal, 4)
+			}
 		}
 	}
 
@@ -1708,7 +1717,7 @@ private struct FaceTile: View {
 	}
 
 	var body: some View {
-		VStack(spacing: 8) {
+		VStack(spacing: 6) {
 			ZStack(alignment: .topTrailing) {
 				// A circle with initials in it — the way macOS draws a person.
 				//
@@ -1738,7 +1747,7 @@ private struct FaceTile: View {
 				// list of people on this system shows.
 				Circle()
 					.fill(Theme.surface)
-					.frame(width: 68, height: 68)
+					.frame(width: 52, height: 52)
 					.overlay {
 						if let portrait {
 							Image(nsImage: portrait)
@@ -1748,7 +1757,7 @@ private struct FaceTile: View {
 								.clipShape(.circle)
 						} else {
 							Text(initials)
-								.font(.system(size: 25, weight: .medium, design: .rounded))
+								.font(.system(size: 21, weight: .medium, design: .rounded))
 								.foregroundStyle(Theme.secondaryLabel)
 						}
 					}
@@ -1778,7 +1787,7 @@ private struct FaceTile: View {
 				.opacity(controlsVisible ? 1 : 0)
 				.allowsHitTesting(controlsVisible)
 				.accessibilityHidden(false)
-				.offset(x: -46, y: 46)
+				.offset(x: -30, y: 30)
 				.transition(.opacity)
 			}
 
@@ -1897,7 +1906,7 @@ private struct AddFaceTile: View {
 
 	var body: some View {
 		Button(action: action) {
-			VStack(spacing: 8) {
+			VStack(spacing: 6) {
 				// A filled tile that lightens on hover, not a dashed outline.
 				//
 				// The dashed rectangle is a drop-zone convention borrowed from the web, and
@@ -1915,7 +1924,7 @@ private struct AddFaceTile: View {
 				Circle()
 					.fill(Theme.surface.opacity(hovering ? 1.6 : 1))
 					.overlay { Circle().strokeBorder(Theme.separator, lineWidth: 1) }
-					.frame(width: 68, height: 68)
+					.frame(width: 52, height: 52)
 					.overlay {
 						Image(systemName: "plus")
 							.font(.system(size: 22, weight: .medium))

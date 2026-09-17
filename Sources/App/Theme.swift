@@ -55,24 +55,11 @@ enum Theme {
 	static let surfaceRaised = dynamic(light: .white.opacity(0.88), dark: .white.opacity(0.18))
 	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
 
-	// MARK: - Setup / enrolment (dark-only)
-
-	/// The setup and enrolment windows force a dark appearance — the screen is mostly camera,
-	/// and a dark surround keeps the face the brightest thing on it. Being dark-only, they
-	/// can't use the dynamic tokens above, so their grounds and label levels live here as one
-	/// value each rather than as the `.white.opacity(...)` literals that had drifted across
-	/// five files (0.5 here, 0.6 there, for the same job).
-	///
-	/// Black. This was a dark grey for a while, on the reasoning that black reads as a
-	/// phone splash screen and a native macOS window ground is grey — true of a window
-	/// with a title bar and a toolbar, which this no longer has. As a borderless panel the
-	/// grey read as an unfinished sheet instead, and the black is what makes the camera,
-	/// the glass buttons and the white type sit *on* something.
-	static let setupGround = Color.black
+	static let setupGround = dynamic(light: Color(white: 0.96), dark: .black)
 	/// The muted line under a title — same level as `secondaryLabel` resolves to in dark.
-	static let setupSecondary = Color.white.opacity(0.68)
+	static let setupSecondary = Color.primary.opacity(0.68)
 	/// The quietest text — a "Not now", a caption. Matches `tertiaryLabel` in dark.
-	static let setupTertiary = Color.white.opacity(0.52)
+	static let setupTertiary = Color.primary.opacity(0.52)
 	/// An unfilled enrolment tick, and the placeholder ring before capture starts. Was three
 	/// different values (`0.34,0.34,0.36`, `.white.opacity(0.14)`) for the one visual role.
 	static let tickEmpty = Color(white: 0.34)
@@ -117,18 +104,18 @@ enum Theme {
 	/// a transition feel like the screen was already moving before you looked at it.
 	enum Motion {
 		/// Screen-to-screen, and anything that moves a whole block of content.
-		static let standard = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.42)
+		static let standard = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.28)
 		/// The same curve, shortened — a control changing state under the pointer.
-		static let quick = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.26)
+		static let quick = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.14)
 		/// Something arriving that should feel physical: a tick, a mark, a result.
-		static let arrive = Animation.spring(response: 0.46, dampingFraction: 0.78)
+		static let arrive = Animation.spring(response: 0.34, dampingFraction: 0.86)
 
 		/// How far a block travels as it arrives. Small on purpose — a long slide reads
 		/// as a page turn, and these are not pages.
-		static let rise: CGFloat = 12
+		static let rise: CGFloat = 8
 		/// The blur an element carries in from. Enough to read as focus resolving; not
 		/// enough to look like a mistake in a screenshot.
-		static let entryBlur: CGFloat = 6
+		static let entryBlur: CGFloat = 3
 	}
 
 	// MARK: - Icon palette
@@ -201,7 +188,7 @@ enum Theme {
 	/// already draws — are much rounder than a settings group used to be.
 	static let cornerRadius: CGFloat = 16
 	static let rowInset: CGFloat = 18
-	static let sectionSpacing: CGFloat = 22
+	static let sectionSpacing: CGFloat = 16
 }
 
 // MARK: - Glass
@@ -515,35 +502,59 @@ struct VibrantBackground: NSViewRepresentable {
 ///
 /// Sentence case, not caps. Uppercased letterspaced headers are an iOS convention that
 /// macOS dropped in Ventura.
+private struct NativeSettingsFormKey: EnvironmentKey {
+	static let defaultValue = false
+}
+
+extension EnvironmentValues {
+	var nativeSettingsForm: Bool {
+		get { self[NativeSettingsFormKey.self] }
+		set { self[NativeSettingsFormKey.self] = newValue }
+	}
+}
+
 struct SettingsSection<Content: View>: View {
+	@Environment(\.nativeSettingsForm) private var nativeForm
 
 	let title: String?
 	var footer: String?
+	var info: String?
 	@ViewBuilder var content: Content
 
-	init(title: String? = nil, footer: String? = nil, @ViewBuilder content: () -> Content) {
+	init(title: String? = nil, footer: String? = nil, info: String? = nil, @ViewBuilder content: () -> Content) {
 		self.title = title
 		self.footer = footer
+		self.info = info
 		self.content = content()
 	}
 
 	var body: some View {
+		if nativeForm {
+			Section {
+				content
+			} header: {
+				sectionHeader
+			} footer: {
+				if let footer, !footer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { Text(footer) }
+			}
+		} else {
+			legacyBody
+		}
+	}
+
+	private var legacyBody: some View {
 		VStack(alignment: .leading, spacing: 7) {
 			// Secondary, not primary. A group title labels the rows under it; setting it in
 			// full-strength white made it compete with the row labels it was introducing.
-			if let title {
-				Text(title)
-					.font(Typography.groupTitle)
-					.foregroundStyle(Theme.secondaryLabel)
-					.padding(.leading, 4)
-			}
+			sectionHeader
+				.padding(.horizontal, 4)
 
 			VStack(spacing: 0) {
 				content
 			}
 			.glassSurface()
 
-			if let footer {
+			if let footer, !footer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
 				Text(footer)
 					.font(Typography.detail)
 					.foregroundStyle(Theme.secondaryLabel)
@@ -552,18 +563,38 @@ struct SettingsSection<Content: View>: View {
 			}
 		}
 	}
+
+	@ViewBuilder private var sectionHeader: some View {
+		if let title {
+			HStack {
+				Text(title)
+					.font(Typography.groupTitle)
+					.foregroundStyle(Theme.secondaryLabel)
+				if let info, !info.isEmpty {
+					Spacer()
+					InfoButton(title: "About \(title)", opensOnHover: true) {
+						Text(info)
+					}
+				}
+			}
+		}
+	}
 }
 
 /// Hairline between rows, inset to line up with the labels rather than the group edge.
 struct RowDivider: View {
+	@Environment(\.nativeSettingsForm) private var nativeForm
 	/// Rows with an icon tile need a deeper inset so the rule starts under the label.
 	var inset: CGFloat = 51
 
 	var body: some View {
+		if !nativeForm {
 		Rectangle()
 			.fill(Theme.separator)
 			.frame(height: 1)
 			.padding(.leading, inset)
+			.accessibilityHidden(true)
+		}
 	}
 }
 
@@ -599,6 +630,7 @@ struct IconTile: View {
 			.foregroundStyle(tint ?? Theme.secondaryLabel)
 			.frame(width: 26, height: 26)
 			.opacity(isEnabled ? 1 : 0.45)
+			.accessibilityHidden(true)
 	}
 }
 
@@ -606,6 +638,7 @@ struct IconTile: View {
 
 /// A row with a title, optional explanation, and trailing control.
 struct SettingRow<Trailing: View>: View {
+	@Environment(\.nativeSettingsForm) private var nativeForm
 
 	let title: String
 	var detail: String?
@@ -623,6 +656,34 @@ struct SettingRow<Trailing: View>: View {
 	@ViewBuilder var trailing: Trailing
 
 	var body: some View {
+		if nativeForm {
+			LabeledContent {
+				trailing
+			} label: {
+				HStack(spacing: 10) {
+					if let portrait {
+						Image(nsImage: portrait)
+							.resizable()
+							.scaledToFit()
+							.frame(width: 26, height: 26)
+							.accessibilityHidden(true)
+					}
+					VStack(alignment: .leading, spacing: 3) {
+						Text(title)
+						if let detail {
+							Text(detail).font(.callout).foregroundStyle(.secondary)
+								.fixedSize(horizontal: false, vertical: true)
+						}
+					}
+				}
+			}
+			.disabled(!isEnabled)
+		} else {
+			legacyBody
+		}
+	}
+
+	private var legacyBody: some View {
 		HStack(spacing: 12) {
 			if let portrait {
 				// Rounded square, not a circle. Half of these are app icons, and macOS app
@@ -642,6 +703,7 @@ struct SettingRow<Trailing: View>: View {
 				Text(title)
 					.font(Typography.row)
 					.foregroundStyle(isEnabled ? Theme.label : Theme.tertiaryLabel)
+					.fixedSize(horizontal: false, vertical: true)
 				if let detail {
 					Text(detail)
 						.font(Typography.detail)
@@ -664,6 +726,7 @@ struct SettingRow<Trailing: View>: View {
 
 /// A switch row.
 struct SettingToggle: View {
+	@Environment(\.nativeSettingsForm) private var nativeForm
 
 	let title: String
 	var detail: String?
@@ -673,12 +736,25 @@ struct SettingToggle: View {
 	@Binding var isOn: Bool
 
 	var body: some View {
+		if nativeForm {
+			Toggle(isOn: $isOn) {
+				Text(title)
+				if let detail { Text(detail) }
+			}
+			.disabled(!isEnabled)
+		} else {
+			legacyBody
+		}
+	}
+
+	private var legacyBody: some View {
 		SettingRow(
 			title: title, detail: detail, symbol: symbol, symbolTint: symbolTint,
 			isEnabled: isEnabled
 		) {
-			Toggle("", isOn: $isOn)
+			Toggle(title, isOn: $isOn)
 				.labelsHidden()
+				.accessibilityHint(detail ?? "")
 				.toggleStyle(.switch)
 				.controlSize(.small)
 				.tint(Theme.accent)
@@ -692,6 +768,7 @@ struct SettingToggle: View {
 /// The pill matters: a bare slider tells you there is a value but not what it is, so any
 /// adjustment becomes trial and error.
 struct SliderRow: View {
+	@Environment(\.nativeSettingsForm) private var nativeForm
 
 	let title: String
 	var symbol: String?
@@ -705,6 +782,18 @@ struct SliderRow: View {
 	private let knobRadius: CGFloat = 7
 
 	var body: some View {
+		if nativeForm {
+			Slider(value: $value, in: range) {
+				Text("\(title): \(format(value))").monospacedDigit()
+			}
+			.accessibilityLabel(title)
+			.accessibilityValue(format(value))
+		} else {
+			legacyBody
+		}
+	}
+
+	private var legacyBody: some View {
 		VStack(spacing: 8) {
 			HStack(spacing: 12) {
 				if let symbol {
@@ -717,18 +806,20 @@ struct SliderRow: View {
 				Text(format(value))
 					.font(Typography.pill)
 					.foregroundStyle(Theme.secondaryLabel)
+					.monospacedDigit()
 					.padding(.horizontal, 9)
 					.padding(.vertical, 3)
 					.background(Capsule().fill(Theme.surfaceRaised))
 					.contentTransition(.numericText())
-					.monospacedDigit()
 			}
 
 			VStack(spacing: 3) {
 				Slider(value: $value, in: range)
+					.accessibilityLabel(title)
+					.accessibilityValue(format(value))
 					.controlSize(.small)
 					.tint(Theme.label.opacity(0.85))
-				ticks
+				ticks.accessibilityHidden(true)
 			}
 			.padding(.leading, symbol == nil ? 0 : 38)
 		}
@@ -919,10 +1010,22 @@ extension View {
 }
 
 struct GazeButtonModifier: ViewModifier {
+	@Environment(\.nativeSettingsForm) private var nativeForm
 	let prominence: GazeButtonProminence
 	let size: ControlSize
 
 	func body(content: Content) -> some View {
+		if nativeForm {
+			switch prominence {
+			case .primary: content.buttonStyle(.borderedProminent).controlSize(size)
+			case .standard: content.buttonStyle(.bordered).controlSize(size)
+			}
+		} else {
+			legacyBody(content: content)
+		}
+	}
+
+	private func legacyBody(content: Content) -> some View {
 		Group {
 			// `.glass` / `.glassProminent` are the Liquid Glass styles proper: a lensing,
 			// refracting control rather than `.bordered`'s flat capsule with a glass-ish
@@ -960,22 +1063,34 @@ struct GazeButtonModifier: ViewModifier {
 struct InfoButton<Content: View>: View {
 
 	let title: String
+	var opensOnHover = false
 	@ViewBuilder var content: Content
 
 	@State private var isShowing = false
+	@State private var buttonHovered = false
+	@State private var popoverHovered = false
+	@State private var pinned = false
 
 	var body: some View {
 		Button {
-			isShowing.toggle()
+			if pinned {
+				pinned = false
+				isShowing = false
+			} else {
+				pinned = true
+				isShowing = true
+			}
 		} label: {
 			Image(systemName: "info.circle")
 				.font(Typography.control)
 				.foregroundStyle(Theme.secondaryLabel)
+				.frame(minWidth: 22, minHeight: 22)
 				.contentShape(.circle)
 		}
 		.buttonStyle(.plain)
 		.help(title)
 		.accessibilityLabel(title)
+		.onHover { buttonHovered = $0 }
 		.popover(isPresented: $isShowing, arrowEdge: .bottom) {
 			VStack(alignment: .leading, spacing: 10) {
 				Text(title)
@@ -989,6 +1104,19 @@ struct InfoButton<Content: View>: View {
 			.multilineTextAlignment(.leading)
 			.padding(16)
 			.frame(width: 300)
+			.onHover { popoverHovered = $0 }
 		}
+		.task(id: buttonHovered || popoverHovered) {
+			guard opensOnHover else { return }
+			let hovering = buttonHovered || popoverHovered
+			do { try await Task.sleep(for: .milliseconds(hovering ? 350 : 250)) }
+			catch { return }
+			guard !pinned else { return }
+			isShowing = hovering
+		}
+		.onChange(of: isShowing) { _, shown in
+			if !shown { pinned = false; popoverHovered = false }
+		}
+		.onDisappear { isShowing = false; pinned = false }
 	}
 }
