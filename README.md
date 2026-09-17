@@ -40,6 +40,18 @@ evaluation described in `Tools/Release/READINESS.md`.
 
 ## How it fits together
 
+The working folder is organized as follows:
+
+| Location | Contents |
+| --- | --- |
+| `Sources/`, `Resources/`, `Plugin/` | App code, bundled resources and authentication plugin |
+| [Tools/](Tools/README.md) | Regression checks, previews, model experiments and release tooling |
+| [Data/](Data/README.md) | Local training and evaluation datasets, excluded from source control |
+| `build/Gaze.app` | Normal local app build |
+| `build/installers/` | Packaged DMGs and their checksums |
+| `build/archive/` | Older generated outputs, with a manifest of their original paths |
+| `script/`, `scripts/` | App launcher and model/icon generation scripts |
+
 ```
 screen locks
    └─ LockWatcher              notices the lock, opens the camera
