@@ -1,8 +1,9 @@
 # Gaze disk image
 
-A 720 × 460 Finder window with original silver/sage artwork, Retina resolution,
+A 640 × 360 Finder window with original silver/sage artwork, Retina resolution,
 the signed Gaze app, and an Applications shortcut. Packaging does not launch Gaze
-or change the installed app. The background contains one installation instruction.
+or change the installed app. One installation instruction sits above the icons;
+an original curved arrow leads from Gaze to Applications.
 
 Install build-only dependencies into the ignored build directory:
 
