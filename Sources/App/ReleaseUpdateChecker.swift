@@ -5,22 +5,10 @@ import os
 
 /// Checks gazeunlock.com for a newer release.
 ///
-/// `UpdateChecker` walks up from the bundle looking for a `.git` and reports how far behind
-/// the checkout is. That is the right tool for a copy built from source and no tool at all
-/// for a copy that was downloaded: an app in `/Applications` has no repository above it, so
-/// it finds nothing and correctly says nothing — which leaves everybody who installed Gaze
-/// rather than cloning it with no way to hear that a new version exists.
-///
-/// This is the other half. The site already owns the release list — releases are written on
-/// it, not on GitHub — so the site is what an installed copy should ask. It reads
-/// `/api/latest`, which serves the newest published release and filters out drafts and
-/// tester-only builds server-side.
-///
 /// It offers, and does not install. The download is opened in the browser rather than
 /// fetched, unpacked and swapped in underneath the running app: replacing a bundle while it
 /// is executing is how an updater turns a bad release into an app that will not launch, and
-/// Gaze is the thing standing between its user and their locked Mac. The same reasoning
-/// `UpdateChecker` gives for stopping after a pull applies here with more force.
+/// Gaze is the thing standing between its user and their locked Mac.
 @Observable
 @MainActor
 final class ReleaseUpdateChecker {
@@ -29,23 +17,7 @@ final class ReleaseUpdateChecker {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Releases")
 
-	/// The feed. Path, not query — it is cached at the edge and a query string would defeat
-	/// that for no gain.
-	///
-	/// `--update-feed=<url>` points it somewhere else, which is the only way to exercise this
-	/// without publishing a release to the live site. Testing an updater against production
-	/// means either believing it works or shipping a fake version to every user to find out;
-	/// the same reasoning that gave `--settings` and `--setup-step` their flags applies here.
-	private static var feed: URL {
-		if
-			let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--update-feed=") }),
-			let value = argument.split(separator: "=", maxSplits: 1).last,
-			let url = URL(string: String(value))
-		{
-			return url
-		}
-		return URL(string: "https://gazeunlock.com/api/latest")!
-	}
+	private static let feed = ReleaseURLPolicy.feed
 
 	struct Release: Equatable {
 		let tag: String
@@ -64,6 +36,14 @@ final class ReleaseUpdateChecker {
 	}
 
 	private(set) var state: State = .idle
+	private let defaults: UserDefaults
+	private let sessionConfiguration: () -> URLSessionConfiguration
+
+	init(defaults: UserDefaults = .standard,
+		sessionConfiguration: @escaping () -> URLSessionConfiguration = ReleaseURLPolicy.sessionConfiguration) {
+		self.defaults = defaults
+		self.sessionConfiguration = sessionConfiguration
+	}
 
 	/// The version this bundle claims to be.
 	var currentVersion: String {
@@ -81,8 +61,8 @@ final class ReleaseUpdateChecker {
 	private static let lastCheckKey = "lastReleaseCheck"
 
 	private var lastCheck: Date? {
-		get { UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date }
-		set { UserDefaults.standard.set(newValue, forKey: Self.lastCheckKey) }
+		get { defaults.object(forKey: Self.lastCheckKey) as? Date }
+		set { defaults.set(newValue, forKey: Self.lastCheckKey) }
 	}
 
 	/// How often to look, unprompted.
@@ -125,14 +105,19 @@ final class ReleaseUpdateChecker {
 		if case .available = state { return }
 		if let last = lastCheck, Date().timeIntervalSince(last) < Self.interval { return }
 		await check()
-		if case .failed = state { return }
-		lastCheck = Date()
 	}
 
 	// MARK: - Checking
 
 	func check() async {
+		guard state != .checking else { return }
 		state = .checking
+		defer {
+			switch state {
+			case .upToDate, .available: lastCheck = Date()
+			case .idle, .checking, .failed: break
+			}
+		}
 
 		do {
 			var request = URLRequest(url: Self.feed)
@@ -142,11 +127,28 @@ final class ReleaseUpdateChecker {
 			request.timeoutInterval = 12
 			request.cachePolicy = .reloadRevalidatingCacheData
 
-			let (data, response) = try await URLSession.shared.data(for: request)
-			guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+			let session = URLSession(configuration: sessionConfiguration(),
+				delegate: ReleaseFeedRedirectPolicy(), delegateQueue: nil)
+			defer { session.invalidateAndCancel() }
+			let (bytes, response) = try await session.bytes(for: request)
+			guard let http = response as? HTTPURLResponse, let finalURL = http.url,
+				ReleaseURLPolicy.isTrusted(finalURL), (200..<300).contains(http.statusCode) else {
 				let code = (response as? HTTPURLResponse)?.statusCode ?? 0
 				state = .failed("The update server answered \(code).")
 				return
+			}
+			guard response.expectedContentLength <= ReleaseURLPolicy.maximumFeedBytes else {
+				state = .failed("The update list is too large.")
+				return
+			}
+			var data = Data()
+			for try await byte in bytes {
+				try Task.checkCancellation()
+				guard data.count < ReleaseURLPolicy.maximumFeedBytes else {
+					state = .failed("The update list is too large.")
+					return
+				}
+				data.append(byte)
 			}
 
 			guard let payload = try? JSONDecoder().decode(Feed.self, from: data) else {
@@ -160,7 +162,11 @@ final class ReleaseUpdateChecker {
 				return
 			}
 
-			guard Self.isNewer(latest.tag, than: currentVersion) else {
+			guard let candidate = Version(latest.tag), let current = Version(currentVersion) else {
+				state = .failed("Couldn't read the release version.")
+				return
+			}
+			guard candidate > current else {
 				Self.logger.notice(
 					"Checked \(Self.feed.absoluteString, privacy: .public): latest \(latest.tag, privacy: .public), running \(self.currentVersion, privacy: .public) — up to date")
 				state = .upToDate
@@ -172,7 +178,7 @@ final class ReleaseUpdateChecker {
 					tag: latest.tag,
 					name: latest.name,
 					notes: latest.notes,
-					downloadURL: latest.download.flatMap { URL(string: $0.url) }))
+					downloadURL: ReleaseURLPolicy.download(latest.download?.url)))
 			Self.logger.notice("Update available: \(latest.tag, privacy: .public)")
 		} catch {
 			// Offline is not an error worth alarming anyone about — it is the normal state of
@@ -184,7 +190,8 @@ final class ReleaseUpdateChecker {
 	/// Opens the download in the browser.
 	func openDownload() {
 		guard case .available(let release) = state else { return }
-		let url = release.downloadURL ?? URL(string: "https://gazeunlock.com/releases")!
+		let url = release.downloadURL.flatMap { ReleaseURLPolicy.isTrusted($0) ? $0 : nil }
+			?? ReleaseURLPolicy.releases
 		NSWorkspace.shared.open(url)
 	}
 
@@ -192,25 +199,76 @@ final class ReleaseUpdateChecker {
 
 	/// Whether `candidate` is a later version than `current`.
 	///
-	/// Compared component by component as numbers. A string compare puts "0.10" before
-	/// "0.9", which is the bug where an updater silently stops working the first time a
-	/// minor version reaches double digits — and it stops working in the quiet direction,
-	/// reporting "up to date" forever rather than failing visibly. A `v` prefix is tolerated
-	/// because tags get written both ways, and anything non-numeric counts as 0.
+	/// Semantic-version precedence, also accepting short numeric versions and a v prefix.
+	/// Build metadata never changes precedence; malformed versions never offer an update.
 	static func isNewer(_ candidate: String, than current: String) -> Bool {
-		func parts(_ tag: String) -> [Int] {
-			tag.trimmingCharacters(in: .whitespaces)
-				.replacingOccurrences(of: "v", with: "", options: [.caseInsensitive, .anchored])
-				.split(whereSeparator: { ".-+".contains($0) })
-				.map { Int($0.prefix(while: \.isNumber)) ?? 0 }
+		guard let candidate = Version(candidate), let current = Version(current) else { return false }
+		return candidate > current
+	}
+
+	private struct Version: Comparable {
+		let core: [String]
+		let prerelease: [String]
+
+		init?(_ tag: String) {
+			var value = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+			if value.first == "v" || value.first == "V" { value.removeFirst() }
+			let build = value.split(separator: "+", omittingEmptySubsequences: false)
+			guard (1...2).contains(build.count) else { return nil }
+			if build.count == 2, Self.identifiers(build[1]) == nil { return nil }
+			let release = build[0].split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+			let numbers = release[0].split(separator: ".", omittingEmptySubsequences: false)
+			guard (1...3).contains(numbers.count), numbers.allSatisfy({ Self.isNumber($0) && Self.hasNoLeadingZero($0) })
+			else { return nil }
+			core = numbers.map(String.init) + Array(repeating: "0", count: 3 - numbers.count)
+			if release.count == 2 {
+				guard let identifiers = Self.identifiers(release[1]),
+					identifiers.allSatisfy({ !Self.isNumber($0) || Self.hasNoLeadingZero($0) })
+				else { return nil }
+				prerelease = identifiers
+			} else {
+				prerelease = []
+			}
 		}
-		let (a, b) = (parts(candidate), parts(current))
-		for i in 0..<max(a.count, b.count) {
-			let left = i < a.count ? a[i] : 0
-			let right = i < b.count ? b[i] : 0
-			if left != right { return left > right }
+
+		static func < (lhs: Self, rhs: Self) -> Bool {
+			for (left, right) in zip(lhs.core, rhs.core) where left != right {
+				return numberIsLess(left, than: right)
+			}
+			if lhs.prerelease.isEmpty || rhs.prerelease.isEmpty {
+				return !lhs.prerelease.isEmpty && rhs.prerelease.isEmpty
+			}
+			for (left, right) in zip(lhs.prerelease, rhs.prerelease) where left != right {
+				switch (isNumber(left), isNumber(right)) {
+				case (true, true): return numberIsLess(left, than: right)
+				case (true, false): return true
+				case (false, true): return false
+				case (false, false): return left < right
+				}
+			}
+			return lhs.prerelease.count < rhs.prerelease.count
 		}
-		return false
+
+		private static func identifiers(_ value: Substring) -> [String]? {
+			let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+			guard parts.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy {
+				(48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45
+			} }) else { return nil }
+			return parts.map(String.init)
+		}
+
+		private static func isNumber(_ value: some StringProtocol) -> Bool {
+			!value.isEmpty && value.utf8.allSatisfy { (48...57).contains($0) }
+		}
+
+		private static func hasNoLeadingZero(_ value: some StringProtocol) -> Bool {
+			value.count == 1 || value.first != "0"
+		}
+
+		private static func numberIsLess(_ lhs: String, than rhs: String) -> Bool {
+			// Compare decimal strings without overflowing Int on a large version component.
+			lhs.count == rhs.count ? lhs < rhs : lhs.count < rhs.count
+		}
 	}
 
 	// MARK: - Wire format

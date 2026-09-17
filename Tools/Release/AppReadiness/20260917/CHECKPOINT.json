@@ -1,0 +1,66 @@
+{
+  "recordedUTC": "2026-09-17T00:20:02.421014+00:00",
+  "status": "local candidate built and verified; not launched or ready for public distribution",
+  "files": {
+    "Sources/App/ReleaseUpdateChecker.swift": "e34b60ca058281854a990a51fd1a022bd6cd727be6e6711ba07b53a3d22286ea",
+    "Sources/App/ReleaseURLPolicy.swift": "fdc857cb18ec33400ce2f6927fdc58458214905762713bc6f6b82a4f53663703",
+    "Sources/App/DesktopWallpaper.swift": "f5cb47c68bd22bfb76d0a90abe62a5b6e00f0fc1e3ccf3c00813a4ae87aa8d1d",
+    "build.sh": "f9088e9b079bcc412052d0fbd40d5eec653b666f647efa9974c5424abf797b2b",
+    "source-archive.sh": "ad71dd2ee6851bd44fc47f03d6cacfaf935e4f8fc21d756b02c71b93a8fe2727",
+    "Tools/ReleaseRegression/run.sh": "166efed1fc9003d12bc2131e6a199cd2c4d39eb08dcab7c80e9d46682b2ecec0",
+    "Tools/ReleaseRegression/source-archive.sh": "70b336d5d89b036b31af8b51700a38e2db6aebdbb39dfc162f59c5ce295930f8",
+    "Tools/AppReadinessRegression/run.sh": "aa4102a3d7ec3f975a744bdd59a6301c2b2420f8bfdf66c39d642f1c4fb6e407",
+    "Tools/AppReadinessRegression/Tests.swift": "b10d79876201cff31f8fa55227f3169774b9e5db79bacd3fc0dffcc11a0c696d",
+    "Tools/AppReadinessRegression/ThemeStub.swift": "c5170a4d880f1d3cdc8b10e41f7ad8f93ff8147498494a73294e24d516775f61",
+    "Tools/AppReadinessRegression/README.md": "36046dacbfefa7243fb10222811ce65fec2324a18fb4d136931b5453ad371fab",
+    "Tools/Release/AppReadiness/20260917/REPORT.md": "4f3a7854ac8b00b36eaa522a0e4ed485d2795ae7ab912b4c09e905d936ab1df0",
+    "Tools/Release/READINESS.md": "07e79fbb5a7f8746d1bbf5540b82f031edb6227c8456b7175f671fcb9e0270da"
+  },
+  "binary": {
+    "path": "build/gaze-readiness-20260917/Gaze.app/Contents/MacOS/Gaze",
+    "sha256": "041b6d864443671babcab54011de3b3f8a76ba449cdc6915add0e4885c4ba747",
+    "bytes": 4690016,
+    "modifiedUTC": "2026-09-17T00:19:11.268824+00:00"
+  },
+  "signature": {
+    "deepStrictVerification": true,
+    "identityKind": "Apple Development",
+    "hardenedRuntime": true,
+    "previousDesignatedRequirementMatched": true
+  },
+  "models": {
+    "FaceEmbedding": {
+      "files": {
+        "analytics/coremldata.bin": "6632d1cf26fcc4e38df07e69c75c511a6cb59cb913d4ab08ed1fe53ef9894f81",
+        "coremldata.bin": "19552d9bb6e02da8ed5fee4acba626f2e4df3848b40eff0d406489ab66e550fb",
+        "metadata.json": "1d0740f9bc9f0922e6482d7735cd39722d05698c0630928f227466a9bdf91596",
+        "model.mil": "72632e8f5c15fbd9772231f3db7baf4e26ddb80309e44e415a6c2feb9202d071",
+        "weights/weight.bin": "c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545"
+      },
+      "matchesPreviousBundle": true,
+      "differingFiles": []
+    },
+    "Spoof": {
+      "files": {
+        "analytics/coremldata.bin": "2599742b0e94d7a5929c7a3e944b8f58081dd7c3a5ec1274608d405331a695a4",
+        "coremldata.bin": "375e46392912f7f89959745588f371a520ad26c3a80ceda77612104b5920ebb0",
+        "metadata.json": "e3aa369713e961398de3b7b52c58c9e961cd4e81d1692958f56a2e7486042b6b",
+        "model0/coremldata.bin": "6d6eb2f4c10cba8ee9b04baf4d54091c1d3d2d7ac51fb43f6ca27c15288cd475",
+        "model1/analytics/coremldata.bin": "0d2c230472e729f7d652cdcaafb57b35013eb43679e5568e56f3a59eb36feb33",
+        "model1/coremldata.bin": "a73cceab28f95173edbb0165e0f9a2ee7281e6e1fa148ae5841ccb6430203ac4",
+        "model1/model/coremldata.bin": "f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+        "model1/model.espresso.net": "80a73e2e7cf6b20b3dd30d989abba63b24eeeb259165de45e14a17b3fd9b0d1e",
+        "model1/model.espresso.shape": "73ccd3ece1b1c257c7b7cd8bb815ac536ead806402c9e706beedbbbfb6b94a2f",
+        "model1/model.espresso.weights": "301316f8d7ed8f773c013ea22683a68041cc70001a21688d172a11601bce303c",
+        "model1/neural_network_optionals/coremldata.bin": "5931bd536c4550294a212c6fc8d3c1bee75da817980ba0b671c8603dafb36238",
+        "model2/coremldata.bin": "ed7d012a6f9344c5e99e85f5fd0c7d88cf3a902c427a122061bc5b961ae157f7"
+      },
+      "matchesPreviousBundle": true,
+      "differingFiles": []
+    }
+  },
+  "legacyModelBundled": false,
+  "newerSwiftSources": [],
+  "baselineBinarySHA256": "919e168b1633a0124f019130573ca1d3bb56a15b44d86da3e7ffb16e3f22ab14",
+  "appLaunched": false
+}

@@ -1,9 +1,56 @@
 import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 import os
+
+struct WallpaperLoadGate {
+	struct Request: Equatable, Sendable {
+		let url: URL
+		let generation: UInt64
+	}
+
+	private var generation: UInt64 = 0
+	private var loadedURL: URL?
+	private(set) var pendingRequest: Request?
+	private var retryAfter: [URL: Date] = [:]
+
+	mutating func request(for url: URL, now: Date) -> Request? {
+		guard pendingRequest?.url != url else { return nil }
+		// Returning to the cached image must invalidate work for a different desktop.
+		pendingRequest = nil
+		guard loadedURL != url else { return nil }
+		retryAfter = retryAfter.filter { $0.value > now }
+		guard retryAfter[url] == nil else { return nil }
+		generation &+= 1
+		let request = Request(url: url, generation: generation)
+		pendingRequest = request
+		return request
+	}
+
+	mutating func complete(_ request: Request, succeeded: Bool, now: Date) -> Bool {
+		guard pendingRequest == request else { return false }
+		pendingRequest = nil
+		if succeeded {
+			loadedURL = request.url
+			retryAfter.removeValue(forKey: request.url)
+		} else {
+			loadedURL = nil
+			retryAfter[request.url] = now.addingTimeInterval(10)
+		}
+		return true
+	}
+
+	mutating func reset() {
+		generation &+= 1
+		loadedURL = nil
+		pendingRequest = nil
+		retryAfter.removeAll()
+	}
+}
 
 /// The desktop picture, blurred, as a background for Gaze's own windows.
 ///
@@ -29,9 +76,9 @@ final class DesktopWallpaper {
 	private(set) var image: NSImage?
 
 	private let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Wallpaper")
-	private let context = CIContext(options: [.useSoftwareRenderer: false])
-	/// What was loaded last, so a redundant reload can be skipped.
-	private var loadedURL: URL?
+	@ObservationIgnored private var loadGate = WallpaperLoadGate()
+	@ObservationIgnored private var loadTask: Task<Void, Never>?
+	@ObservationIgnored private var reportedUnresolvedURL = false
 
 	private init() {
 		load()
@@ -67,15 +114,38 @@ final class DesktopWallpaper {
 	/// Reload if the desktop picture has actually changed.
 	func load() {
 		guard let url = Self.currentWallpaperURL() else {
-			logger.notice("Could not resolve the desktop picture; keeping the plain ground.")
+			loadTask?.cancel()
+			loadTask = nil
+			loadGate.reset()
+			image = nil
+			if !reportedUnresolvedURL {
+				logger.notice("Could not resolve the desktop picture; keeping the plain ground.")
+				reportedUnresolvedURL = true
+			}
 			return
 		}
-		guard url != loadedURL else { return }
-		loadedURL = url
+		reportedUnresolvedURL = false
+		guard let request = loadGate.request(for: url, now: .now) else {
+			if loadGate.pendingRequest == nil {
+				loadTask?.cancel()
+				loadTask = nil
+			}
+			return
+		}
 
-		Task.detached(priority: .utility) { [context] in
-			let blurred = Self.blurred(contentsOf: url, using: context)
-			await MainActor.run { self.image = blurred }
+		loadTask?.cancel()
+		loadTask = Task(priority: .utility) { [weak self] in
+			let data = await Self.blurred(contentsOf: request.url)
+			guard !Task.isCancelled, let self,
+				self.loadGate.pendingRequest == request else { return }
+			let blurred = data.flatMap { NSImage(data: $0) }
+			guard self.loadGate.complete(request, succeeded: blurred != nil, now: .now)
+			else { return }
+			self.image = blurred
+			self.loadTask = nil
+			if blurred == nil {
+				self.logger.notice("Could not decode the desktop picture; keeping the plain ground.")
+			}
 		}
 	}
 
@@ -92,11 +162,11 @@ final class DesktopWallpaper {
 	///
 	/// So the aerial case is resolved first, from the wallpaper store, and the image API is
 	/// only trusted when the store says the wallpaper really is an image.
-	nonisolated private static func currentWallpaperURL() -> URL? {
+	private static func currentWallpaperURL() -> URL? {
 		if let aerial = aerialThumbnailURL() { return aerial }
-		guard let screen = MainActor.assumeIsolated({ NSScreen.main ?? NSScreen.screens.first })
+		guard let screen = NSScreen.main ?? NSScreen.screens.first
 		else { return nil }
-		return MainActor.assumeIsolated { NSWorkspace.shared.desktopImageURL(for: screen) }
+		return NSWorkspace.shared.desktopImageURL(for: screen)
 	}
 
 	/// The still that macOS keeps for the aerial currently set as the desktop.
@@ -163,8 +233,10 @@ final class DesktopWallpaper {
 	/// wallpaper is a `.madesktop` bundle, and the aerials are video. `CIImage` simply
 	/// fails on those, which is the right outcome — the caller keeps its flat ground rather
 	/// than showing something wrong.
-	nonisolated private static func blurred(contentsOf url: URL, using context: CIContext) -> NSImage? {
-		guard let source = CIImage(contentsOf: url) else { return nil }
+	@concurrent private static func blurred(contentsOf url: URL) async -> Data? {
+		guard !Task.isCancelled, let source = CIImage(contentsOf: url),
+			!Task.isCancelled, !source.extent.isEmpty, !source.extent.isInfinite
+		else { return nil }
 
 		// Wide enough to stay sharp behind a resized window, small enough that the blur is
 		// cheap. The blur radius is scaled with it so the result looks the same whatever
@@ -196,11 +268,22 @@ final class DesktopWallpaper {
 		// a featureless grey smear — the exact synthetic-gradient look this backdrop exists
 		// to avoid. A blurred photograph of the user's own desktop is the one thing on that
 		// screen that could not have been generated.
-		guard let output = blur.outputImage?.cropped(to: scaled.extent),
+		guard !Task.isCancelled,
+			let output = blur.outputImage?.cropped(to: scaled.extent) else { return nil }
+		let context = CIContext(options: [.useSoftwareRenderer: false])
+		guard !Task.isCancelled,
 			let cgImage = context.createCGImage(output, from: scaled.extent)
 		else { return nil }
 
-		return NSImage(cgImage: cgImage, size: scaled.extent.size)
+		guard !Task.isCancelled else { return nil }
+		let data = NSMutableData()
+		guard let destination = CGImageDestinationCreateWithData(
+			data, UTType.png.identifier as CFString, 1, nil
+		) else { return nil }
+		CGImageDestinationAddImage(destination, cgImage, nil)
+		guard !Task.isCancelled, CGImageDestinationFinalize(destination), !Task.isCancelled
+		else { return nil }
+		return Data(referencing: data)
 	}
 }
 
