@@ -808,8 +808,9 @@ struct SettingsView: View {
 	/// anywhere in the interface, and revoking one in System Settings left Gaze silently
 	/// unable to type a password with nothing on screen saying why.
 	///
-	/// Read at draw time rather than cached: both can be changed in System Settings while
-	/// this window is open, and a remembered answer would be wrong the moment they are.
+	/// Refreshed when Settings appears or the app becomes active (see
+	/// `refreshExternalState`): both can still be changed in System Settings while
+	/// this window is open, so the rows show the last refresh rather than a live read.
 	private var permissionsSection: some View {
 		SettingsSection(
 			title: "Permissions",
@@ -822,7 +823,7 @@ struct SettingsView: View {
 				symbol: "camera.fill",
 				symbolTint: cameraAccessGranted ? nil : Theme.warning
 			) {
-				Button(cameraAccessGranted ? "Open Settings" : "Allow") {
+				Button("Open Settings") {
 					openPrivacySettings("Privacy_Camera")
 				}
 				.gazeButton()
@@ -832,10 +833,10 @@ struct SettingsView: View {
 			RowDivider(inset: 0)
 			SettingRow(
 				title: "Accessibility",
-				detail: AXIsProcessTrusted()
-					? "Allowed" : "Not allowed — Gaze can't type your password",
+				detail: accessibilityGranted
+					? "Allowed" : "Not ready - review Accessibility access",
 				symbol: "accessibility",
-				symbolTint: AXIsProcessTrusted() ? nil : Theme.warning
+				symbolTint: accessibilityGranted ? nil : Theme.warning
 			) {
 				Button("Review") { openSetup(at: .permission) }
 					.gazeButton()
@@ -844,7 +845,7 @@ struct SettingsView: View {
 		}
 	}
 
-	/// Whether the camera has been granted, asked fresh each time this is drawn.
+	/// Whether the camera has been granted, refreshed when Settings appears or the app becomes active.
 	private var cameraAccessGranted: Bool {
 		cameraGranted
 	}
