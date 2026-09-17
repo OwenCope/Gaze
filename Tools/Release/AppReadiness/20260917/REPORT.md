@@ -1,5 +1,8 @@
 # Gaze app readiness — September 17, 2026
 
+Latest candidate and validation: [HOUR-REPORT.md](HOUR-REPORT.md). This document
+retains the earlier wallpaper/updater pass and its artifact identity.
+
 The native app is the current focus. Website and Passwords work are paused.
 Public distribution remains blocked; basic unlocking passed on the preceding
 candidate by owner report, not by an automated lock-screen test.

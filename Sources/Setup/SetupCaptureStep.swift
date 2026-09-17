@@ -22,14 +22,32 @@ struct SetupCaptureStep: View {
 	let model: EnrollmentModel?
 	var onAuthorized: () -> Void
 	var onBack: (() -> Void)?
+	var onRetry: (() -> Void)? = nil
 
-	@State private var isAuthorized = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+	@State private var authorization = AVCaptureDevice.authorizationStatus(for: .video)
 	@State private var isRequesting = false
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+	private var isAuthorized: Bool { authorization == .authorized }
 
 	private let ringSide: CGFloat = 300
 	private let previewSide: CGFloat = 224
 
 	var body: some View {
+		Group {
+			if isAuthorized {
+				capture
+			} else {
+				SetupCameraAccessContent(position: position, authorization: authorization,
+					isRequesting: isRequesting, onRequest: requestAccess, onBack: onBack)
+			}
+		}
+		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+			refresh()
+		}
+		.onAppear { refresh() }
+	}
+
+	private var capture: some View {
 		SetupScaffold(
 			position: position,
 			title: title,
@@ -42,7 +60,8 @@ struct SetupCaptureStep: View {
 					EnrollmentRing(
 						covered: model.covered,
 						currentAngle: model.currentAngle,
-						isEngaged: model.isEngaged
+						isEngaged: model.isEngaged,
+						targetSegment: model.targetSegment
 					)
 					.frame(width: ringSide, height: ringSide)
 				} else {
@@ -61,7 +80,7 @@ struct SetupCaptureStep: View {
 							// each time someone glances at the trackpad.
 							Circle()
 								.fill(.black.opacity(camera.faceMissing ? 0.5 : 0))
-								.animation(Theme.Motion.quick, value: camera.faceMissing)
+								.animation(reduceMotion ? nil : Theme.Motion.quick, value: camera.faceMissing)
 						}
 				} else {
 					Circle()
@@ -75,43 +94,55 @@ struct SetupCaptureStep: View {
 				}
 			}
 		} actions: {
-			// A button only where there is a decision. Once the camera is running the
-			// screen is waiting on a face, not on a click.
-			if !isAuthorized {
-				SetupButton(title: isRequesting ? "Requesting…" : "Allow Camera Access", action: requestAccess)
-					.disabled(isRequesting)
+			if case .failed = camera.state, let onRetry, model?.phase != .complete {
+				SetupButton(title: "Try Again", action: onRetry)
 			} else {
 				Text(model.map { "\(Int($0.progress * 100))%" } ?? "")
 					.font(Typography.setupBody.weight(.semibold).monospacedDigit())
 					.foregroundStyle(Theme.setupTertiary)
 					.opacity(showsPercentage ? 1 : 0)
-					.animation(Theme.Motion.quick, value: showsPercentage)
+					.animation(reduceMotion ? nil : Theme.Motion.quick, value: showsPercentage)
 					.frame(height: 28)
 			}
 		}
-		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-			refresh()
-		}
-		.onAppear { refresh() }
 	}
 
 	// MARK: - Words
 
 	private var title: String {
+		if case .failed = camera.state { return "The camera couldn’t start" }
 		guard isAuthorized else { return "Gaze needs the camera" }
-		switch model?.phase {
-		case .capturing: return "Move your head slowly"
-		default: return "Center your face"
+		if camera.faceMissing {
+			switch camera.absence {
+			case .multipleFaces: return "One face at a time"
+			case .analysisFailed: return "Hold still for a moment"
+			case .detectionFailed: return "The camera frame couldn’t be read"
+			default: return "Center your face"
+			}
 		}
+		return model?.captureTitle ?? "Center your face"
 	}
 
 	private var caption: String {
+		if case .failed = camera.state {
+			if onRetry != nil {
+				return "Make sure the built-in camera is available, then try again. Your face hasn’t been saved."
+			}
+			return "Make sure the built-in camera is available. Go back and try again. Your face hasn’t been saved."
+		}
 		guard isAuthorized else {
 			return "Nothing is recorded, and no images ever leave this Mac."
 		}
 		guard let model else { return " " }
-		if case .capturing = model.phase { return model.instruction }
-		return camera.faceMissing ? "Look at the camera and fill the circle." : "Hold there."
+		if camera.faceMissing {
+			switch camera.absence {
+			case .multipleFaces: return "Gaze found more than one face. Only the person being enrolled should be in view."
+			case .analysisFailed: return "Your face was found, but its details couldn’t be measured. Face the camera in even light."
+			case .detectionFailed: return "Face analysis is unavailable for this frame. If it persists, go back and reopen capture."
+			default: return "Look at the camera and fill the circle. Your captured progress is kept."
+			}
+		}
+		return model.instruction
 	}
 
 	/// Only while there is progress to report. At 0% it reads as stuck.
@@ -123,9 +154,8 @@ struct SetupCaptureStep: View {
 	// MARK: - Permission
 
 	private func refresh() {
-		let granted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-		isAuthorized = granted
-		if granted { onAuthorized() }
+		authorization = AVCaptureDevice.authorizationStatus(for: .video)
+		if isAuthorized { onAuthorized() }
 	}
 
 	private func requestAccess() {
@@ -136,21 +166,73 @@ struct SetupCaptureStep: View {
 			refresh()
 		case .notDetermined:
 			isRequesting = true
-			AVCaptureDevice.requestAccess(for: .video) { granted in
+			AVCaptureDevice.requestAccess(for: .video) { _ in
 				Task { @MainActor in
 					isRequesting = false
-					isAuthorized = granted
-					if granted { onAuthorized() }
+					refresh()
 				}
 			}
-		case .denied, .restricted:
+		case .denied:
 			// Refused once already: the system will never ask again, so the only way
 			// forward is Settings. Sending them there beats a button that does nothing.
 			if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
 				NSWorkspace.shared.open(url)
 			}
+		case .restricted:
+			refresh()
 		@unknown default:
-			isAuthorized = false
+			refresh()
+		}
+	}
+}
+
+struct SetupCameraAccessContent: View {
+	var position: SetupPosition?
+	let authorization: AVAuthorizationStatus
+	var isRequesting = false
+	var onRequest: () -> Void
+	var onBack: (() -> Void)?
+
+	static func actionTitle(for status: AVAuthorizationStatus) -> String? {
+		switch status {
+		case .notDetermined: "Allow Camera Access"
+		case .denied: "Open Camera Settings"
+		default: nil
+		}
+	}
+
+	var body: some View {
+		SetupScaffold(
+			position: position,
+			title: authorization == .restricted ? "Camera access is restricted" : "Let Gaze see you",
+			message: message,
+			figureHeight: 132,
+			onBack: onBack
+		) {
+			SetupGlyph(symbol: "camera")
+		} detail: {
+			Label("Recognition happens on this Mac. Nothing is recorded.", systemImage: "lock")
+				.font(.system(size: 12))
+				.foregroundStyle(Theme.setupSecondary)
+				.padding(.top, 24)
+		} actions: {
+			if let title = Self.actionTitle(for: authorization) {
+				SetupButton(title: isRequesting ? "Waiting for Permission…" : title, action: onRequest)
+					.disabled(isRequesting)
+			}
+		}
+	}
+
+	private var message: String {
+		switch authorization {
+		case .notDetermined:
+			"Gaze uses your built-in camera to recognise your face.\nChoose Allow when macOS asks for camera access."
+		case .denied:
+			"Camera access is off. Enable Gaze in Privacy & Security → Camera, then return here to continue."
+		case .restricted:
+			"A system policy is blocking the camera. Ask your Mac’s administrator to allow access before continuing."
+		default:
+			"Camera access is unavailable. Close setup and try again."
 		}
 	}
 }

@@ -1,13 +1,13 @@
 # Gaze release gates
 
-Latest native app checkpoint: [AppReadiness/20260917/REPORT.md](AppReadiness/20260917/REPORT.md).
-The separate candidate at `build/gaze-readiness-20260917/Gaze.app` includes wallpaper
-race/retry fixes, correct release-version ordering, reliable update-check timestamps,
-omission of the unused legacy model, a wallpaper-backed companion preview, and
-consistent permission labels. Offline regressions, the full build, and
-actual signature/resource checks pass. It has not been launched; the owner-tested
-`build/Gaze.app` remains unchanged. Public release still needs the acceptance,
-distribution-rights and signing steps listed in that report. Website work is paused.
+Latest native app checkpoint: [AppReadiness/20260917/HOUR-REPORT.md](AppReadiness/20260917/HOUR-REPORT.md).
+The candidate at `build/gaze-hour-20260917/Gaze.app` adds camera-failure retry,
+readable release notes, background lesson pausing and truthful login-item recovery
+to the earlier wallpaper/updater fixes. The SDK 26.5 build, signature/resource checks,
+onboarding/enrollment suites and isolated UI checks pass. It has not been launched;
+the owner-tested `build/Gaze.app` remains unchanged. Public release still needs
+owner acceptance, supported-Mac installation/update checks, distribution rights,
+Developer ID/notarization and deployed update-service acceptance. Website work is paused.
 
 Latest website checkpoint: Morning20260917/REPORT.md. The morning fixes and their
 synthetic tests passed; the preview process stopped in a later Droppy crash.

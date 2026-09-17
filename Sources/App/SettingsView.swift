@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import ApplicationServices
+import ServiceManagement
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
@@ -106,6 +107,10 @@ struct SettingsView: View {
 	@State private var lockoutPassword = ""
 	@State private var accessibilityGranted = SetupPermissionStatus.current.isReady
 	@State private var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+	@State private var loginItemEnabled = LoginItem.isEnabled
+	@State private var loginItemNeedsApproval = LoginItem.needsApproval
+	@State private var loginItemError: String?
+	@State private var loginItemFailedRequest: Bool?
 	/// The settings search field. Blank means no search: the panes show as before.
 	@State private var searchQuery = ""
 	@State private var pauseExpiryRevision = 0
@@ -601,6 +606,7 @@ struct SettingsView: View {
 		hasStoredPassword = PasswordVault.hasPassword
 		cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
 		accessibilityGranted = SetupPermissionStatus.current.isReady
+		refreshLoginItemState()
 	}
 
 	// MARK: - Unlocking
@@ -957,22 +963,52 @@ struct SettingsView: View {
 	}
 
 	private var behaviourSection: some View {
-		SettingsSection(title: "This Mac", footer: LoginItem.needsApproval ? behaviourFooter : nil,
+		SettingsSection(title: "This Mac", footer: loginItemNeedsApproval ? behaviourFooter : nil,
 			info: behaviourFooter) {
 			SettingToggle(
 				title: "Open at login",
+				detail: loginItemNeedsApproval ? "Waiting for approval in System Settings." : nil,
 				// Grey, like Login Items in System Settings — and because `Theme.faceID` is
 				// documented as Gaze identity only. A power button is not Gaze.
 				symbol: "power",
 				isOn: Binding(
-					get: { LoginItem.isEnabled },
-					set: { LoginItem.setEnabled($0) }))
+					get: { loginItemEnabled || loginItemNeedsApproval },
+					set: { setLoginItemEnabled($0) }))
+
+			if loginItemNeedsApproval || loginItemError != nil {
+				RowDivider()
+				SettingRow(
+					title: loginItemError == nil ? "Approval needed" : "Open at login couldn’t be changed",
+					detail: loginItemError,
+					symbol: "exclamationmark.circle"
+				) {
+					Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }
+						.gazeButton()
+				}
+			}
 
 			RowDivider()
 			SettingToggle(
 				title: "Ask for a password before quitting",
 				symbol: "lock.fill",
 				isOn: bind(\.tamperProtection))
+		}
+	}
+
+	private func setLoginItemEnabled(_ requested: Bool) {
+		let succeeded = LoginItem.setEnabled(requested)
+		loginItemFailedRequest = succeeded ? nil : requested
+		loginItemError = succeeded ? nil : "Couldn’t change Open at login. Review Login Items in System Settings, then try again."
+		refreshLoginItemState()
+	}
+
+	private func refreshLoginItemState() {
+		loginItemEnabled = LoginItem.isEnabled
+		loginItemNeedsApproval = LoginItem.needsApproval
+		if let requested = loginItemFailedRequest,
+			requested == (loginItemEnabled || loginItemNeedsApproval) {
+			loginItemError = nil
+			loginItemFailedRequest = nil
 		}
 	}
 
@@ -1043,7 +1079,7 @@ struct SettingsView: View {
 
 	private var behaviourFooter: String {
 		var notes: [String] = []
-		if LoginItem.needsApproval {
+		if loginItemNeedsApproval {
 			notes.append("Approve Gaze in System Settings › General › Login Items.")
 		}
 		notes.append("Gaze only watches for your screen locking while it's running.")
@@ -1090,30 +1126,58 @@ struct SettingsView: View {
 	// MARK: - Updates
 
 	private var updatesSection: some View {
-		SettingsSection(
-			title: "Updates",
-			footer: "Source updates are manual. Review and rebuild in your trusted checkout; Gaze never runs Git or installs downloaded code."
-		) {
-			SettingRow(
-				title: "Version \(updates.currentVersion)",
-				symbol: "arrow.trianglehead.2.clockwise"
+		VStack(alignment: .leading, spacing: 7) {
+			SettingsSection(
+				title: "Updates",
+				footer: "Downloads open in your browser. Gaze does not install updates automatically."
 			) {
-				Button("Open Source Folder") { updates.revealRepository() }
-					.gazeButton()
-					.disabled(updates.repositoryURL == nil)
+				SettingRow(
+					title: "Version \(updates.currentVersion)",
+					symbol: "arrow.trianglehead.2.clockwise"
+				) {
+					if updates.repositoryURL != nil {
+						Button("Open Source Folder") { updates.revealRepository() }
+							.gazeButton()
+					}
+				}
+
+				RowDivider(inset: 0)
+				SettingRow(
+					title: releaseRowTitle,
+					detail: releaseRowDetail,
+					symbol: "sparkles"
+				) {
+					Button(releaseButtonTitle) { releaseAction() }
+						.gazeButton()
+						.disabled(releases.state == .checking)
+				}
+
+				if case .available(let release) = releases.state,
+					!release.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+				{
+					RowDivider(inset: 0)
+					DisclosureGroup("Release Notes") {
+						Text(release.notes)
+							.font(Typography.detail)
+							.foregroundStyle(Theme.secondaryLabel)
+							.multilineTextAlignment(.leading)
+							.frame(maxWidth: .infinity, alignment: .leading)
+							.fixedSize(horizontal: false, vertical: true)
+							.textSelection(.enabled)
+					}
+					.padding(.horizontal, Theme.rowInset)
+					.padding(.vertical, 11)
+				}
 			}
 
-			RowDivider(inset: 0)
-			SettingRow(
-				title: releaseRowTitle,
-				detail: releaseRowDetail,
-				symbol: "sparkles"
-			) {
-				Button(releaseButtonTitle) { releaseAction() }
-					.gazeButton()
-					.disabled(releases.state == .checking)
+			if updates.repositoryURL != nil {
+				Text("For source builds, review and rebuild in your trusted checkout.")
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+					.multilineTextAlignment(.leading)
+					.fixedSize(horizontal: false, vertical: true)
+					.padding(.horizontal, Theme.rowInset)
 			}
-
 		}
 	}
 
