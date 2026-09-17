@@ -16,6 +16,7 @@ export function PageLinks({ current }: { current: string }) {
         <div>
           <p className="text-2xl font-semibold tracking-[-0.025em]">More about Gaze.</p>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-[var(--muted-ink)]">Made for your Mac. Independently developed and not affiliated with Apple.</p>
+          <a href="https://discord.gg/BFgKT5YJH" target="_blank" rel="noreferrer" className="site-link mt-3 text-sm">Questions or feedback? Ask on Discord</a>
         </div>
         <nav aria-label="More pages">
           <ul className="grid gap-x-10 gap-y-4 sm:grid-cols-2">

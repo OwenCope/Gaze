@@ -66,7 +66,7 @@ export function ScreenshotGallery() {
               aria-labelledby={"gallery-tab-" + selected}
               aria-describedby="gallery-shot-description"
             >
-              <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[20px] border border-white/10 bg-[#151518]">
+              <div className="relative aspect-[16/10] w-full">
                 {SHOTS.map((preview, index) => (
                   <div
                     key={preview.src}
@@ -82,10 +82,14 @@ export function ScreenshotGallery() {
                       width={preview.width}
                       height={preview.height}
                       style={{ maxWidth: preview.width / 2 }}
-                      className="block h-full w-full object-contain"
+                      className="block h-auto max-h-full w-full rounded-[12px] object-contain"
                     />
                   </div>
                 ))}
+
+              </div>
+              <figcaption className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[13px] text-[var(--muted-ink)]">
+                <span>Native setup detail · camera off</span>
                 <button
                   ref={expandButton}
                   type="button"
@@ -94,14 +98,14 @@ export function ScreenshotGallery() {
                     dialog.current?.showModal();
                     setExpanded(true);
                   }}
-                  className="absolute right-3 bottom-3 flex size-11 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-[#252528] text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]"
+                  className="site-link min-h-11 shrink-0 cursor-pointer rounded-sm text-[13px]"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <span>View larger</span>
+                  <svg width="16" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
                   </svg>
                 </button>
-              </div>
-              <figcaption className="mt-4 text-center text-[13px] text-[var(--muted-ink)]">Native setup detail · camera off</figcaption>
+              </figcaption>
             </figure>
 
             <div role="tablist" aria-label="Choose a screenshot" className="relative mx-auto mt-5 grid w-full max-w-[480px] grid-cols-4 rounded-full bg-[var(--panel-bg)] p-1">
@@ -139,7 +143,7 @@ export function ScreenshotGallery() {
           ref={dialog}
           aria-labelledby="gallery-dialog-title"
           className="gallery-dialog"
-          style={{ width: `min(${shot.width / 2 + 32}px, calc(100vw - 2rem))` }}
+          style={{ width: `min(${shot.width / 2}px, calc(100vw - 2rem))`, background: "transparent", padding: 0, borderRadius: 0 }}
           onClose={() => {
             setExpanded(false);
             expandButton.current?.focus();
@@ -147,8 +151,8 @@ export function ScreenshotGallery() {
           onClick={(event) => { if (event.target === event.currentTarget) dialog.current?.close(); }}
         >
           <div className="mb-3 flex items-center justify-between gap-4">
-            <h3 id="gallery-dialog-title" className="text-[16px] font-medium">{shot.title}</h3>
-            <button type="button" aria-label="Close preview" onClick={() => dialog.current?.close()} className="flex size-11 cursor-pointer items-center justify-center rounded-full bg-[var(--section-bg)] focus-visible:outline-2 focus-visible:outline-[var(--action)]">
+            <h3 id="gallery-dialog-title" className="text-[16px] font-medium text-white">{shot.title}</h3>
+            <button type="button" aria-label="Close preview" onClick={() => dialog.current?.close()} className="flex size-11 cursor-pointer items-center justify-center rounded-full bg-white/15 text-white focus-visible:outline-2 focus-visible:outline-white">
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden><path d="m5 5 10 10M15 5 5 15" /></svg>
             </button>
           </div>

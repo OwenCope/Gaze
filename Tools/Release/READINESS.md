@@ -1,5 +1,9 @@
 # Gaze release gates
 
+Latest website checkpoint: Morning20260917/REPORT.md. The morning fixes and their
+synthetic tests passed; the preview process stopped in a later Droppy crash.
+Public launch is still not approved, and crash cause remains unconfirmed.
+
 ## Current local checkpoint — September 16, 2026
 
 Latest UI follow-up: lossless native-detail imagery, a fixed-stage segmented gallery

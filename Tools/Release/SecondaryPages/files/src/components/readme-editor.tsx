@@ -1,8 +1,34 @@
 "use client";
 
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { LiquidButton } from "@/components/ui/liquid-glass-button";
+
+type TabDraft = { schema: 1; text: string; baseVersion: string };
+
+function parseTabDraft(raw: string): TabDraft | null {
+  try {
+    const draft: unknown = JSON.parse(raw);
+    if (
+      typeof draft !== "object" ||
+      draft === null ||
+      !("schema" in draft) ||
+      draft.schema !== 1 ||
+      !("text" in draft) ||
+      typeof draft.text !== "string" ||
+      !("baseVersion" in draft) ||
+      typeof draft.baseVersion !== "string" ||
+      !(draft.baseVersion === "missing" || (
+        draft.baseVersion.length === 64 && /^[0-9a-f]{64}$/.test(draft.baseVersion)
+      ))
+    ) {
+      return null;
+    }
+    return { schema: 1, text: draft.text, baseVersion: draft.baseVersion };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The tester page's notes, in markdown.
@@ -23,11 +49,14 @@ import { LiquidButton } from "@/components/ui/liquid-glass-button";
 export function ReadmeEditor({
   initial,
   initialVersion,
+  draftKey,
 }: {
   initial: string;
   initialVersion: string;
+  draftKey?: string;
 }) {
   const router = useRouter();
+  const [initialText] = useState(initial);
   const [text, setText] = useState(initial);
   // Last server version acknowledged by a valid success response. Tracked
   // separately from the editable draft so a save started while another is
@@ -37,6 +66,13 @@ export function ReadmeEditor({
   const [savedText, setSavedText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
+  const [recoveredDraft, setRecoveredDraft] = useState<TabDraft | null>(null);
+  const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
+  const liveTextRef = useRef(initial);
+  const mountedRef = useRef(false);
+  const recoveredDraftRef = useRef<TabDraft | null>(null);
+  const storageReadyRef = useRef(false);
+  const reloadConfirmedRef = useRef(false);
   // Synchronous guard: React state updates are async, so rapid clicks or a
   // click plus keyboard shortcut could otherwise send duplicate requests
   // before `busy` flips. The ref flips in the same tick as the check.
@@ -44,9 +80,90 @@ export function ReadmeEditor({
 
   // Saved only when the live draft still equals the text the server accepted.
   const saved = savedText !== null && text === savedText;
+  const dirty = text !== (savedText ?? initialText);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    const readDraft = () => {
+      try {
+        const raw = window.sessionStorage.getItem(draftKey);
+        const draft = raw === null ? null : parseTabDraft(raw);
+        if (draft && draft.text !== initialText) {
+          recoveredDraftRef.current = draft;
+          setRecoveredDraft(draft);
+        } else if (raw !== null) {
+          window.sessionStorage.removeItem(draftKey);
+        }
+        storageReadyRef.current = true;
+      } catch {
+        setRecoveryUnavailable(true);
+      }
+    };
+    readDraft();
+  }, [draftKey, initialText]);
+
+  useEffect(() => {
+    if (!dirty && !recoveredDraft) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (reloadConfirmedRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [dirty, recoveredDraft]);
+
+  const persistDraft = (
+    nextText: string,
+    baseVersion: string,
+    acknowledgedText = savedText ?? initialText,
+  ) => {
+    if (!draftKey || !storageReadyRef.current || recoveredDraftRef.current) return;
+    try {
+      if (nextText === acknowledgedText) {
+        window.sessionStorage.removeItem(draftKey);
+      } else {
+        const draft: TabDraft = { schema: 1, text: nextText, baseVersion };
+        window.sessionStorage.setItem(draftKey, JSON.stringify(draft));
+      }
+      setRecoveryUnavailable(false);
+    } catch {
+      setRecoveryUnavailable(true);
+    }
+  };
+
+  const restoreDraft = () => {
+    if (inFlightRef.current || !recoveredDraft) return;
+    liveTextRef.current = recoveredDraft.text;
+    setText(recoveredDraft.text);
+    setVersion(recoveredDraft.baseVersion);
+    recoveredDraftRef.current = null;
+    setRecoveredDraft(null);
+    setConflict(false);
+    setError(null);
+    persistDraft(recoveredDraft.text, recoveredDraft.baseVersion);
+  };
+
+  const discardDraft = () => {
+    if (inFlightRef.current || !draftKey) return;
+    try {
+      window.sessionStorage.removeItem(draftKey);
+      setRecoveryUnavailable(false);
+    } catch {
+      setRecoveryUnavailable(true);
+    }
+    recoveredDraftRef.current = null;
+    setRecoveredDraft(null);
+    persistDraft(liveTextRef.current, version);
+  };
 
   const save = async () => {
-    if (inFlightRef.current) return;
+    if (inFlightRef.current || recoveredDraftRef.current) return;
     inFlightRef.current = true;
     setBusy(true);
     setError(null);
@@ -92,6 +209,7 @@ export function ReadmeEditor({
       if (
         data?.ok !== true ||
         typeof data?.version !== "string" ||
+        data.version.length !== 64 ||
         !/^[0-9a-f]{64}$/.test(data.version)
       ) {
         throw new Error("Save could not be confirmed. Refresh before retrying.");
@@ -100,16 +218,18 @@ export function ReadmeEditor({
       // `text` is untouched here so a newer draft is never replaced by a
       // late response, and `router` refresh keeps client state (`initial`
       // and `initialVersion` are only mount values).
+      if (!mountedRef.current) return;
       setConflict(false);
       setSavedText(submitted);
       setVersion(data.version);
+      persistDraft(liveTextRef.current, data.version, submitted);
       router.refresh();
     } catch (e) {
       const message = e instanceof Error && e.message ? e.message : "Could not save";
-      setError(message);
+      if (mountedRef.current) setError(message);
     } finally {
       inFlightRef.current = false;
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   };
 
@@ -129,12 +249,35 @@ export function ReadmeEditor({
         "Reloading replaces your unsaved text with the saved notes. Continue?",
       )
     ) {
+      reloadConfirmedRef.current = true;
+      if (draftKey && !recoveredDraftRef.current) {
+        try {
+          window.sessionStorage.removeItem(draftKey);
+        } catch {
+          setRecoveryUnavailable(true);
+        }
+      }
       window.location.reload();
     }
   };
 
   return (
     <div className="rounded-[20px] panel p-7">
+      {recoveredDraft && (
+        <div className="mb-5 rounded-[12px] border border-[var(--surface-edge)] p-4">
+          <p role="status" className="text-[14px] text-[var(--muted-ink)]">
+            This tab has an unsaved draft. Restore it, or discard it to edit the saved notes.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <LiquidButton variant="glass" size="default" disabled={busy} onClick={restoreDraft}>
+              Restore draft
+            </LiquidButton>
+            <LiquidButton variant="glass" size="default" disabled={busy} onClick={discardDraft}>
+              Discard draft
+            </LiquidButton>
+          </div>
+        </div>
+      )}
       <label
         htmlFor="tester-notes"
         className="mb-2 block text-[14px] font-medium text-[var(--muted-ink)]"
@@ -143,10 +286,14 @@ export function ReadmeEditor({
       </label>
       <textarea
         id="tester-notes"
+        disabled={recoveredDraft !== null}
         rows={20}
         value={text}
         onChange={(e) => {
-          setText(e.target.value);
+          const nextText = e.target.value;
+          liveTextRef.current = nextText;
+          setText(nextText);
+          persistDraft(nextText, version);
         }}
         onKeyDown={onKeyDown}
         aria-busy={busy}
@@ -158,7 +305,7 @@ export function ReadmeEditor({
         <LiquidButton
           variant="solid"
           size="default"
-          disabled={busy}
+          disabled={busy || recoveredDraft !== null}
           title="Save (Cmd+S or Ctrl+S)"
           onClick={() => void save()}
         >
@@ -186,6 +333,11 @@ export function ReadmeEditor({
           </span>
         )}
       </div>
+      {recoveryUnavailable && (
+        <p role="status" className="mt-3 text-[14px] text-[var(--muted-ink)]">
+          Draft recovery is unavailable in this tab. Keep a copy of unsaved changes.
+        </p>
+      )}
       {conflict && (
         <p className="mt-3 text-[14px] text-[var(--muted-ink)]">
           Your edits are still above. Copy any changes you want to keep before

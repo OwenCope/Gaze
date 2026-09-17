@@ -7,10 +7,10 @@ import { AppIcon } from "./app-icon";
 import { ThemeToggle } from "./theme-toggle";
 
 const adminLinks = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/new", label: "New release" },
-  { href: "/admin/readme", label: "Tester notes" },
-  { href: "/admin/testers", label: "People" },
+  { href: "/admin", label: "Dashboard", compact: "Home" },
+  { href: "/admin/new", label: "New release", compact: "Release" },
+  { href: "/admin/readme", label: "Tester notes", compact: "Notes" },
+  { href: "/admin/testers", label: "People", compact: "People" },
 ] as const;
 
 export function SiteNav() {
@@ -34,8 +34,8 @@ export function SiteNav() {
         </div>
       </div>
 
-      <nav aria-label="Admin" className="h-12 overflow-x-auto">
-        <div className="site-container flex h-full items-center gap-1">
+      <nav aria-label="Admin" className="h-12">
+        <div className="site-container grid h-full grid-cols-4 items-center gap-1 sm:flex">
           {adminLinks.map((link) => {
             const current = pathname === link.href;
 
@@ -43,14 +43,16 @@ export function SiteNav() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-label={link.label}
                 aria-current={current ? "page" : undefined}
-                className={`flex min-h-11 shrink-0 items-center rounded-lg px-4 text-[14px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] ${
+                className={`flex min-h-11 min-w-0 items-center justify-center rounded-lg px-1 text-[13px] sm:shrink-0 sm:px-4 sm:text-[14px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] ${
                   current
                     ? "bg-[var(--surface)] text-[var(--foreground)]"
                     : "text-[var(--muted-ink)] hover:text-[var(--foreground)]"
                 }`}
               >
-                {link.label}
+                <span className="sm:hidden">{link.compact}</span>
+                <span className="hidden sm:inline">{link.label}</span>
               </Link>
             );
           })}

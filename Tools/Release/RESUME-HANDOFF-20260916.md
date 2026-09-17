@@ -1,5 +1,38 @@
 # Resume handoff — September 16, 2026
 
+## Latest: September17 morning batch COMPLETE; Droppy crashed afterward
+
+Read Morning20260917/REPORT.md first. Thirteen actual website source files match
+the saved checkpoint after the latest crash. Build/TypeScript/lint/HTTP checks,
+20 functional checks and6 recovery/copy edge checks passed. Frame removal,
+publication intent, tester-note recovery (including unmounted late-response guard),
+measured gray-text contrast and mobile admin-nav fixes are DONE. Do not redo them.
+Earlier sections saying these are all open are superseded for that exact scope.
+
+The preview server is currently STOPPED (no listener on55523). No new source edits
+or builds were launched after the latest crash. All heads have finished. The
+morning report gives the isolated restart command and remaining work. No deployment.
+The preceding overnight request did not complete; this work happened this morning.
+
+
+## Morning September17 recovery
+
+The owner reports another overnight crash. Stored history shows the overnight
+request interrupted around22:10September16, without completed overnight work.
+Four image-component hashes matched the pre-night checkpoint; no overnight report
+folder existed. Do not claim the promised hour ran successfully. No new crash
+report appeared in the inspected standard/Droppy log locations. Cause remains
+unknown; earlier resource/watchdog reports are not proof of the latest cause.
+
+The framing task resumed this morning: one bounded helper finished the previously
+unlanded features-carousel.tsx change, root finished product-tour.tsx, and the
+saved gallery/walkthrough removals are included. Latest isolated preview runner:
+exec30906, http://127.0.0.1:55523, logs build/morning-20260917/website.
+Build/TypeScript/scoped lint and five HTTP checks pass. Browser framing checks are
+under build/morning-20260917. The publication/draft-recovery/contrast tasks remain
+open unless a newer checkpoint below explicitly records their completion.
+
+
 ## Latest owner feedback — gallery style and preview pacing
 
 After the image-resolution correction the owner said the Mac preview was too fast

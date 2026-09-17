@@ -59,6 +59,7 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
   // so renaming one replaces the old record in a single POST carrying
   // previousTag — never a save plus a separate DELETE.
   const originalTag = initial?.tag ?? null;
+  const editingPublished = Boolean(initial && !initial.draft);
 
   // Synchronous in-flight guard shared by uploads and saves. React's disabled
   // state only lands on the next render, so rapid clicks could otherwise start
@@ -84,8 +85,11 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
     ...(initial?.videos ?? []).map((src) => ({ src, alt: "", kind: "video" as const })),
   ]);
   const [busy, setBusy] = useState<null | "upload" | "save">(null);
+  const [uploadTarget, setUploadTarget] = useState<"build" | "media" | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const pick = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -93,6 +97,8 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
     inFlight.current = true;
     const list = Array.from(files);
     setBusy("upload");
+    setUploadTarget("media");
+    setMediaError(null);
     setError(null);
     try {
       for (const [i, file] of list.entries()) {
@@ -119,10 +125,11 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
         ]);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      setMediaError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       inFlight.current = false;
       setBusy(null);
+      setUploadTarget(null);
       setProgress(null);
       if (fileInput.current) fileInput.current.value = "";
     }
@@ -134,6 +141,8 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy("upload");
+    setUploadTarget("build");
+    setBuildError(null);
     setError(null);
     try {
       const blob = await upload(file.name, file, {
@@ -144,10 +153,11 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
       });
       setDownload({ url: blob.url, name: file.name, size: file.size });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      setBuildError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       inFlight.current = false;
       setBusy(null);
+      setUploadTarget(null);
       setProgress(null);
       if (buildInput.current) buildInput.current.value = "";
     }
@@ -371,7 +381,7 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
               disabled={busy !== null}
               onClick={() => buildInput.current?.click()}
             >
-              {download ? "Replace build" : "Attach build"}
+              {uploadTarget === "build" ? "Uploading build…" : download ? "Replace build" : "Attach build"}
             </LiquidButton>
             {download && (
               <span className="text-[14px] text-[var(--muted-ink)]">
@@ -379,6 +389,12 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
               </span>
             )}
           </div>
+          {buildError && <p role="alert" className="mt-3 text-[14px] text-[var(--destructive)]">{buildError}</p>}
+          {uploadTarget === "build" && (
+            <p role="status" className={hint}>
+              Uploading build{progress ? `: ${progress}` : "…"}
+            </p>
+          )}
         </div>
 
         <div className="rounded-[20px] panel p-7">
@@ -402,9 +418,15 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
               disabled={busy !== null}
               onClick={() => fileInput.current?.click()}
             >
-              {busy === "upload" ? `Uploading ${progress ?? ""}`.trim() + "…" : "Add files"}
+              {uploadTarget === "media" ? `Uploading ${progress ?? ""}`.trim() + "…" : "Add files"}
             </LiquidButton>
           </div>
+          {mediaError && <p role="alert" className="mt-3 text-[14px] text-[var(--destructive)]">{mediaError}</p>}
+          {uploadTarget === "media" && (
+            <p role="status" className={hint}>
+              Uploading media{progress ? `: ${progress}` : "…"}
+            </p>
+          )}
 
           {media.length > 0 && (
             <ul className="mt-5 space-y-3">
@@ -420,17 +442,21 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
                     <video src={m.src} className="size-14 shrink-0 rounded-[9px] object-cover" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <input
-                      aria-label={m.kind === "image" ? "Image description" : "Clip description"}
-                      className={`${field} !py-1.5`}
-                      value={m.alt}
-                      placeholder={m.kind === "image" ? "Describe it, for screen readers" : "Clip"}
-                      onChange={(e) =>
-                        setMedia((list) =>
-                          list.map((x, j) => (j === i ? { ...x, alt: e.target.value } : x)),
-                        )
-                      }
-                    />
+                    {m.kind === "image" ? (
+                      <input
+                        aria-label="Image description"
+                        className={`${field} !py-1.5`}
+                        value={m.alt}
+                        placeholder="Describe it, for screen readers"
+                        onChange={(e) =>
+                          setMedia((list) =>
+                            list.map((x, j) => (j === i ? { ...x, alt: e.target.value } : x)),
+                          )
+                        }
+                      />
+                    ) : (
+                      <p className="py-1.5 text-[14px] text-[var(--muted-ink)]">Video clip</p>
+                    )}
                     {i === 0 && m.kind === "image" && (
                       <p className="mt-1.5 text-[12px] text-[var(--faint-ink)]">Cover image</p>
                     )}
@@ -464,23 +490,35 @@ export function ReleaseComposer({ initial }: { initial?: StoredRelease }) {
             )}
           </AnimatePresence>
 
-          {/* Draft first: the safer of two actions should be the one your hand
-              goes to. */}
           <div className="flex flex-wrap gap-2.5">
-            <LiquidButton size="default" disabled={busy !== null} onClick={() => void save(true)}>
-              {busy === "save" ? "Saving…" : initial ? "Save as draft" : "Save as draft"}
-            </LiquidButton>
             <LiquidButton
               variant="solid"
               size="default"
               disabled={busy !== null}
-              onClick={() => void save(false)}
+              onClick={() => void save(!editingPublished)}
             >
-              {initial ? "Save changes" : "Publish"}
+              {busy === "save" ? "Saving…" : editingPublished ? "Save changes" : "Save draft"}
+            </LiquidButton>
+            <LiquidButton
+              size="default"
+              disabled={busy !== null}
+              onClick={() => {
+                if (inFlight.current) return;
+                if (editingPublished) {
+                  if (confirm("Unpublish this release? It will no longer be visible to readers.")) {
+                    void save(true);
+                  }
+                } else {
+                  void save(false);
+                }
+              }}
+            >
+              {editingPublished ? "Unpublish to draft" : "Publish release"}
             </LiquidButton>
           </div>
           <p className={hint}>
-            A draft is only visible to you. Publishing puts it on /releases straight away.
+            {editingPublished ? "Release audience: " : "Publish audience: "}
+            {isPrivate ? "Testers only" : "Public release"}. A draft is only visible to you.
           </p>
         </div>
       </div>
