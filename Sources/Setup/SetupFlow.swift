@@ -87,7 +87,8 @@ struct SetupFlow: View {
 					camera: camera,
 					model: model,
 					onAuthorized: startCamera,
-					onBack: purpose == .addFace ? nil : back
+					onBack: purpose == .addFace ? nil : back,
+					onRetry: retry
 				)
 				.id(captureSession)
 			case .password:
