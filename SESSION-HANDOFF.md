@@ -1,3 +1,27 @@
+## Latest correction: no top bar, blurred photo fade, current icon
+
+User explicitly rejected the 48pt top bar and the hard photo/footer boundary.
+- Removed the top bar. Native images use wider 1440×900 crops preserving the
+  photographed window's side margins, so Back/X overlay the photo without hitting
+  its controls. Web photo crops remain 1280×800.
+- TourKit photographs now blend into a 14pt blurred copy toward the bottom, then
+  fade to zero alpha before the footer. This replaces the old color scrim.
+  All four rendered photo/footer boundaries were sampled and are uniform.
+  Actual ScreenCaptureKit capture confirms the compositor blur and bar removal:
+  build/tour-blend-20260918/welcome.png (1440×1360).
+- Unlock my Mac now uses GazeBrand.toolbarIcon through SettingToggle's portrait
+  slot, replacing the old green faceid symbol. Binding/actions unchanged.
+  Recaptured actual Unlock Settings and refreshed native/site assets and manifest.
+- Native build and the 18-state tour fixture pass. Installed PID 58514,
+  SHA256 525de5931abb9e0c41dad0809806c098b703a20a7c7af0930469a5fb3369df7f; KeepAlive plist restored unchanged.
+- READY website preview: https://gaze-site-1114ztm7z-gaze2.vercel.app
+  Refreshed icon photo HTTP200 and byte-for-byte identical to the local WebP.
+- ProductCapture selects visible content windows without requiring canBecomeKey,
+  because the plain tour window is not key-capable. Evidence: build/tour-blend-20260918.
+
+Earlier top-bar and 96pt-scrim notes below are superseded. Pinned website comments
+remain pending user-supplied text/thread link; no contents were guessed.
+
 ## Latest: real app photographs, September 18 at 22:30
 
 User supplied three recordings: Droppy Code's photo-heavy tour as the reference,

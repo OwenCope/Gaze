@@ -20,6 +20,13 @@ shots = {
     "unlock": (80, 290, 1360, 1090),
     "security": (80, 340, 1360, 1140),
 }
+# Keep the photographed window's side margins under the tour's overlay controls.
+native_crops = {
+    "general": (0, 95, 1440, 995),
+    "notch": (0, 95, 1440, 995),
+    "unlock": (0, 285, 1440, 1185),
+    "security": (0, 295, 1440, 1195),
+}
 for name in shots:
     with Image.open(args.captures / f"{name}.png") as source:
         if source.size != (1440, 1200):
@@ -31,15 +38,17 @@ for name, crop in shots.items():
     source_path = args.captures / f"{name}.png"
     with Image.open(source_path) as source:
         photo = source.crop(crop).convert("RGB")
+        native_photo = source.crop(native_crops[name]).convert("RGB")
     native = root / "Resources/Art" / f"tour-{name}.png"
     web = args.website / f"gaze-settings-{name}.webp"
-    photo.save(native, optimize=True)
+    native_photo.save(native, optimize=True)
     photo.save(web, "WEBP", quality=92, method=6)
     records.append({
         "source": source_path.name,
         "sourceSHA256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
         "crop": list(crop), "size": list(photo.size),
         "native": str(native.relative_to(root)),
+        "nativeCrop": list(native_crops[name]), "nativeSize": list(native_photo.size),
         "nativeSHA256": hashlib.sha256(native.read_bytes()).hexdigest(),
         "web": web.name, "webSHA256": hashlib.sha256(web.read_bytes()).hexdigest(),
     })

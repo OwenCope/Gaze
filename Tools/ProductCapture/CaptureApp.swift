@@ -51,7 +51,7 @@ import SwiftUI
         Self.captureStarted = true
         do {
             try await Task.sleep(for: .seconds(1))
-            guard let window = NSApp.windows.first(where: { $0.canBecomeKey && $0.isVisible }) else {
+            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else {
                 throw CaptureError.missingWindow
             }
             guard let screen = window.screen else { throw CaptureError.missingWindow }

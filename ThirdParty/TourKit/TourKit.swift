@@ -155,36 +155,13 @@ public struct TourSlideshowView: View {
                         .padding(.top, 36)
                         .padding(.bottom, 40)
                 } else {
-                    image(for: pages[currentIndex])
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: width, height: imageHeight - 48, alignment: .top)
-                        .clipped()
-                        .padding(.top, 48)
-                        .accessibilityHidden(true)
+                    photograph
                 }
             }
                 .frame(width: width, height: imageHeight)
                 .clipped()
                 .id(currentIndex)
                 .transition(.opacity)
-
-            if pageMedia == nil {
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: Color(white: 0.10).opacity(0.15), location: 0.25),
-                        .init(color: Color(white: 0.10).opacity(0.45), location: 0.50),
-                        .init(color: Color(white: 0.10).opacity(0.80), location: 0.75),
-                        .init(color: Color(white: 0.10), location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 96)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .allowsHitTesting(false)
-            }
 
             PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
                 .padding(.bottom, 14)
@@ -194,6 +171,36 @@ public struct TourSlideshowView: View {
             topControls
         }
         .frame(width: width, height: imageHeight)
+    }
+
+    private var photograph: some View {
+        let photo = image(for: pages[currentIndex])
+            .resizable()
+            .scaledToFill()
+            .frame(width: width, height: imageHeight)
+
+        return photo
+            .overlay {
+                photo
+                    .blur(radius: 14, opaque: true)
+                    .mask {
+                        LinearGradient(stops: [
+                            .init(color: .clear, location: 0.45),
+                            .init(color: .white, location: 0.83)
+                        ], startPoint: .top, endPoint: .bottom)
+                    }
+            }
+            .mask {
+                LinearGradient(stops: [
+                    .init(color: .white, location: 0),
+                    .init(color: .white, location: 0.52),
+                    .init(color: .white.opacity(0.85), location: 0.70),
+                    .init(color: .white.opacity(0.30), location: 0.85),
+                    .init(color: .clear, location: 0.98),
+                    .init(color: .clear, location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+            }
+            .accessibilityHidden(true)
     }
 
     // MARK: - Bottom panel (text + button)

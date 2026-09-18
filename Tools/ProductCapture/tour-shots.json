@@ -17,7 +17,17 @@
         800
       ],
       "native": "Resources/Art/tour-general.png",
-      "nativeSHA256": "d2425485e7e288c2bce8513355cb5739990cbc7971e905ff69d7476da82f5cf0",
+      "nativeCrop": [
+        0,
+        95,
+        1440,
+        995
+      ],
+      "nativeSize": [
+        1440,
+        900
+      ],
+      "nativeSHA256": "bd5b1be41e78aff0a3ad4e7777a7ab06ee7af53c5906528d010359d9584668a7",
       "web": "gaze-settings-general.webp",
       "webSHA256": "34345612836a045d215acdc1484a9c752fb19fb3e7c004970974856112fe2ed7"
     },
@@ -35,13 +45,23 @@
         800
       ],
       "native": "Resources/Art/tour-notch.png",
-      "nativeSHA256": "b348cfb111ee9a12726aa62cbff4b468743c35fd477f9cd78cd914c21c2bc196",
+      "nativeCrop": [
+        0,
+        95,
+        1440,
+        995
+      ],
+      "nativeSize": [
+        1440,
+        900
+      ],
+      "nativeSHA256": "29663983a4173f8aa50ad0cd4be1f6eaa6e339ac705c5f70793f5966ae3981ea",
       "web": "gaze-settings-notch.webp",
       "webSHA256": "469113da9c020f7932df0e722f33d193324999d8dd6608fe6f440a44a99fd8ae"
     },
     {
       "source": "unlock.png",
-      "sourceSHA256": "4dfb95281b3d30d25ca04af85f62d117f18047b4796de064336172b7d197cce1",
+      "sourceSHA256": "88dd00d0bd57da1222b69c90f636c8418ad8bf2ccc755d9cc8e4c6e55300f0ac",
       "crop": [
         80,
         290,
@@ -53,9 +73,19 @@
         800
       ],
       "native": "Resources/Art/tour-unlock.png",
-      "nativeSHA256": "e32db54fe0e1a468ef036e47e111e700417fc5ec870eb8a1ae0697fac9c8fb65",
+      "nativeCrop": [
+        0,
+        285,
+        1440,
+        1185
+      ],
+      "nativeSize": [
+        1440,
+        900
+      ],
+      "nativeSHA256": "fa81d7b8920f2688e194fe31b99d12f93b613e9b109ff0599ac0de73a62ea711",
       "web": "gaze-settings-unlock.webp",
-      "webSHA256": "829081de1125369374dcab3ef7b236c8b280c34e76a9b8e7c82bc738eb5b64b8"
+      "webSHA256": "513d13be34065258880152516a5669d53296a971154394df51b3b31145bb97b8"
     },
     {
       "source": "security.png",
@@ -71,7 +101,17 @@
         800
       ],
       "native": "Resources/Art/tour-security.png",
-      "nativeSHA256": "51cb5777bc2cee0180473fc80083d944d43869817a2d85fa0a9b1ae9973b09a8",
+      "nativeCrop": [
+        0,
+        295,
+        1440,
+        1195
+      ],
+      "nativeSize": [
+        1440,
+        900
+      ],
+      "nativeSHA256": "9868d53298d64c2a07dc5a368c6937c826b61aee5a90f9f3a5dbd01f7065f7e2",
       "web": "gaze-settings-security.webp",
       "webSHA256": "aec85e52cd8de4c98368ba48bf8eb1ffb50c782811853aab7822a802a1c52057"
     }
