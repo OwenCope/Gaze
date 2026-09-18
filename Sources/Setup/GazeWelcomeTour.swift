@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The opening screen of first-run setup: a five-page introduction.
 ///
-/// This is TourKit's embedded `TourSlideshowView`, not a `TourKitWindowController`,
+/// This is the embedded slideshow view, not a window controller,
 /// so Gaze keeps its existing window lifecycle — the flow owns the window, the
 /// slideshow only owns its pages. It deliberately does nothing else: no cameras are
 /// started, no permissions are requested, no passwords are stored, and nothing here
@@ -21,8 +21,6 @@ struct GazeWelcomeTour: View {
 	var movementCount: Int = 2
 	var initialPageIndex: Int = 0
 	var onPageChange: ((Int) -> Void)? = nil
-
-	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	private static let pages: [TourPage] = [
 		TourPage(
@@ -58,35 +56,14 @@ struct GazeWelcomeTour: View {
 	]
 
 	var body: some View {
-		GeometryReader { proxy in
-			ZStack(alignment: .topTrailing) {
-				TourSlideshowView(
-					pages: Self.pages,
-					width: max(proxy.size.width, 1),
-					initialPageIndex: initialPageIndex,
-					continueButtonTitle: "Next",
-					finishButtonTitle: "Start setup",
-					onFinish: onContinue,
-					onClose: onClose,
-					presentation: .windowContent,
-					contentHeight: max(proxy.size.height, 1),
-					onPageChange: onPageChange
-				)
-				// The slideshow cross-fades between slides; under Reduce Motion that
-				// movement goes away rather than becoming a lesser movement.
-				.transaction { transaction in
-					if reduceMotion { transaction.disablesAnimations = true }
-				}
-				Button("Skip", action: onClose)
-					.buttonStyle(.plain)
-					.foregroundStyle(.secondary)
-					.padding(.horizontal, 14)
-					.padding(.top, 12)
-					.help("Skip the introduction")
-			}
-		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		// Escape leaves the flow the same way Not Now did: close without setting up.
-		.onExitCommand(perform: onClose)
+		TourSlideshowView(
+			pages: Self.pages,
+			width: 660,
+			initialPageIndex: initialPageIndex,
+			continueButtonTitle: "Next",
+			finishButtonTitle: "Start setup",
+			onFinish: onContinue,
+			onClose: onClose
+		)
 	}
 }
