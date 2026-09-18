@@ -105,14 +105,15 @@ struct SetupFlow: View {
 				SetupPasswordStep(
 					position: position(of: .password),
 					onSaved: advance,
-					onSkip: advance
+					onSkip: advance,
+					onBack: plan.previous(before: .password) != nil ? back : nil
 				)
 			case .permission:
 				SetupPermissionStep(
 					position: position(of: .permission),
 					onContinue: advance,
 					onSkip: advance,
-					onBack: plan.steps.contains(.password) ? back : nil
+					onBack: plan.previous(before: .permission) != nil ? back : nil
 				)
 			case .done:
 				SetupDoneStep(

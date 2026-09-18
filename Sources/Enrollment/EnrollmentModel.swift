@@ -36,6 +36,28 @@ final class EnrollmentModel {
 	/// Where the user's head is pointing right now, for the live indicator.
 	private(set) var currentAngle: Double = 0
 	private(set) var isEngaged = false
+	private(set) var captureStatus: CaptureStatus = .noFace
+
+	enum CaptureStatus: Equatable {
+		case noFace, tooSmall, lowQuality, invalidMeasurements, embeddingUnavailable, steady, turning
+	}
+
+	var targetSegment: Int? {
+		guard case .capturing = phase, progress > 0.25 else { return nil }
+		return covered.firstIndex(of: false)
+	}
+
+	var captureTitle: String {
+		switch captureStatus {
+		case .noFace: return "Bring your face back into view"
+		case .tooSmall: return "Move a little closer"
+		case .lowQuality: return "Pause in brighter light"
+		case .invalidMeasurements, .embeddingUnavailable: return "Hold your face toward the camera"
+		case .steady, .turning:
+			if case .positioning = phase { return "Center your face" }
+			return targetSegment == nil ? "Move your head slowly" : "Follow the highlighted gap"
+		}
+	}
 
 	private(set) var prints: [Faceprint] = []
 
@@ -44,12 +66,28 @@ final class EnrollmentModel {
 	}
 
 	var instruction: String {
+		if case .failed(let message) = phase { return message }
+		if phase != .complete {
+			switch captureStatus {
+			case .noFace: return "No usable face is coming through. Your captured progress is kept."
+			case .tooSmall: return "Your face is visible, but needs to fill more of the camera view."
+			case .lowQuality: return "Your face is visible, but this frame isn’t clear enough to save. Face a light and pause briefly."
+			case .invalidMeasurements: return "Your face measurements aren’t usable yet. Look straight ahead for a moment."
+			case .embeddingUnavailable: return "Gaze sees your face but couldn’t create a faceprint. No new progress was saved."
+			case .steady, .turning: break
+			}
+		}
 		switch phase {
 		case .positioning:
 			return "Position your face in the circle"
 		case .capturing(let pass):
-			if progress > 0.92 { return pass == 1 ? "Almost done" : "Nearly there" }
-			return pass == 1 ? "Move your head slowly to complete the circle" : "One more time"
+			if let targetSegment {
+				let directions = ["up", "up and right", "right", "down and right", "down", "down and left", "left", "up and left"]
+				let direction = directions[((targetSegment + 3) / 6) % 8]
+				return "Slowly point your face \(direction), toward the bright tick. Keep your eyes visible to the camera."
+			}
+			if captureStatus == .steady { return "Your face is detected. Gently turn your head to capture the unfilled angles." }
+			return pass == 1 ? "Move your head slowly to complete the circle" : "Almost done — turn your head slowly once more to finish the circle"
 		case .complete:
 			return "Gaze is set up"
 		case .failed(let message):
@@ -67,21 +105,35 @@ final class EnrollmentModel {
 
 	/// Feed every camera frame here. Nil means no single usable face was found.
 	func consume(_ sample: FaceSample?) {
-		guard phase != .complete else { return }
+		switch phase {
+		case .complete, .failed: return
+		default: break
+		}
 
-		guard let sample else {
+		let rejection: CaptureStatus? = {
+			guard let sample else { return .noFace }
+			switch FrameQuality.rejection(sample) {
+			case .invalidMeasurements: return .invalidMeasurements
+			case .tooSmall: return .tooSmall
+			case .tooBlurred: return .lowQuality
+			case nil: return sample.quality < Self.minimumQuality ? .lowQuality : nil
+			}
+		}()
+		guard let sample, rejection == nil else {
+			captureStatus = rejection ?? .noFace
 			framesWithFace = 0
 			isEngaged = false
 			if case .capturing = phase { return }  // Don't reset mid-pass on a dropped frame.
 			phase = .positioning
 			return
 		}
+		captureStatus = .steady
 
 		// A short run of good frames before starting, so the ring doesn't begin filling
 		// from a single lucky detection as the user is still sitting down.
 		framesWithFace += 1
 		if case .positioning = phase {
-			guard framesWithFace > 8, sample.quality >= Self.minimumQuality else { return }
+			guard framesWithFace > 8 else { return }
 			// Capture one straight-ahead print before the turning begins.
 			//
 			// Every other print in the set is taken mid-turn — `capture` only runs once the
@@ -90,7 +142,8 @@ final class EnrollmentModel {
 			// people look straight at the Mac, then get matched against a set of turned prints.
 			// This lands the most-used direction in the set on the first pass. Only pass 1, so
 			// it isn't duplicated.
-			if pass == 1, let frontal = embedder.embed(sample) {
+			if pass == 1 {
+				guard let frontal = embedder.embed(sample) else { captureStatus = .embeddingUnavailable; return }
 				prints.append(frontal)
 			}
 			phase = .capturing(pass: pass)
@@ -99,7 +152,8 @@ final class EnrollmentModel {
 		currentAngle = sample.pose.ringAngle
 		isEngaged = sample.pose.offCentre >= Self.engagementThreshold
 
-		guard isEngaged, sample.quality >= Self.minimumQuality else { return }
+		guard isEngaged else { return }
+		captureStatus = .turning
 		capture(sample)
 	}
 
@@ -112,14 +166,15 @@ final class EnrollmentModel {
 			(index + Self.segmentCount - 1) % Self.segmentCount]
 
 		let isNewDirection = neighbours.contains { !covered[$0] }
-		for i in neighbours { covered[i] = true }
 
 		// One print per newly covered direction, rather than per frame, or the enrolment
 		// set fills with near-identical frontal prints and matching gets slower for
 		// nothing.
-		if isNewDirection, let print = embedder.embed(sample) {
-			prints.append(print)
+		if isNewDirection {
+			guard let faceprint = embedder.embed(sample) else { captureStatus = .embeddingUnavailable; return }
+			prints.append(faceprint)
 		}
+		for index in neighbours { covered[index] = true }
 
 		guard progress >= 1 else { return }
 		advancePass()
@@ -133,7 +188,7 @@ final class EnrollmentModel {
 		} else {
 			phase = prints.count >= 8
 				? .complete
-				: .failed("Not enough of your face was captured. Try again in better light.")
+				: .failed("Not enough of your face was captured. Go back and try again in brighter, even light.")
 		}
 	}
 
@@ -150,5 +205,7 @@ final class EnrollmentModel {
 		pass = 1
 		framesWithFace = 0
 		isEngaged = false
+		currentAngle = 0
+		captureStatus = .noFace
 	}
 }

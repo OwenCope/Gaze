@@ -425,16 +425,16 @@ struct SettingsView: View {
 						.gazeButton(.primary, size: .large)
 					} else if !store.isEnrolled {
 						Button {
-							if store.isEnrolled { SetupRequest.begin() } else { SetupRequest.beginOnboarding() }
+							SetupRequest.beginOnboarding()
 							AppActivation.bringToFront()
 							openWindow(id: "enrollment")
 						} label: {
-							Text(store.isEnrolled ? "Add a Face" : "Set Up Gaze")
+							Text("Set Up Gaze")
 								.frame(maxWidth: .infinity)
 						}
-						.gazeButton(store.isEnrolled ? .standard : .primary, size: .large)
+						.gazeButton(.primary, size: .large)
 						.disabled(!store.canAddFace)
-						.help(store.canAddFace ? "Enroll another face on this Mac" : "Remove an enrolled face before adding another")
+						.help(store.canAddFace ? "Add your face to unlock this Mac" : "Remove an enrolled face before adding another")
 					}
 
 					if store.isEnrolled {
@@ -456,7 +456,7 @@ struct SettingsView: View {
 
 	private var onboardingSection: some View {
 		SettingsSection(title: "Getting Started") {
-			SettingRow(title: "Welcome to Gaze", detail: "Review setup and learn what Gaze’s expressions mean.") {
+			SettingRow(title: "Welcome to Gaze", detail: "Reopen the setup walkthrough.") {
 				Button("Open Onboarding") {
 					SetupRequest.beginOnboarding()
 					AppActivation.bringToFront(userInitiated: true)
@@ -483,7 +483,7 @@ struct SettingsView: View {
 		if store.isCorrupted { return "Your enrolled face couldn’t be read. Enroll it again." }
 		if !store.isEnrolled { return "Add your face to get started." }
 		if settings.isPaused, let until = settings.pausedUntil {
-			return "Face recognition resumes at \(until.formatted(date: .omitted, time: .shortened)). You can resume it sooner below."
+			return "Face recognition resumes at \(until.formatted(date: .omitted, time: .shortened)). You can resume it sooner here."
 		}
 		if !cameraGranted { return "Allow the camera so Gaze can recognise you." }
 		if !PasswordReplaySafety.isEnabled { return "Enable Unlock my Mac to use face verification. Your password and Touch ID remain available." }
@@ -858,7 +858,7 @@ struct SettingsView: View {
 			SettingRow(
 				title: "Accessibility",
 				detail: accessibilityGranted
-					? "Allowed" : "Not ready - review Accessibility access",
+					? "Allowed" : "Not allowed — review Accessibility access",
 				symbol: "accessibility",
 				symbolTint: accessibilityGranted ? nil : Theme.warning
 			) {
@@ -980,8 +980,11 @@ struct SettingsView: View {
 		}
 	}
 
+	// MARK: - Behaviour
+
 	private var behaviourSection: some View {
-		SettingsSection(title: "This Mac", footer: loginItemNeedsApproval ? behaviourFooter : nil,
+		SettingsSection(title: "This Mac",
+			footer: behaviourFooter,
 			info: behaviourFooter) {
 			SettingToggle(
 				title: "Open at login",
@@ -1203,7 +1206,7 @@ struct SettingsView: View {
 		if case .available(let release) = releases.state {
 			return "Gaze \(release.tag) is available"
 		}
-		return "Released version"
+		return "Released version on gazeunlock.com"
 	}
 
 	private var releaseRowDetail: String? {

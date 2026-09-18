@@ -58,4 +58,29 @@ Also updated the `TourKitWindowController.present` doc comment
    the primary action button remain single shared instances. `body` adds
    `.onChange(of: currentIndex)` forwarding the new index to
    `onPageChange`; clamping and navigation semantics unchanged, and the
-   notification never calls finish/close.
+    notification never calls finish/close.
+
+7. Compact `.windowContent` artwork/footer styling (640x520 host):
+    `imageHeight` reserves 260 points for the lower panel (260-point
+    media region at the host; `.card` sizing unchanged). Static
+    `.windowContent` artwork keeps the existing Image loader with
+    `resizable`/`scaledToFit` (no crop or stretch), a continuous
+    16-point `RoundedRectangle` clip immediately after `scaledToFit`
+    (before padding/outer frame) plus a matching 0.5-point
+    white-at-10% `strokeBorder`, then horizontal 32 / vertical 16
+    padding and the outer width/`imageHeight` frame; the dark gradient
+    overlay is removed only in `.windowContent` (`.card`
+    artwork/gradient unchanged). `PageIndicator` renders only in
+    `.card` image sections; `topControls` stays in both modes (hidden
+    initial Back, no `.windowContent` close-X). The new
+    `.windowContent` bottom panel is top-aligned with a text VStack
+    (8-point spacing; title 24 semibold white, description 14
+    white-70% with lineSpacing 2, same table/bundle lookups; 440 max
+    width, 100 min height), 12-point top padding, then the single
+    `PageIndicator` (+12), the primary action (+16), and 24-point
+    bottom padding, with no expanding Spacer (`.card` panel
+    unchanged). The `.windowContent` primary action keeps the same
+    title/action/`defaultAction` shortcut as native
+    `.borderedProminent`, large, capsule, `.accentColor` (label 14
+    semibold, 140 min width); the 220-point gradient pill remains only
+    in `.card`.

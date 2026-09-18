@@ -113,11 +113,11 @@ public struct TourSlideshowView: View {
     /// so the artwork's edges never anti-alias against the card background.
     ///
     /// In `.windowContent` mode with a supplied `contentHeight`, the image
-    /// shrinks to reserve at least 220 points for the title, description,
+    /// shrinks to reserve at least 260 points for the title, description,
     /// and primary action, with a 120-point floor.
     var imageHeight: CGFloat {
         if presentation == .windowContent, let contentHeight {
-            return max(120, min(width / Self.imageAspectRatio, contentHeight - 220)).rounded()
+            return max(120, min(width / Self.imageAspectRatio, contentHeight - 260)).rounded()
         }
         return (width / Self.imageAspectRatio).rounded()
     }
@@ -194,6 +194,22 @@ public struct TourSlideshowView: View {
                     .frame(width: width, height: imageHeight)
                     .id(currentIndex)
                     .transition(.opacity)
+            } else if presentation == .windowContent {
+                image(for: pages[currentIndex])
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 16)
+                    .frame(width: width, height: imageHeight)
+                    .id(currentIndex)
+                    .transition(.opacity)
+                    // Decorative: the slide's title and description carry its meaning.
+                    .accessibilityHidden(true)
             } else {
                 image(for: pages[currentIndex])
                     .resizable()
@@ -220,10 +236,12 @@ public struct TourSlideshowView: View {
                 .allowsHitTesting(false)
             }
 
-            PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
-                .padding(.bottom, 14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .allowsHitTesting(false)
+            if presentation == .card {
+                PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
+                    .padding(.bottom, 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .allowsHitTesting(false)
+            }
 
             topControls
         }
@@ -235,32 +253,67 @@ public struct TourSlideshowView: View {
     private var bottomPanel: some View {
         let currentPage = pages[currentIndex]
 
-        return VStack(spacing: 0) {
-            Text(currentPage.title, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
-                .font(.system(size: 28, weight: .bold))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
-                .fixedSize(horizontal: false, vertical: true)
+        return Group {
+            if presentation == .windowContent {
+                VStack(spacing: 0) {
+                    VStack(spacing: 8) {
+                        Text(currentPage.title, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
+                            .font(.system(size: 24, weight: .semibold))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white)
+                            .fixedSize(horizontal: false, vertical: true)
 
-            Text(currentPage.description, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.white.opacity(0.70))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 6)
+                        Text(currentPage.description, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
+                            .font(.system(size: 14))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(Color.white.opacity(0.70))
+                            .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: 440, minHeight: 100, alignment: .top)
+                    .padding(.top, 12)
 
-            Spacer(minLength: 24)
+                    PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
+                        .padding(.top, 12)
 
-            primaryActionButton
+                    primaryActionButton
+                        .padding(.top, 16)
+                }
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // Per-slide identity so title, description, and button cross-fade
+                // as one unit alongside the image above.
+                .id(currentIndex)
+                .transition(.opacity)
+            } else {
+                VStack(spacing: 0) {
+                    Text(currentPage.title, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
+                        .font(.system(size: 28, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(currentPage.description, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
+                        .font(.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.white.opacity(0.70))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 6)
+
+                    Spacer(minLength: 24)
+
+                    primaryActionButton
+                }
+                .padding(.horizontal, 32)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Per-slide identity so title, description, and button cross-fade
+                // as one unit alongside the image above.
+                .id(currentIndex)
+                .transition(.opacity)
+            }
         }
-        .padding(.horizontal, 32)
-        .padding(.top, 12)
-        .padding(.bottom, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Per-slide identity so title, description, and button cross-fade
-        // as one unit alongside the image above.
-        .id(currentIndex)
-        .transition(.opacity)
     }
 
     // MARK: - Top controls (back / close overlaying the image)
@@ -297,33 +350,52 @@ public struct TourSlideshowView: View {
     // MARK: - Primary CTA
 
     private var primaryActionButton: some View {
-        Button(action: advance) {
-            Text(
-                isLastPage ? finishButtonTitle : continueButtonTitle,
-                tableName: buttonTableName,
-                bundle: buttonBundle
-            )
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 220, height: 42)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.10, green: 0.60, blue: 1.0),
-                                    Color(red: 0.04, green: 0.46, blue: 0.96)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
+        return Group {
+            if presentation == .windowContent {
+                Button(action: advance) {
+                    Text(
+                        isLastPage ? finishButtonTitle : continueButtonTitle,
+                        tableName: buttonTableName,
+                        bundle: buttonBundle
+                    )
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(minWidth: 140)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .buttonBorderShape(.capsule)
+                .tint(.accentColor)
+                .keyboardShortcut(.defaultAction)
+            } else {
+                Button(action: advance) {
+                    Text(
+                        isLastPage ? finishButtonTitle : continueButtonTitle,
+                        tableName: buttonTableName,
+                        bundle: buttonBundle
+                    )
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 220, height: 42)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 0.10, green: 0.60, blue: 1.0),
+                                            Color(red: 0.04, green: 0.46, blue: 0.96)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
                         )
-                )
-                .clipShape(Capsule(style: .continuous))
-                .contentShape(Capsule(style: .continuous))
+                        .clipShape(Capsule(style: .continuous))
+                        .contentShape(Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.defaultAction)
+            }
         }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.defaultAction)
     }
 
     // MARK: - Icon button (glass circle)

@@ -10,7 +10,7 @@
     "TourKit.swift": {
       "upstream": "Sources/TourKit/TourKit.swift",
       "upstreamSha256": "4d67d1f9eaa13dd63d5dc72044b5a9d28cb707117e0a39ef6070ca6187a76207",
-      "localSha256": "65c968e7984f72eb605bdd54bb9c520f46aa76da5d7f3c312c01c9edebaa4ed7",
+      "localSha256": "dbff83aaf265feb223087e58872843b05a9214ef7fc9ca21f05a2e8f47eec057",
       "localModifications": "see LOCAL-CHANGES.md"
     },
     "LICENSE": {
