@@ -157,11 +157,15 @@ public struct TourSlideshowView: View {
                 } else {
                     image(for: pages[currentIndex])
                         .resizable()
-                        .scaledToFit()
+                        .scaledToFill()
+                        .frame(width: width, height: imageHeight - 48, alignment: .top)
+                        .clipped()
+                        .padding(.top, 48)
                         .accessibilityHidden(true)
                 }
             }
                 .frame(width: width, height: imageHeight)
+                .clipped()
                 .id(currentIndex)
                 .transition(.opacity)
 
@@ -177,7 +181,7 @@ public struct TourSlideshowView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 220)
+                .frame(height: 96)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .allowsHitTesting(false)
             }
@@ -198,6 +202,8 @@ public struct TourSlideshowView: View {
         let currentPage = pages[currentIndex]
 
         return VStack(spacing: 0) {
+            Spacer(minLength: 12)
+
             Text(currentPage.title, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
                 .font(.system(size: 28, weight: .bold))
                 .multilineTextAlignment(.center)
@@ -211,12 +217,11 @@ public struct TourSlideshowView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
 
-            Spacer(minLength: 24)
+            Spacer(minLength: 12)
 
             primaryActionButton
         }
         .padding(.horizontal, 32)
-        .padding(.top, 12)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Per-slide identity so title, description, and button cross-fade
@@ -484,6 +489,7 @@ public final class TourKitWindowController {
 
         let contentSize = CGSize(width: width, height: totalHeight)
         let hosting = NSHostingView(rootView: rootView)
+        hosting.sizingOptions = []
         hosting.frame = NSRect(origin: .zero, size: contentSize)
 
         let window = HostWindow(
@@ -574,7 +580,9 @@ private struct TourBottomPanelSizingView: View {
     let buttonBundle: Bundle?
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
+            Spacer(minLength: 12)
+
             Text(page.title, tableName: page.tableName, bundle: page.resolvedStringsBundle)
                 .font(.system(size: 28, weight: .bold))
                 .multilineTextAlignment(.center)
@@ -586,15 +594,15 @@ private struct TourBottomPanelSizingView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color.white.opacity(0.70))
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 6)
+                .padding(.top, 6)
+
+            Spacer(minLength: 12)
 
             Text(buttonTitle, tableName: buttonTableName, bundle: buttonBundle)
                 .font(.system(size: 15, weight: .semibold))
                 .frame(width: 220, height: 42)
-                .padding(.top, 18)
         }
         .padding(.horizontal, 32)
-        .padding(.top, 6)
         .padding(.bottom, 24)
     }
 }

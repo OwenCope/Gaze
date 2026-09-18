@@ -1,0 +1,79 @@
+{
+  "method": "ScreenCaptureKit currentProcess photographs of current Gaze Settings views, using the isolated ProductCapture app and a system-wallpaper window behind the native glass.",
+  "content": "Empty enrollment, automatic unlocking off, isolated preferences. No user recordings, camera image, biometric scores, or credentials.",
+  "editing": "Rectangular crops and WebP encoding only. No UI retouching or generated screenshots.",
+  "captures": [
+    {
+      "source": "general.png",
+      "sourceSHA256": "44e7b852b0135454480a6eea33a07b2108a1e325dd2b70aaf93b0ff7cb59be85",
+      "crop": [
+        80,
+        126,
+        1360,
+        926
+      ],
+      "size": [
+        1280,
+        800
+      ],
+      "native": "Resources/Art/tour-general.png",
+      "nativeSHA256": "d2425485e7e288c2bce8513355cb5739990cbc7971e905ff69d7476da82f5cf0",
+      "web": "gaze-settings-general.webp",
+      "webSHA256": "34345612836a045d215acdc1484a9c752fb19fb3e7c004970974856112fe2ed7"
+    },
+    {
+      "source": "notch.png",
+      "sourceSHA256": "f523bf709ccd2c7e07b33d3588d468a2c45746098c96daab4733450d9d1e15a4",
+      "crop": [
+        80,
+        130,
+        1360,
+        930
+      ],
+      "size": [
+        1280,
+        800
+      ],
+      "native": "Resources/Art/tour-notch.png",
+      "nativeSHA256": "b348cfb111ee9a12726aa62cbff4b468743c35fd477f9cd78cd914c21c2bc196",
+      "web": "gaze-settings-notch.webp",
+      "webSHA256": "469113da9c020f7932df0e722f33d193324999d8dd6608fe6f440a44a99fd8ae"
+    },
+    {
+      "source": "unlock.png",
+      "sourceSHA256": "4dfb95281b3d30d25ca04af85f62d117f18047b4796de064336172b7d197cce1",
+      "crop": [
+        80,
+        290,
+        1360,
+        1090
+      ],
+      "size": [
+        1280,
+        800
+      ],
+      "native": "Resources/Art/tour-unlock.png",
+      "nativeSHA256": "e32db54fe0e1a468ef036e47e111e700417fc5ec870eb8a1ae0697fac9c8fb65",
+      "web": "gaze-settings-unlock.webp",
+      "webSHA256": "829081de1125369374dcab3ef7b236c8b280c34e76a9b8e7c82bc738eb5b64b8"
+    },
+    {
+      "source": "security.png",
+      "sourceSHA256": "da6249fb1ffaea5a5f4a297f17d0f7aee85497772d93a056dce6105cb197c55e",
+      "crop": [
+        80,
+        340,
+        1360,
+        1140
+      ],
+      "size": [
+        1280,
+        800
+      ],
+      "native": "Resources/Art/tour-security.png",
+      "nativeSHA256": "51cb5777bc2cee0180473fc80083d944d43869817a2d85fa0a9b1ae9973b09a8",
+      "web": "gaze-settings-security.webp",
+      "webSHA256": "aec85e52cd8de4c98368ba48bf8eb1ffb50c782811853aab7822a802a1c52057"
+    }
+  ]
+}

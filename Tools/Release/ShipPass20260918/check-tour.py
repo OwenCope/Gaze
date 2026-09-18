@@ -16,6 +16,8 @@ resources = APP / "Contents/Resources/Art"
 resources.mkdir(parents=True, exist_ok=True)
 for name in ("onboarding-recognition.png", "onboarding-local.png", "onboarding-unlock.png", "onboarding-choice.png", "onboarding-success.png", "onboarding-failure.png", "movement-left.png", "movement-right.png", "movement-nod.png", "movement-blink.png", "movement-mouth.png"):
     shutil.copyfile(ROOT / "Resources/Art" / name, resources / name)
+for name in ("general", "notch", "unlock", "security"):
+    shutil.copyfile(ROOT / f"Resources/Art/tour-{name}.png", resources / f"tour-{name}.png")
 with (APP / "Contents/Info.plist").open("wb") as stream:
     plistlib.dump({"CFBundleIdentifier": "local.gaze.tour-validation", "CFBundleExecutable": "TourFixture",
                    "CFBundleName": "Gaze Tour Fixture", "CFBundlePackageType": "APPL"}, stream)

@@ -1,3 +1,47 @@
+## Latest: real app photographs, September 18 at 22:30
+
+User supplied three recordings: Droppy Code's photo-heavy tour as the reference,
+plus two Gaze recordings. Keep TourKit's preset structure, dark card and blue CTA;
+plain Back/X controls; autoplay movement previews without player chrome or subtitles.
+Do not redesign the site. No helper heads were used in this pass.
+
+Completed:
+- Fixed ProductCapture to use `SCShareableContent.currentProcess`, the supported
+  own-window capture API used by Droppy Code. The prior all-window enumeration
+  was why captures required Screen Recording permission. No permission workaround
+  or access to other apps: the helper captures only its own current production
+  Settings views and system-wallpaper backdrop. Empty enrollment, inert credentials.
+- Four real Settings close-ups now replace the illustrations in the native intro,
+  completion, website gallery, feature carousel, product tour and setup walkthrough.
+  Source/output hashes and crop coordinates: Tools/ProductCapture/tour-shots.json.
+  User recordings and camera images were NOT exported or published.
+- TourKit photo fade reduced from 220 to 96 pt; text centered in the existing footer;
+  navigation has a 48 pt clear strip above photographs so screenshot controls do
+  not collide with Back/X. Fixed measured hosting size for standalone TourKit windows.
+- Movement animation remains live with no player controls or subtitles.
+- Native build and 18-state tour fixture pass (four intro, six movement, eight
+  completion/action cases). Website targeted ESLint, TypeScript and production
+  build pass. Real photos loaded in the isolated browser preview; desktop screenshot
+  in Aside session 2026-09-18_BarXj7EQnL4ukkf3/artifacts/gaze-photos-desktop.png.
+- Installed app PID: 56577; SHA256: 10d04edc952de24d0e08f860ebb552c02459f2ea7a3c81d5b2031f6c9a9640bb.
+  Signature verified; KeepAlive agent restored with the original plist unchanged.
+- New Vercel preview READY: https://gaze-site-l4342mke9-gaze2.vercel.app
+  Deployment dpl_MoUM4Cz7k8V3QRGxktDw2LqtWtVZ. 196 verified tracked inputs uploaded.
+  Preview home and all four photos return HTTP 200; deployed hashes match local.
+  Gallery centered at 1231px viewport with no overflow; movement video plays muted
+  and loops, controls=false, textTracks=0.
+  No production promotion and no git commit/push/branch/PR operation.
+
+Still outstanding: actual pinned website comments. The Vercel toolbar is absent
+in the attached preview browser, and /v1/comments returned 404. Asked user for
+comment text or a direct thread link via async input; no answer yet. Do not invent
+comment contents or claim those comments were addressed.
+
+Evidence: build/droppy-reference-20260918 (captures, native build log, tour fixture log),
+and gaze-site/build/deployment-recovery-20260918 (photos-build.log, preview receipt).
+The older notes below describe previous iterations; their capture-permission
+block and screenshot-pending status are superseded by this section.
+
 # Gaze handoff, September 18
 
 ## Latest UI refinement: autoplay and real app shots

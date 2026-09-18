@@ -3,6 +3,11 @@ import ScreenCaptureKit
 import SwiftUI
 
 @main struct ProductCaptureApp: App {
+    @MainActor private static var captureStarted = false
+    init() {
+        Preferences.shared.appTheme = .glass
+        Preferences.shared.notchStyle = .semiLiquidGlass
+    }
     private let store = FaceEnrollmentStore()
     private let lockout = LockoutManager(load: { nil }, save: { _ in
         fatalError("Product capture cannot save lockout state")
@@ -42,11 +47,34 @@ import SwiftUI
     }
 
     @MainActor private func capture() async {
+        guard !Self.captureStarted else { return }
+        Self.captureStarted = true
         do {
             try await Task.sleep(for: .seconds(1))
             guard let window = NSApp.windows.first(where: { $0.canBecomeKey && $0.isVisible }) else {
                 throw CaptureError.missingWindow
             }
+            guard let screen = window.screen else { throw CaptureError.missingWindow }
+            if kind == "security", let content = window.contentView,
+               let scrollView = Self.scrollView(in: content), let document = scrollView.documentView {
+                let bottom = max(0, document.bounds.height - scrollView.contentView.bounds.height)
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped ? bottom : 0))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+            let backdrop = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            backdrop.isReleasedWhenClosed = false
+            backdrop.hasShadow = false
+            backdrop.ignoresMouseEvents = true
+            let wallpaperURL = URL(fileURLWithPath: "/System/Library/Wallpapers/.default/DefaultAerial.heic")
+            guard let wallpaper = NSImage(contentsOf: wallpaperURL) else { throw CaptureError.missingWallpaper }
+            backdrop.contentView = NSHostingView(rootView:
+                Image(nsImage: wallpaper).resizable().scaledToFill()
+                    .frame(width: screen.frame.width, height: screen.frame.height).clipped())
+            defer { backdrop.close() }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            backdrop.order(.below, relativeTo: window.windowNumber)
+            try await Task.sleep(for: .seconds(0.5))
             let destination = CommandLine.arguments.first { $0.hasPrefix("--output=") }!
                 .dropFirst("--output=".count)
             let path = URL(fileURLWithPath: String(destination))
@@ -56,17 +84,22 @@ import SwiftUI
             try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
                 .write(to: path.appendingPathComponent("window.json"))
             if CommandLine.arguments.contains("--inspect") { return }
-            let shareable = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
-            guard let target = shareable.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }) else {
+            let shareable = try await SCShareableContent.currentProcess
+            guard shareable.windows.contains(where: { $0.windowID == CGWindowID(window.windowNumber) }) else {
+                throw CaptureError.missingWindow
+            }
+            guard let display = shareable.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
                 throw CaptureError.missingWindow
             }
             let configuration = SCStreamConfiguration()
+            configuration.sourceRect = CGRect(x: window.frame.minX, y: screen.frame.maxY - window.frame.maxY,
+                                              width: window.frame.width, height: window.frame.height)
             configuration.width = Int(window.frame.width * 2)
             configuration.height = Int(window.frame.height * 2)
             configuration.showsCursor = false
-            configuration.ignoreShadowsSingleWindow = true
+            configuration.captureResolution = .best
             let image = try await SCScreenshotManager.captureImage(
-                contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: configuration)
+                contentFilter: SCContentFilter(display: display, including: shareable.windows), configuration: configuration)
             let bitmap = NSBitmapImageRep(cgImage: image)
             guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CaptureError.encoding }
             try png.write(to: path.appendingPathComponent("\(kind).png"))
@@ -77,5 +110,13 @@ import SwiftUI
         NSApp.terminate(nil)
     }
 
-    enum CaptureError: Error { case missingWindow, encoding }
+    enum CaptureError: Error { case missingWindow, missingWallpaper, encoding }
+
+    @MainActor private static func scrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView { return scrollView }
+        for child in view.subviews {
+            if let result = scrollView(in: child) { return result }
+        }
+        return nil
+    }
 }
