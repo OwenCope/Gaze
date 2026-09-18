@@ -15,13 +15,27 @@ struct AutofillSection: View {
 	let store: FaceEnrollmentStore
 
 	@State private var draft: SavedAppDraft?
+	@State private var operationError: String?
 	/// Detected once when the pane appears, not on every redraw — it reads plists off
 	/// disk, and a body can run many times a second.
 	@State private var suggestions: [PasswordApps.Suggestion] = []
 
 	var body: some View {
+		if let error = savedApps.storageError ?? operationError {
+			SettingsSection(title: "Saved-password error") {
+				Text(error)
+					.foregroundStyle(Theme.warning)
+					.fixedSize(horizontal: false, vertical: true)
+				if savedApps.storageError != nil {
+					Button("Retry Storage Recovery") {
+						operationError = nil
+						savedApps.reload()
+					}
+				}
+			}
+		}
 		if !suggestions.isEmpty {
-			SettingsSection(title: "Password apps on this Mac", footer: suggestionsFooter) {
+			SettingsSection(title: "Password apps on this Mac", info: suggestionsFooter) {
 				ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, app in
 					if index > 0 { RowDivider() }
 					suggestionRow(app)
@@ -29,7 +43,7 @@ struct AutofillSection: View {
 			}
 		}
 
-		SettingsSection(title: "Saved apps", footer: footer) {
+		SettingsSection(title: "Saved apps", footer: "Stored on this Mac. Browser filling isn't supported.", info: footer) {
 			if savedApps.apps.isEmpty {
 				emptyRow
 			} else {
@@ -43,7 +57,7 @@ struct AutofillSection: View {
 			addRow
 		}
 
-		SettingsSection(title: "How it works", footer: shortcutFooter) {
+		SettingsSection(title: "How it works", info: shortcutFooter) {
 			SettingToggle(
 				title: "Fill automatically when an app asks",
 				detail:
@@ -92,11 +106,12 @@ struct AutofillSection: View {
 
 		.onAppear { refreshSuggestions() }
 		.onChange(of: savedApps.apps.count) { _, _ in refreshSuggestions() }
-		.sheet(item: $draft) { draft in
-			SavedAppEditor(draft: draft) { username, password in
-				savedApps.add(
+		.background {
+			SavedAppEditorSheet(draft: $draft) { draft, username, password in
+				try await savedApps.add(
 					bundleID: draft.bundleID, name: draft.name,
-					username: username, password: password)
+					username: username, password: password, selection: draft.selection,
+					replacing: draft.existing)
 			}
 		}
 	}
@@ -111,7 +126,7 @@ struct AutofillSection: View {
 	/// problems that look identical. This says which one it was.
 	@ViewBuilder
 	private var diagnosticsSection: some View {
-		SettingsSection(title: "Last attempt", footer: diagnosticsFooter) {
+		SettingsSection(title: "Last attempt", info: diagnosticsFooter) {
 			if let last = AutofillService.lastOutcome {
 				SettingRow(
 					title: last.outcome.summary,
@@ -153,7 +168,7 @@ struct AutofillSection: View {
 	}()
 
 	private var diagnosticsFooter: String {
-		"If a fill doesn't happen, this says which step stopped — a password box that isn't marked secure is the usual reason, and the shortcut works there even when automatic filling won't."
+		"Automatic filling and the shortcut require a verified face, fresh Touch ID or macOS password approval, and a secure writable field in the exact saved app. Five attempts require owner approval to reset. Browser filling remains blocked."
 	}
 
 	// MARK: - Suggestions
@@ -162,11 +177,16 @@ struct AutofillSection: View {
 		SettingRow(
 			title: app.name,
 			detail: "Found on this Mac",
-			portrait: savedApps.icon(forBundleID: app.bundleID)
+			portrait: NSWorkspace.shared.icon(forFile: app.url.path)
 		) {
 			Button("Set Up") {
+				guard let selection = AppIdentity.selection(forAppAt: app.url) else {
+					operationError = "The selected app's signing identity could not be verified. Nothing was saved."
+					return
+				}
 				draft = SavedAppDraft(
-					bundleID: app.bundleID, name: app.name, username: "", isExisting: false)
+					bundleID: app.bundleID, name: app.name, username: "",
+					selection: selection, applicationURL: selection.url)
 			}
 			.gazeButton(.primary, size: .small)
 		}
@@ -200,18 +220,24 @@ struct AutofillSection: View {
 			// The username, or an honest blank. "No username" would be a row of grey text
 			// repeating on every entry that does not need one.
 			detail: savedApp.username.isEmpty ? savedApp.bundleID : savedApp.username,
-			portrait: savedApps.icon(for: savedApp)
+			portrait: displayIcon(for: savedApp)
 		) {
 			HStack(spacing: 8) {
 				Button("Change Password…") {
 					draft = SavedAppDraft(
 						bundleID: savedApp.bundleID, name: savedApp.name,
-						username: savedApp.username, isExisting: true)
+						username: savedApp.username, existing: savedApp,
+						applicationURL: savedApp.applicationURL)
 				}
 				.gazeButton(.standard, size: .small)
 
 				Button {
-					savedApps.remove(savedApp.id)
+					do {
+						try savedApps.remove(savedApp.id)
+						operationError = nil
+					} catch {
+						operationError = error.localizedDescription
+					}
 				} label: {
 					Image(systemName: "minus.circle.fill")
 						.foregroundStyle(Theme.danger)
@@ -220,6 +246,12 @@ struct AutofillSection: View {
 				.help("Remove \(savedApp.name)")
 			}
 		}
+	}
+
+	private func displayIcon(for savedApp: SavedApp) -> NSImage? {
+		savedApps.icon(for: savedApp)
+			?? savedApps.icon(forBundleID: savedApp.bundleID)
+			?? NSImage(systemSymbolName: "app", accessibilityDescription: nil)
 	}
 
 	private var addRow: some View {
@@ -260,9 +292,14 @@ struct AutofillSection: View {
 			?? url.deletingPathExtension().lastPathComponent
 
 		let existing = savedApps.savedApp(forBundleID: bundleID)
+		guard let selection = AppIdentity.selection(forAppAt: url) else {
+			operationError = "The selected app's signing identity could not be verified. Nothing was saved."
+			return
+		}
 		draft = SavedAppDraft(
 			bundleID: bundleID, name: name,
-			username: existing?.username ?? "", isExisting: existing != nil)
+			username: existing?.username ?? "", existing: existing,
+			selection: selection, applicationURL: selection.url)
 	}
 
 	/// Read fresh each time the pane draws, rather than stored. Registration happens once
@@ -272,12 +309,12 @@ struct AutofillSection: View {
 
 	private var footer: String {
 		savedApps.apps.isEmpty
-			? "Gaze can type a saved password into an app when you ask it to, once it recognises you. Nothing is filled automatically and nothing is submitted for you."
-			: "Passwords are encrypted with the Secure Enclave and never leave this Mac. Removing an app deletes its password."
+			? "Gaze can fill secure password fields in verified saved apps after face recognition. Automatic filling is optional; Gaze does not press Return."
+			: "Passwords are stored encrypted on this Mac. A row is removed only after password deletion and the saved list update are confirmed. Failed changes block filling until storage recovery succeeds."
 	}
 
 	private var shortcutFooter: String {
-		"Automatic filling only ever acts on a saved app showing a focused password box. The shortcut is broader — it works in any text field, in any saved app. Neither presses Return for you."
+		"Automatic filling and the shortcut require a focused, secure, writable password field in a verified saved app. Neither fills plain text fields or presses Return. Browser filling requires a future website-identity integration."
 	}
 }
 
@@ -291,59 +328,278 @@ struct SavedAppDraft: Identifiable {
 	let bundleID: String
 	let name: String
 	var username: String
-	/// Whether this replaces a password already stored, which changes only what the sheet
-	/// says — the store treats both the same.
-	let isExisting: Bool
+	var existing: SavedApp? = nil
+	var isExisting: Bool { existing != nil }
+	var selection: AppIdentity.Selection? = nil
+	var applicationURL: URL? = nil
 }
 
 private struct SavedAppEditor: View {
 
-	@State var draft: SavedAppDraft
-	let save: (String, String) -> Void
+	let draft: SavedAppDraft
+	let save: (String, String) async throws -> Void
+	let dismiss: () -> Void
 
 	@State private var username: String = ""
 	@State private var password: String = ""
-	@Environment(\.dismiss) private var dismiss
+	@State private var appIcon: NSImage?
+	@State private var saveError: String?
+	@State private var saveTask: Task<Void, Never>?
+	@State private var isSaving = false
+	@FocusState private var focusedField: Field?
+
+	private enum Field: Hashable {
+		case username, password
+	}
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 18) {
-			VStack(alignment: .leading, spacing: 4) {
-				Text(draft.isExisting ? "Change the password for \(draft.name)" : "Save \(draft.name)")
-					.font(Typography.heroTitle)
-					.foregroundStyle(Theme.label)
-				Text(draft.bundleID)
-					.font(Typography.detail.monospaced())
-					.foregroundStyle(Theme.tertiaryLabel)
-			}
-
-			VStack(alignment: .leading, spacing: 10) {
-				SettingsField(placeholder: "Username (optional)", text: $username)
-				SettingsField(placeholder: "Password", text: $password, isSecure: true)
-			}
-
-			Text(
-				"Stored encrypted on this Mac. Gaze types it only when you press the shortcut and it recognises your face."
-			)
-			.font(Typography.detail)
-			.foregroundStyle(Theme.secondaryLabel)
-			.fixedSize(horizontal: false, vertical: true)
-
-			HStack {
-				Spacer()
-				Button("Cancel") { dismiss() }
-					.gazeButton()
-					.keyboardShortcut(.cancelAction)
-				Button(draft.isExisting ? "Update" : "Save") {
-					save(username, password)
+		VStack(alignment: .leading, spacing: 20) {
+			HStack(spacing: 12) {
+				Button {
+					saveTask?.cancel()
 					dismiss()
+				} label: {
+					Image(systemName: "xmark")
+						.font(.system(size: 13, weight: .semibold))
+						.frame(width: 20, height: 20)
 				}
-				.gazeButton(.primary)
+				.buttonStyle(.glass)
+				.buttonBorderShape(.circle)
+				.controlSize(.large)
+				.keyboardShortcut(.cancelAction)
+				.accessibilityLabel("Cancel")
+				.help("Cancel")
+
+				Group {
+					if let appIcon {
+						Image(nsImage: appIcon)
+							.resizable()
+							.scaledToFit()
+					} else {
+						Image(systemName: "key.fill")
+							.font(.system(size: 28))
+							.foregroundStyle(.secondary)
+					}
+				}
+				.frame(width: 32, height: 32)
+				.accessibilityHidden(true)
+
+				VStack(alignment: .leading, spacing: 4) {
+					Text(draft.isExisting ? "Edit Password" : "Add Password")
+						.font(.headline)
+						.accessibilityAddTraits(.isHeader)
+					Text(draft.name)
+						.font(.subheadline)
+						.foregroundStyle(.secondary)
+						.fixedSize(horizontal: false, vertical: true)
+						.help(draft.bundleID)
+				}
+				Spacer(minLength: 0)
+				Button(action: submit) {
+					Image(systemName: "checkmark")
+						.font(.system(size: 15, weight: .semibold))
+						.foregroundStyle(.blue)
+						.frame(width: 20, height: 20)
+				}
+				.buttonStyle(.glass)
+				.buttonBorderShape(.circle)
+				.controlSize(.large)
 				.keyboardShortcut(.defaultAction)
-				.disabled(password.isEmpty)
+				.accessibilityLabel(draft.isExisting ? "Save Changes" : "Add Password")
+				.help(password.isEmpty ? "Enter a password to save" : "Save password")
+				.disabled(password.isEmpty || isSaving)
+			}
+
+			Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 12) {
+				GridRow {
+					Text("Username:")
+						.gridColumnAlignment(.trailing)
+					TextField("Optional", text: $username)
+						.textContentType(.username)
+						.autocorrectionDisabled()
+						.accessibilityLabel("Username")
+						.accessibilityHint("Optional")
+						.focused($focusedField, equals: .username)
+						.onSubmit { focusedField = .password }
+				}
+				GridRow {
+					Text(draft.isExisting ? "New password:" : "Password:")
+					SecureField("Required", text: $password)
+						.accessibilityLabel(draft.isExisting ? "New password" : "Password")
+						.focused($focusedField, equals: .password)
+						.onSubmit { submit() }
+				}
+			}
+			.textFieldStyle(.roundedBorder)
+			.controlSize(.regular)
+			.disabled(isSaving)
+
+			if let saveError {
+				Text(saveError)
+					.font(.footnote)
+					.foregroundStyle(Theme.warning)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+
+			if draft.isExisting && draft.selection != nil {
+				Text("If the selected app has a different signing identity, saving requires fresh Touch ID or account-password approval. Cancel if you did not intend to trust a different app.")
+					.font(.footnote)
+					.foregroundStyle(.secondary)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+			if let url = draft.applicationURL {
+				Text("Selected application: \(url.path)")
+					.font(.footnote)
+					.foregroundStyle(.secondary)
+					.fixedSize(horizontal: false, vertical: true)
+			}
+
+			Text("Gaze saves this password for autofill; it doesn't change the password in \(draft.name). Stored encrypted on this Mac and filled after face recognition.")
+				.font(.footnote)
+				.foregroundStyle(.secondary)
+				.fixedSize(horizontal: false, vertical: true)
+
+		}
+		.padding(24)
+		.frame(width: 460)
+		.onAppear {
+			username = draft.username
+			if let url = draft.applicationURL {
+				appIcon = NSWorkspace.shared.icon(forFile: url.path)
+			}
+			focusedField = draft.isExisting ? .password : .username
+		}
+		.onDisappear {
+			saveTask?.cancel()
+			password = ""
+		}
+	}
+
+	private func submit() {
+		guard !password.isEmpty, !isSaving else { return }
+		isSaving = true
+		saveError = nil
+		saveTask = Task { @MainActor in
+			defer { isSaving = false }
+			do {
+				try await save(username, password)
+				password = ""
+				dismiss()
+			} catch {
+				saveError = error.localizedDescription
 			}
 		}
-		.padding(22)
-		.frame(width: 420)
-		.onAppear { username = draft.username }
+	}
+}
+
+private struct SavedAppEditorSheet: NSViewRepresentable {
+	@Binding var draft: SavedAppDraft?
+	let save: (SavedAppDraft, String, String) async throws -> Void
+
+	func makeCoordinator() -> Coordinator { Coordinator(draft: $draft, save: save) }
+
+	func makeNSView(context: Context) -> AnchorView {
+		let view = AnchorView()
+		view.onWindowChange = { [weak coordinator = context.coordinator] window in
+			coordinator?.schedulePresentation(in: window)
+		}
+		return view
+	}
+
+	func updateNSView(_ view: AnchorView, context: Context) {
+		context.coordinator.draft = $draft
+		context.coordinator.requestedDraft = draft
+		context.coordinator.save = save
+		context.coordinator.schedulePresentation(in: view.window)
+	}
+
+	static func dismantleNSView(_ view: AnchorView, coordinator: Coordinator) {
+		view.onWindowChange = nil
+		coordinator.pendingPresentation?.cancel()
+		coordinator.close()
+	}
+
+	final class AnchorView: NSView {
+		var onWindowChange: ((NSWindow?) -> Void)?
+		override func viewDidMoveToWindow() {
+			super.viewDidMoveToWindow()
+			onWindowChange?(window)
+		}
+	}
+
+	final class EditorPanel: NSPanel {
+		var onCancel: (() -> Void)?
+		override var canBecomeKey: Bool { true }
+		override var canBecomeMain: Bool { false }
+		override func cancelOperation(_ sender: Any?) { onCancel?() }
+	}
+
+	@MainActor
+	final class Coordinator {
+		var draft: Binding<SavedAppDraft?>
+		var requestedDraft: SavedAppDraft?
+		var save: (SavedAppDraft, String, String) async throws -> Void
+		var pendingPresentation: Task<Void, Never>?
+		private var panel: EditorPanel?
+
+		init(draft: Binding<SavedAppDraft?>, save: @escaping (SavedAppDraft, String, String) async throws -> Void) {
+			self.draft = draft
+			self.requestedDraft = draft.wrappedValue
+			self.save = save
+		}
+
+		func schedulePresentation(in parent: NSWindow?) {
+			pendingPresentation?.cancel()
+			pendingPresentation = Task { @MainActor [weak self, weak parent] in
+				await Task.yield()
+				guard !Task.isCancelled, let self else { return }
+				guard let currentDraft = self.requestedDraft else {
+					self.close()
+					return
+				}
+				guard let parent, self.panel == nil, parent.attachedSheet == nil else { return }
+				self.present(currentDraft, in: parent)
+			}
+		}
+
+		private func present(_ currentDraft: SavedAppDraft, in parent: NSWindow) {
+			let editor = SavedAppEditor(
+				draft: currentDraft,
+				save: { [weak self] username, password in
+					guard let self else { throw CancellationError() }
+					try await self.save(currentDraft, username, password)
+				},
+				dismiss: { [weak self] in self?.close() })
+			let host = NSHostingView(rootView: editor)
+			let frame = NSRect(origin: .zero, size: host.fittingSize)
+			let panel = EditorPanel(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+			panel.title = currentDraft.isExisting ? "Edit Password" : "Add Password"
+			panel.isOpaque = false
+			panel.backgroundColor = .clear
+			panel.hasShadow = true
+			panel.isReleasedWhenClosed = false
+			panel.appearance = parent.effectiveAppearance
+			panel.onCancel = { [weak self] in self?.close() }
+			let glass = NSGlassEffectView(frame: frame)
+			glass.style = .regular
+			glass.cornerRadius = 24
+			glass.contentView = host
+			panel.contentView = glass
+			self.panel = panel
+			parent.beginSheet(panel) { [weak self, weak panel] _ in
+				panel?.orderOut(nil)
+				guard let self, self.panel === panel else { return }
+				self.panel = nil
+				if self.draft.wrappedValue?.id == currentDraft.id {
+					self.draft.wrappedValue = nil
+				}
+			}
+		}
+
+		func close() {
+			guard let panel else { return }
+			panel.sheetParent?.endSheet(panel)
+			panel.orderOut(nil)
+		}
 	}
 }
