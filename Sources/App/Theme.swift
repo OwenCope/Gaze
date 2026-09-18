@@ -732,6 +732,7 @@ struct SettingToggle: View {
 	var detail: String?
 	var symbol: String?
 	var symbolTint: Color?
+	var portrait: NSImage?
 	var isEnabled = true
 	@Binding var isOn: Bool
 
@@ -750,6 +751,7 @@ struct SettingToggle: View {
 	private var legacyBody: some View {
 		SettingRow(
 			title: title, detail: detail, symbol: symbol, symbolTint: symbolTint,
+			portrait: portrait,
 			isEnabled: isEnabled
 		) {
 			Toggle(title, isOn: $isOn)

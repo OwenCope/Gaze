@@ -123,6 +123,7 @@ struct SettingsView: View {
 	@State private var pendingSearchSection: SettingsSearchItem?
 
 	@Environment(\.openWindow) private var openWindow
+	@Environment(\.colorScheme) private var colorScheme
 
 	var body: some View {
 		let _ = pauseExpiryRevision
@@ -644,7 +645,7 @@ struct SettingsView: View {
 				detail: !PasswordReplaySafety.isEnabled ? "Off — your Mac stays locked" : settings.unlockBackend == .keystroke
 					? "Use face recognition on the lock screen"
 					: "Off — your Mac stays locked",
-				symbol: "faceid", symbolTint: Theme.faceID,
+				portrait: GazeBrand.toolbarIcon(dark: (settings.appTheme.colorScheme ?? colorScheme) == .dark),
 				isOn: Binding(get: { PasswordReplaySafety.isEnabled && settings.unlockBackend == .keystroke },
 					set: { unlockBinding.wrappedValue = $0 ? .keystroke : .none }))
 				.disabled(AppServices.isUIReview)
