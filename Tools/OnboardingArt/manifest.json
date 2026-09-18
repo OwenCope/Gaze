@@ -3,38 +3,38 @@
     {
       "dimensions" : "1440x900",
       "file" : "onboarding-recognition.png",
-      "pose" : "resting pose, charcoal, 360px at (720,310)",
-      "sha256" : "05b9faccb827cebdf9790f822cb67965f6c354ba4140ef4abb9df2a374ecb9a2"
+      "pose" : "resting pose, charcoal, 360px at (720,450)",
+      "sha256" : "fc17eaa2087e34f98109453dc516247482d3afb2db74c1f398a771cdf3493736"
     },
     {
       "dimensions" : "1440x900",
       "file" : "onboarding-success.png",
-      "pose" : "accepted stillPose (expression +1), charcoal, 360px at (720,310)",
-      "sha256" : "d8a853c860053832bb3ecdadd517bd732dad59778d54813c404b98b75a8afeee"
+      "pose" : "accepted stillPose (expression +1), charcoal, 360px at (720,450)",
+      "sha256" : "635d948e293e441a427b41a36d45f7755cf73a7b25441002b7ee969720427676"
     },
     {
       "dimensions" : "1440x900",
       "file" : "onboarding-failure.png",
-      "pose" : "rejected stillPose (expression -1), charcoal, 360px at (720,310)",
-      "sha256" : "eac088625b33681ce7a93bb0d7982d8291fe990af4dd13d5cd6b59a9f2a74113"
+      "pose" : "rejected stillPose (expression -1), charcoal, 360px at (720,450)",
+      "sha256" : "79ca612d1a418e7d4f37f0010777fd9a5898a4e6158cd27f26d57ea82906361a"
     },
     {
       "dimensions" : "1440x900",
       "file" : "onboarding-local.png",
-      "pose" : "resting face 320px at (560,310) + lock.fill ~150px at (880,310)",
-      "sha256" : "3fbed062cada40a5dc55239e66fdd8eb8e75aab4d308d426c246d24f286f837f"
+      "pose" : "resting face 320px at (560,450) + lock.fill ~150px at (880,450); translated +38px to center visible bounds",
+      "sha256" : "2a2a7b1b6a1d85f10c001318a173661469da2ad07ba070c9e86297bf6c64b4f3"
     },
     {
       "dimensions" : "1440x900",
       "file" : "onboarding-choice.png",
-      "pose" : "resting face 320px at (560,310) + key.fill ~150px at (880,310); no toggle",
-      "sha256" : "4d8be27d3d59cd0ed7841366f8836299651cd16c71ece1284245677a12d7018f"
+      "pose" : "resting face 320px at (560,450) + key.fill ~150px at (880,450); translated +43px to center visible bounds; no toggle",
+      "sha256" : "527294658034db5f3a2eacfa275944f778d153f469edaef9efb6ec2d53499f98"
     },
     {
       "dimensions" : "1440x900",
       "file" : "onboarding-unlock.png",
-      "pose" : "camera.fill 130px at (330,300) -> resting face 300px at (720,300) -> key.fill 130px at (1110,300); arrow.right 56px connectors",
-      "sha256" : "4a648734b52b86cc0ee2535b90306864e533a4c59baf162df0064894e79110fd"
+      "pose" : "camera.fill 130px at (330,450) -> resting face 300px at (720,450) -> key.fill 130px at (1110,450); arrow.right 56px connectors; translated +12px to center visible bounds",
+      "sha256" : "731e56683721068ab5bca6bc1e80a3bda7716303db287b5493974828b895190b"
     },
     {
       "dimensions" : "1440x900",
@@ -75,7 +75,7 @@
   "sources" : [
     {
       "path" : "Tools\/OnboardingArt\/Generate.swift",
-      "sha256" : "23d40c9c6b2b7cc4bfaf92d122a70550bd931a76a032f3ba49de942d630d8cb5"
+      "sha256" : "d456f3103b038120653f3ef6163a9d91690aa84ca2dcd02b6895dc37759bc46a"
     },
     {
       "path" : "Sources\/Companion\/GazeCompanionShader.swift",

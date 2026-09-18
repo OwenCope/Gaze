@@ -1,0 +1,28 @@
+{
+  "type": "Animations rendered from current app code; not a screenshot or a real face check",
+  "size": [
+    900,
+    560
+  ],
+  "fps": 60,
+  "durationSeconds": 16,
+  "movements": [
+    "Turn left",
+    "Turn right",
+    "Nod",
+    "Blink",
+    "Open mouth"
+  ],
+  "videoSha256": "35d0812ca55cd02b72909675bf6a58ccb9b8059462fe2f50b8f2646b5678ac54",
+  "sourceHashes": {
+    "Tools/ProductCapture/MovementMovie.swift": "6ee106cdd9fa8d1a3171f50af90c0fe6df3aa300daad72d0ab258922a175f6c0",
+    "build/polish-20260918/movement-movie/OnboardingArtDeclarations.swift": "f9b2a518f2a8ba0dbc1b38bcc142cbf7e9880fc49d3bc5e6817898b6b5e8996a",
+    "Sources/Companion/GazeCompanionShader.swift": "fbeb5564d04afd6c4b7a6afb0ffd80278c44bdf03cf2f14866615e327e665a1c",
+    "Sources/Companion/GazeCompanionMotion.swift": "00cb321659c6ad3d54ec0d37a0ea04b8701afd19baa3b4128876eee120204707",
+    "Sources/Companion/GazeCompanionRenderer.swift": "766a546448c95349b5b0c7c4b21268fb077d4873ddfdcbbc69c4fc42ef4e8583",
+    "Sources/Companion/GazeCompanionView.swift": "04ffdd9a9bd2096d2d8748bd634ce12c2e9f579fa13f033d796b4ccb5336fa0f",
+    "Sources/Companion/GazeRenderDiagnostics.swift": "c38bd9b5a69c421017200de7b4b0b99710766dc9ba19e76d07ffb3c1ff2baa81",
+    "Sources/LockScreen/GazeFaceMark.swift": "614cf30fc4eabaedffd72ff8d85aae00ed5a890af70f5b25734c41beb2022187"
+  },
+  "artRendererSha256": "23d40c9c6b2b7cc4bfaf92d122a70550bd931a76a032f3ba49de942d630d8cb5"
+}

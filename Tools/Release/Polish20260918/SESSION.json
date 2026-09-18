@@ -1,0 +1,18 @@
+{
+  "startedUTC": "2026-09-18T10:53:39Z",
+  "notBeforeFinishUTC": "2026-09-18T11:53:39Z",
+  "status": "local_changes_ready_capture_permission_pending",
+  "scope": [
+    "Restore previous website layout",
+    "Current app captures instead of illustration placeholders",
+    "Centered live movement animations",
+    "Native Liquid Glass controls/surface without redesigning TourKit layout"
+  ],
+  "note": "Local implementation, builds, installation and checks finished. Real app screenshots remain blocked by macOS capture permission; no user response received. Elapsed time includes waiting for that response.",
+  "implementation": "ready_locally",
+  "remaining": "Real app screenshots require macOS Screen Recording access; user response pending",
+  "currentHandoff": "SESSION-HANDOFF.md",
+  "memoryNode": "Gaze Current UI Handoff 2026-09-18",
+  "workWindowEndedUTC": "2026-09-18T11:54:34.266805+00:00",
+  "elapsedMinutes": 60.92
+}

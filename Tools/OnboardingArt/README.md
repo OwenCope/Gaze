@@ -26,13 +26,14 @@ through the real `SoftFaceGPU` Metal pipeline (`GazeCompanionShader`,
 `GazeCompanionMotion`, `GazeFaceMotion` poses) offscreen; only the layout and
 the monochrome SF Symbols around them are new.
 
-Canvas: 1440×900 RGBA, transparent. Subjects sit in the upper two-thirds so
-TourKit's existing bottom fade leaves them visible. No text, buttons, windows,
+Canvas: 1440×900 RGBA, transparent. Intro/completion subjects are centered at y=450,
+matching the current TourKit media region. Legacy three-pose strips remain at y=310;
+the live movement guide no longer displays those strips. No text, buttons, windows,
 navigation dots, personal data, coloured backdrops or card frames.
 
 | File | Subject |
 | --- | --- |
-| `onboarding-recognition.png` | Resting face, 360px at (720, 310) |
+| `onboarding-recognition.png` | Resting face, 360px at (720, 450) |
 | `onboarding-local.png` | Resting face 320px + `lock.fill` side by side |
 | `onboarding-unlock.png` | `camera.fill` → face → `key.fill`, `arrow.right` connectors |
 | `onboarding-choice.png` | Resting face 320px + `key.fill`; no fake toggle |

@@ -113,7 +113,7 @@ struct CompletionScenario {
     /// Upstream close control: TourKit's checkmark icon button, observed as
     /// AXButton desc "Selected" ident "checkmark" (the SF Symbol default label).
     static func closeControl(host: AXUIElement) -> AXUIElement? {
-        axNodes(host).first { axRole($0) == (kAXButtonRole as String) && axIdent($0) == "checkmark" }
+        axNodes(host).first { axRole($0) == (kAXButtonRole as String) && axIdent($0) == "tour-close" }
     }
     /// Upstream back control: TourKit's chevron icon button, observed as
     /// AXButton desc "Back". Absent on the first page.
@@ -143,14 +143,13 @@ struct CompletionScenario {
         precondition(primaryButtons.count == 1, "Exactly one primary button \(primary) on page \(index)")
         let other = index == titles.count - 1 ? "Next" : finishTitle
         precondition(axButton(other, host: host) == nil, "No \(other) on page \(index)")
-        for absent in ["Skip", "Continue", "Pause", "Play", "Previous page", "Close introduction", "Step 1 of 1"] {
+        for absent in ["Skip", "Continue", "Previous page", "Close introduction", "Step 1 of 1"] {
             precondition(!labels.contains(absent), "No \(absent) control on page \(index)")
         }
     }
     static func mount<Content: View>(_ content: Content, in container: NSView) -> NSView {
         for child in container.subviews { child.removeFromSuperview() }
-        let host = NSHostingView(rootView: content.preferredColorScheme(.dark)
-            .transaction { $0.disablesAnimations = true })
+        let host = NSHostingView(rootView: content.preferredColorScheme(.dark).environment(\.scenePhase, .inactive))
         host.frame = container.bounds
         host.layoutSubtreeIfNeeded()
         let fitting = host.fittingSize
@@ -257,10 +256,38 @@ struct CompletionScenario {
         let movementHost = mount(GazeMovementTour(onClose: { movementClosed += 1 }, movementCount: 1), in: container)
         ax = axWindow(titled: window.title)
         precondition(axNodes(ax).map(axLabel).contains { $0.contains("one small movement") && $0.contains("camera off") })
+        var movementPerformance: [[String: Any]] = []
         for page in 0..<movementHeadings.count {
             ax = axWindow(titled: window.title)
             checkPage(page, host: ax, pageHeadings: movementHeadings, finishTitle: "Done")
             precondition(movementClosed == 0)
+            precondition(axButton("Pause", host: ax) != nil, "Active movement has playback control")
+            let surfaces = CompanionCapture.surfaces(in: movementHost)
+            precondition(surfaces.count == 1, "Only the current page owns a renderer")
+            let mediaFrame = surfaces[0].view.convert(surfaces[0].view.bounds, to: movementHost)
+            precondition(abs(mediaFrame.midX - movementHost.bounds.midX) < 1, "Movement is horizontally centered")
+            press("Pause", host: ax)
+            precondition(surfaces[0].view.isPaused, "Pause stops the renderer")
+            precondition(axButton("Play", host: ax) != nil, "Paused control becomes Play")
+            press("Play", host: ax)
+            let resumed = CompanionCapture.surfaces(in: movementHost)
+            precondition(resumed.count == 1 && !resumed[0].view.isPaused, "Play resumes the renderer")
+            let surface = resumed[0]
+            let probe = LessonMotionTests.FrameProbe(renderer: surface.renderer)
+            surface.view.delegate = probe
+            let start = Date.timeIntervalSinceReferenceDate
+            while Date.timeIntervalSinceReferenceDate - start < 6 {
+                RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0 / 60))
+            }
+            precondition(probe.samples.count > 180, "Glass guide must submit continuous drawable frames")
+            precondition(probe.samples.contains { $0.1 != probe.samples[0].1 }, "The visible guide must animate")
+            let intervals = zip(probe.samples.dropFirst(), probe.samples).map { ($0.0 - $1.0) * 1000 }.sorted()
+            let p95 = intervals[Int(Double(intervals.count - 1) * 0.95)]
+            movementPerformance.append(["page": movementHeadings[page], "frames": probe.samples.count,
+                "durationSeconds": 6, "medianMS": intervals[intervals.count / 2], "p95MS": p95])
+            surface.view.delegate = surface.renderer
+            print("PASS: glass guide \(movementHeadings[page]), \(probe.samples.count) frames, p95 \(p95)ms")
+            fflush(stdout)
             try capture(container, card: movementHost, path: CommandLine.arguments[1] + "/movement-\(page + 1).png")
             press(page == movementHeadings.count - 1 ? "Done" : "Next", host: ax)
         }
@@ -296,6 +323,8 @@ struct CompletionScenario {
             precondition(actions == ["done"], "Completion close never starts a camera/test or retries")
         }
 
+        let performanceData = try JSONSerialization.data(withJSONObject: movementPerformance, options: [.prettyPrinted, .sortedKeys])
+        try performanceData.write(to: URL(fileURLWithPath: CommandLine.arguments[1] + "/glass-movement-performance.json"))
         let layout: [String: Any] = [
             "requestedWindow": ["width": 760, "height": 680],
             "hostFittingSize": ["width": fitting.width, "height": fitting.height],

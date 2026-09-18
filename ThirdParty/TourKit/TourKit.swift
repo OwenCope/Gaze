@@ -64,7 +64,10 @@ public struct TourSlideshowView: View {
     let buttonBundle: Bundle?
     let onFinish: (() -> Void)?
     let onClose: (() -> Void)?
+    /// Optional live content for the active page, inside the existing media region.
+    let pageMedia: ((Int) -> AnyView)?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State var currentIndex: Int
 
     public init(
@@ -76,7 +79,8 @@ public struct TourSlideshowView: View {
         buttonTableName: String? = nil,
         buttonBundle: Bundle? = nil,
         onFinish: (() -> Void)? = nil,
-        onClose: (() -> Void)? = nil
+        onClose: (() -> Void)? = nil,
+        pageMedia: ((Int) -> AnyView)? = nil
     ) {
         self.pages = pages
         self.width = width
@@ -86,6 +90,7 @@ public struct TourSlideshowView: View {
         self.buttonBundle = buttonBundle
         self.onFinish = onFinish
         self.onClose = onClose
+        self.pageMedia = pageMedia
         _currentIndex = State(initialValue: Self.clamped(initialPageIndex, pageCount: pages.count))
     }
 
@@ -104,19 +109,14 @@ public struct TourSlideshowView: View {
                     imageSection
                     bottomPanel
                 }
-                .background(Color(white: 0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                }
+                .modifier(TourCardSurface())
             }
         }
         .frame(width: width)
         // Purely visual animation: drives the slide cross-fade and the
         // page-indicator's active-dot slide. Layout size never changes
         // because the hosting window is locked to the tallest slide.
-        .animation(.easeInOut(duration: 0.25), value: currentIndex)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: currentIndex)
     }
 
     private var emptyState: some View {
@@ -140,34 +140,24 @@ public struct TourSlideshowView: View {
     static let imageAspectRatio: CGFloat = 16.0 / 10.0
 
     private var imageSection: some View {
-        // Only the artwork participates in the cross-fade. The gradient
-        // and page indicator are siblings of the transitioning image in
-        // this ZStack so they stay at full opacity across slide changes;
-        // if they were `.overlay`s on the image they'd be part of its
-        // `.id + .transition(.opacity)` subtree and visibly fade out and
-        // back in at the transition's midpoint.
+        // Only the active media cross-fades; navigation and page dots stay visible.
         ZStack(alignment: .top) {
-            image(for: pages[currentIndex])
-                .resizable()
-                .scaledToFit()
+            Group {
+                if let pageMedia {
+                    pageMedia(currentIndex)
+                        .padding(.horizontal, 48)
+                        .padding(.top, 36)
+                        .padding(.bottom, 40)
+                } else {
+                    image(for: pages[currentIndex])
+                        .resizable()
+                        .scaledToFit()
+                        .accessibilityHidden(true)
+                }
+            }
                 .frame(width: width, height: imageHeight)
                 .id(currentIndex)
                 .transition(.opacity)
-
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: Color(white: 0.10).opacity(0.15), location: 0.25),
-                    .init(color: Color(white: 0.10).opacity(0.45), location: 0.50),
-                    .init(color: Color(white: 0.10).opacity(0.80), location: 0.75),
-                    .init(color: Color(white: 0.10), location: 1.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 220)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .allowsHitTesting(false)
 
             PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
                 .padding(.bottom, 14)
@@ -179,7 +169,7 @@ public struct TourSlideshowView: View {
         .frame(width: width, height: imageHeight)
     }
 
-    // MARK: - Bottom panel (dark area with text + button)
+    // MARK: - Bottom panel (text + button)
 
     private var bottomPanel: some View {
         let currentPage = pages[currentIndex]
@@ -188,13 +178,13 @@ public struct TourSlideshowView: View {
             Text(currentPage.title, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
                 .font(.system(size: 28, weight: .bold))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(currentPage.description, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color.white.opacity(0.70))
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
 
@@ -220,6 +210,9 @@ public struct TourSlideshowView: View {
                 goBack()
             }
             .opacity(currentIndex > 0 ? 1 : 0)
+            .disabled(currentIndex == 0)
+            .accessibilityHidden(currentIndex == 0)
+            .accessibilityLabel("Back")
 
             Spacer()
 
@@ -230,6 +223,8 @@ public struct TourSlideshowView: View {
                     dismiss()
                 }
             }
+            .accessibilityLabel("Close tour")
+            .accessibilityIdentifier("tour-close")
         }
         .padding(.horizontal, 14)
         .padding(.top, 12)
@@ -237,58 +232,42 @@ public struct TourSlideshowView: View {
 
     // MARK: - Primary CTA
 
-    private var primaryActionButton: some View {
-        Button(action: advance) {
+    @ViewBuilder private var primaryActionButton: some View {
+        let button = Button(action: advance) {
             Text(
                 isLastPage ? finishButtonTitle : continueButtonTitle,
                 tableName: buttonTableName,
                 bundle: buttonBundle
             )
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 220, height: 42)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.10, green: 0.60, blue: 1.0),
-                                    Color(red: 0.04, green: 0.46, blue: 0.96)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                )
-                .clipShape(Capsule(style: .continuous))
-                .contentShape(Capsule(style: .continuous))
+                .frame(width: 188)
         }
-        .buttonStyle(.plain)
+        .controlSize(.large)
+        .buttonBorderShape(.capsule)
         .keyboardShortcut(.defaultAction)
+
+        if #available(macOS 26.0, iOS 26.0, *) {
+            button.buttonStyle(.glassProminent)
+        } else {
+            button.buttonStyle(.borderedProminent)
+        }
     }
 
     // MARK: - Icon button (glass circle)
 
-    private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    @ViewBuilder private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
+        let button = Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.88))
-                .frame(width: 32, height: 32)
-                .background {
-                    if #available(macOS 26.0, iOS 26.0, *) {
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .overlay {
-                                Circle().stroke(Color.white.opacity(0.25), lineWidth: 0.5)
-                            }
-                    } else {
-                        Circle().fill(Color.white.opacity(0.15))
-                    }
-                }
-                .contentShape(Circle())
+                .frame(width: 16, height: 16)
         }
-        .buttonStyle(.plain)
+        .controlSize(.large)
+        .buttonBorderShape(.circle)
+        if #available(macOS 26.0, iOS 26.0, *) {
+            button.buttonStyle(.glass)
+        } else {
+            button.buttonStyle(.bordered)
+        }
     }
 
     var isLastPage: Bool {
@@ -592,6 +571,16 @@ private struct TourBottomPanelSizingView: View {
 
 #endif
 
+private struct TourCardSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, iOS 26.0, *) {
+            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        } else {
+            content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+    }
+}
+
 public struct PageIndicator: View {
     let totalPages: Int
     let currentIndex: Int
@@ -605,7 +594,7 @@ public struct PageIndicator: View {
         HStack(spacing: 7) {
             ForEach(0..<totalPages, id: \.self) { index in
                 Capsule(style: .continuous)
-                    .fill(index == currentIndex ? Color.white.opacity(0.95) : Color.white.opacity(0.32))
+                    .fill(Color.primary.opacity(index == currentIndex ? 0.95 : 0.32))
                     .frame(width: index == currentIndex ? 24 : 8, height: 8)
             }
         }
