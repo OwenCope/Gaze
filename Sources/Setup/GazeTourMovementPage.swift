@@ -21,7 +21,7 @@ struct GazeTourMovementPage: View {
 					.frame(minWidth: 64)
 					.foregroundStyle(.primary)
 			}
-			.buttonStyle(.glass)
+			.buttonStyle(.bordered)
 			.buttonBorderShape(.capsule)
 			.controlSize(.large)
 			.disabled(reduced)

@@ -109,7 +109,12 @@ public struct TourSlideshowView: View {
                     imageSection
                     bottomPanel
                 }
-                .modifier(TourCardSurface())
+                .background(Color(white: 0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                }
             }
         }
         .frame(width: width)
@@ -145,6 +150,7 @@ public struct TourSlideshowView: View {
             Group {
                 if let pageMedia {
                     pageMedia(currentIndex)
+                        .environment(\.colorScheme, .dark)
                         .padding(.horizontal, 48)
                         .padding(.top, 36)
                         .padding(.bottom, 40)
@@ -158,6 +164,23 @@ public struct TourSlideshowView: View {
                 .frame(width: width, height: imageHeight)
                 .id(currentIndex)
                 .transition(.opacity)
+
+            if pageMedia == nil {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: Color(white: 0.10).opacity(0.15), location: 0.25),
+                        .init(color: Color(white: 0.10).opacity(0.45), location: 0.50),
+                        .init(color: Color(white: 0.10).opacity(0.80), location: 0.75),
+                        .init(color: Color(white: 0.10), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 220)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .allowsHitTesting(false)
+            }
 
             PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
                 .padding(.bottom, 14)
@@ -178,13 +201,13 @@ public struct TourSlideshowView: View {
             Text(currentPage.title, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
                 .font(.system(size: 28, weight: .bold))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.primary)
+                .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(currentPage.description, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.white.opacity(0.70))
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
 
@@ -232,42 +255,58 @@ public struct TourSlideshowView: View {
 
     // MARK: - Primary CTA
 
-    @ViewBuilder private var primaryActionButton: some View {
-        let button = Button(action: advance) {
+    private var primaryActionButton: some View {
+        Button(action: advance) {
             Text(
                 isLastPage ? finishButtonTitle : continueButtonTitle,
                 tableName: buttonTableName,
                 bundle: buttonBundle
             )
                 .font(.system(size: 15, weight: .semibold))
-                .frame(width: 188)
+                .foregroundStyle(.white)
+                .frame(width: 220, height: 42)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.10, green: 0.60, blue: 1.0),
+                                    Color(red: 0.04, green: 0.46, blue: 0.96)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                )
+                .clipShape(Capsule(style: .continuous))
+                .contentShape(Capsule(style: .continuous))
         }
-        .controlSize(.large)
-        .buttonBorderShape(.capsule)
+        .buttonStyle(.plain)
         .keyboardShortcut(.defaultAction)
-
-        if #available(macOS 26.0, iOS 26.0, *) {
-            button.buttonStyle(.glassProminent)
-        } else {
-            button.buttonStyle(.borderedProminent)
-        }
     }
 
     // MARK: - Icon button (glass circle)
 
-    @ViewBuilder private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
-        let button = Button(action: action) {
+    private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 13, weight: .semibold))
-                .frame(width: 16, height: 16)
+                .foregroundStyle(.white.opacity(0.88))
+                .frame(width: 32, height: 32)
+                .background {
+                    if #available(macOS 26.0, iOS 26.0, *) {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .overlay {
+                                Circle().stroke(Color.white.opacity(0.25), lineWidth: 0.5)
+                            }
+                    } else {
+                        Circle().fill(Color.white.opacity(0.15))
+                    }
+                }
+                .contentShape(Circle())
         }
-        .controlSize(.large)
-        .buttonBorderShape(.circle)
-        if #available(macOS 26.0, iOS 26.0, *) {
-            button.buttonStyle(.glass)
-        } else {
-            button.buttonStyle(.bordered)
-        }
+        .buttonStyle(.plain)
     }
 
     var isLastPage: Bool {
@@ -571,16 +610,6 @@ private struct TourBottomPanelSizingView: View {
 
 #endif
 
-private struct TourCardSurface: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        } else {
-            content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        }
-    }
-}
-
 public struct PageIndicator: View {
     let totalPages: Int
     let currentIndex: Int
@@ -594,7 +623,7 @@ public struct PageIndicator: View {
         HStack(spacing: 7) {
             ForEach(0..<totalPages, id: \.self) { index in
                 Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(index == currentIndex ? 0.95 : 0.32))
+                    .fill(index == currentIndex ? Color.white.opacity(0.95) : Color.white.opacity(0.32))
                     .frame(width: index == currentIndex ? 24 : 8, height: 8)
             }
         }

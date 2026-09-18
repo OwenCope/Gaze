@@ -1,5 +1,43 @@
 # Gaze handoff, September 18
 
+## Website deployment recovery
+
+The failed Vercel preview at commit 3d5bf3f omitted 11 local-only imported modules
+and required media. Application source, referenced media and package declarations
+are now staged for Hydra. `npm run build` has a prebuild input check that catches
+missing/untracked deployment files. No manual commit or push was made.
+
+Lapse's private registry then caused npm E401 in the first recovery preview.
+It is now an optional local install (`npm run setup:lapse`, `npm run dev:lapse`),
+with production aliases to an empty component. User-level npm credentials stay
+local. Vercel CLI link refreshed its local OIDC configuration; env files were
+excluded from uploads and Git.
+
+Successful preview: https://gaze-site-e7u0w982h-gaze2.vercel.app
+Deployment: dpl_HJab3L1ZZNYsgXiWws7uxAmpp7D9, READY. Public pages/media returned200;
+/admin redirects to /signin. All82 existing tests pass. Browser access retains
+Vercel protection; authenticated CLI checks passed. Evidence is in gaze-site/
+build/deployment-recovery-20260918/RESULT.json. The temporary upload allowlist
+was removed. Production was not promoted.
+
+TourKit preset styling remains restored and installed. Its fresh local DMG is
+build/installers/20260918-tourkit-preset/Gaze-0.1-arm64-local-preview.dmg,
+SHA256 504e84e9ae2582aaa166bbfb6f200442b9d4904096a96ac8277261f4328ccb27.
+Real app screenshot replacement is still waiting for macOS capture access.
+
+## Latest correction: TourKit preset styling
+
+The user rejected the translucent custom-glass tour in a screenshot and explicitly
+reaffirmed TourKit’s preset styling. The pinned upstream opaque dark card, blue
+action button, icon circles, white text and page indicators have been restored.
+Live movement content, centering, navigation and accessibility fixes remain.
+Build, preset-style comparison and tour interaction checks passed. Installed
+PID 45776, executable SHA256 e6ca309966aaac249415249a6caa57701586ba2da9a25297ee36a219a9be294c.
+Evidence: build/tourkit-preset-20260918. The ProductCapture helper must be rebuilt
+with build.py before future screenshots; its previous binary has the rejected skin.
+This correction supersedes the custom-glass decisions described below.
+Do not reinterpret a general glass request as permission to replace TourKit’s skin.
+
 Read this file and `Tools/Release/Polish20260918/PROGRESS.md` before continuing.
 They supersede the 10:40 UTC checkpoint, which is preserved in
 `Tools/Release/ShipPass20260918/SESSION-HANDOFF-1040.md`.
