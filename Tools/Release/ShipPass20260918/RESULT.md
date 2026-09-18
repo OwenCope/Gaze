@@ -1,5 +1,15 @@
 # Gaze improvement pass, September 18
 
+Latest installation follow-up: the full-window introduction now includes the
+movement demonstrations in its nine-page tour. It continues directly into the
+remaining setup steps, and Back from capture restores the last tour page.
+The signed build was installed at `build/Gaze.app` and relaunched at
+2026-09-18 03:44 UTC. One running agent, PID 89692, was verified against the
+installed executable. The login agent was temporarily unloaded for the swap and
+restored without changing its plist. The prior bundle is preserved under
+`build/archive/2026-09-18/before-unified-tour-20260918T034153Z/Gaze.app`.
+`build/gaze-ship-20260918/unified-tour-install-result.json` records the replacement.
+
 This pass adds native feature guidance, improves onboarding and admin workflows,
 and validates the combined app and website changes. Timing is recorded in
 `WORK-SESSION.json`.
@@ -7,17 +17,18 @@ and validates the combined app and website changes. Timing is recorded in
 ## Review artifacts
 
 - Local app: `build/gaze-ship-20260918/Gaze.app`
-- Installer: `build/installers/20260918-tourkit-tipkit/Gaze-0.1-arm64-local-preview.dmg`
+- Earlier installer (predates the unified tour): `build/installers/20260918-tourkit-tipkit/Gaze-0.1-arm64-local-preview.dmg`
 - Website preview: http://127.0.0.1:55524/features
-- Tour overview: `build/gaze-ship-20260918/tour-overview.jpg`
+- Current tour captures: `build/gaze-ship-20260918/tour-interaction/step-1.png` through `step-9.png`
 - Detailed evidence: `build/gaze-ship-20260918/validation-summary.json`
 
-The installer is 98,729,532 bytes and contains an arm64 app targeting macOS 26+.
+The earlier installer is 98,729,532 bytes and contains an arm64 app targeting macOS 26+.
 It is Apple Development signed and is a local preview, not a notarized public
-release. The normal running app was not replaced with this candidate.
+release. It has not been repackaged with the unified tour; the installed app and
+local app candidate above contain the latest changes.
 
 App executable SHA-256:
-`1d851eea3a584887cfffc63de779148d4cb213f5df83921801de504678ee0882`
+`91b1a28459a36ea0a97afe202b4c73ccd7e2e83d3887878a5fc4b013734883b6`
 
 DMG SHA-256:
 `0d7f1145acf3237bd61082ab8aadb0897f18c716b93564880d8f65719c0a0b3f`
@@ -27,10 +38,12 @@ DMG SHA-256:
 - Ezra 4 added a native TipKit hint for the simulated panel preview. It uses
   daily display frequency, a two-display maximum, and invalidates after Play.
   Review/scan/browser-only execution does not configure or update tip history.
-- The TourKit introduction now uses current project imagery, labels Back and
-  Close clearly, and excludes the invisible first-page Back button from focus.
-  Completing the introduction leads to interactive movement practice; it does
-  not enable camera access or automatic unlocking.
+- The TourKit introduction fills its native window and includes the movement
+  demonstrations with one Back/Continue system and page indicator. Only the
+  active movement mounts a renderer. Its Pause control respects Reduce Motion,
+  and all demonstrations keep the camera off. The native window owns closing;
+  the invisible first-page Back button is excluded from focus. Finishing the tour
+  leads directly to the remaining setup steps, without a separate practice guide.
 - Setup avoids duplicate capture when a usable enrollment already exists.
   Recognition testing offers a setup path without starting the camera for an
   unenrolled user.
@@ -72,7 +85,7 @@ DMG SHA-256:
 | Native production-source build | Passed with Xcode-beta; TipKit linked. |
 | Native signature | Deep strict verification passed; established signing requirement retained. |
 | DMG | Checksum, mounted app signature/hash, Applications link, Finder positions and background passed. |
-| Tour fixture | Next, Back, final action, Close, hidden initial Back, and three slide captures passed using the actual views and inert callbacks. |
+| Tour fixture | Nine pages, one navigation/progress system, Pause/Play, Back, saved page restoration, one-movement copy, app Reduce Motion, and native window closing passed using actual views and inert callbacks. System Reduce Motion and raw Escape injection were not exercised. |
 | Setup fixture | 54 light/dark renders and plan checks passed; earlier display-driven lesson checks also passed. |
 | Lockout feedback | Actual row/handler compiled with a fake verifier: failure persists, typing clears it, and only verified input clears lockout. |
 | Backend/SEO tests | 82 tests passed with temporary data or mocked services. |
