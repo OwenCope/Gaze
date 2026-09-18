@@ -146,6 +146,20 @@ struct OnboardingTests {
 				}
 			}
 		}
+		let unenrolled = SetupPlan(hasPassword: false, hasPermission: false, hasEnrollment: false)
+		precondition(unenrolled.steps.prefix(3) == [.how, .meetGaze, .capture],
+			"Unenrolled onboarding must still capture a face")
+		let enrolled = SetupPlan(hasPassword: false, hasPermission: false, hasEnrollment: true)
+		precondition(enrolled.steps.prefix(2) == [.how, .meetGaze],
+			"Enrolled onboarding must still explain the app")
+		precondition(!enrolled.steps.contains(.capture),
+			"Enrolled onboarding must not save another face")
+		let enrolledForced = SetupPlan(hasPassword: false, hasPermission: false, including: .capture, hasEnrollment: true)
+		precondition(enrolledForced.steps.contains(.capture),
+			"Explicitly forced capture must still capture when enrolled")
+		let enrolledAddFace = SetupPlan(hasPassword: false, hasPermission: false, purpose: .addFace, hasEnrollment: true)
+		precondition(enrolledAddFace.steps == [.capture],
+			"Add-face must always capture, regardless of enrollment")
 	}
 
 	static func checkFirstUse() {

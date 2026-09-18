@@ -1,35 +1,44 @@
 import SwiftUI
 
-/// Setup's primary button.
-///
-/// The same native push button the rest of the app uses (`gazeButton`) at `.large`: the
-/// system bordered styles, which render as real Liquid Glass on macOS 26 and read as Apple's
-/// because they are. No green tint — buttons take the system accent, so green stays reserved
-/// for the one thing it means in Gaze, *recognised*.
 struct SetupButton: View {
 	var title: String = "Continue"
 	var isProminent = true
 	var action: () -> Void
 
 	var body: some View {
+		Group {
+			if isProminent {
+				button.buttonStyle(.glassProminent)
+			} else {
+				button.buttonStyle(.glass)
+			}
+		}
+		.controlSize(.large)
+		.buttonBorderShape(.capsule)
+		.keyboardShortcut(.defaultAction)
+	}
+
+	private var button: some View {
+		Button(action: action) {
+			Text(title)
+				.font(.body.weight(.semibold).scaled(by: 14.0 / 13.0))
+				.frame(minWidth: 132)
+		}
+	}
+}
+
+struct SetupSecondaryButton: View {
+	let title: String
+	var action: () -> Void
+
+	var body: some View {
 		Button(title, action: action)
-			.gazeButton(isProminent ? .primary : .standard, size: .extraLarge)
-			// Tinted white, and only here.
-			//
-			// `.glassProminent` takes the accent colour and lenses whatever is behind it.
-			// In Settings that is a light glass sheet and it comes out as a real button. In
-			// setup the ground is near-black under an 0.80 scrim, so the material had almost
-			// nothing to refract and the accent had nothing to lift: Continue rendered as a
-			// dim grey capsule with grey text, which on a dark screen is the exact appearance
-			// of a *disabled* control. The one action the screen exists for looked switched
-			// off.
-			//
-			// White rather than a colour, deliberately. Green means "recognised" everywhere
-			// in this app and spending it on a navigation button dilutes the one place it
-			// carries meaning. A light capsule with dark type is what macOS puts on a dark
-			// sheet, and it stays a system glass control — the tint is the only thing
-			// changed.
-			.tint(isProminent ? .white : Theme.setupSecondary)
+			.buttonStyle(.glass)
+			.buttonBorderShape(.capsule)
+			.controlSize(.regular)
+			.foregroundStyle(Theme.setupSecondary)
+			.padding(.horizontal, 8)
+			.padding(.vertical, 2)
 	}
 }
 
@@ -52,9 +61,9 @@ struct SetupGlyph: View {
 
 	var body: some View {
 		Image(systemName: symbol)
-			.font(.system(size: 76, weight: .light))
-			.foregroundStyle(tint ?? .white)
-			.shadow(color: .black.opacity(0.35), radius: 20, y: 8)
+			.font(.system(size: 60, weight: .regular))
+			.foregroundStyle(tint ?? .primary)
+			.accessibilityHidden(true)
 	}
 }
 
@@ -77,6 +86,7 @@ struct GlassField: View {
 	var onSubmit: () -> Void = {}
 
 	@FocusState private var isFocused: Bool
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	var body: some View {
 		Group {
@@ -87,12 +97,13 @@ struct GlassField: View {
 			}
 		}
 		.textFieldStyle(.plain)
+		.accessibilityLabel(placeholder)
 		// Scaled, because this is the one field in setup somebody actually types into —
 		// a password, without seeing what they typed. A fixed 15pt meant the person most
 		// likely to have raised their system text size got the app's least forgiving
 		// control at the app's smallest fixed size.
 		.font(.body.scaled(by: 15.0 / 13.0))
-		.foregroundStyle(.white)
+		.foregroundStyle(.primary)
 		.focused($isFocused)
 		.onSubmit(onSubmit)
 		.disabled(!isEnabled)
@@ -101,7 +112,7 @@ struct GlassField: View {
 		.padding(.vertical, 12)
 		// Long enough to hold a password without scrolling it, and wide enough that the
 		// capsule reads as a capsule rather than a pill with two characters in it.
-		.frame(width: 360)
+		.frame(minWidth: 0, maxWidth: 360)
 		// The material only. No hand-drawn capsule under it.
 		//
 		// This drew its own fill and its own edge *and then* applied `.glassEffect` on top,
@@ -112,9 +123,9 @@ struct GlassField: View {
 		.glassEffect(.regular, in: .capsule)
 		.overlay {
 			Capsule(style: .continuous)
-				.strokeBorder(.white.opacity(isFocused ? 0.34 : 0), lineWidth: 1)
+				.strokeBorder(Color.accentColor.opacity(isFocused ? 0.8 : 0), lineWidth: 1)
 		}
-		.animation(Theme.Motion.quick, value: isFocused)
+		.animation(reduceMotion ? nil : Theme.Motion.quick, value: isFocused)
 		.onAppear { isFocused = true }
 	}
 }

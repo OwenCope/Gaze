@@ -19,6 +19,9 @@ struct RecognitionTestView: View {
 
 	let store: FaceEnrollmentStore
 
+	@Environment(\.openWindow) private var openWindow
+	@Environment(\.dismissWindow) private var dismissWindow
+
 	@State private var camera = CameraController()
 	@State private var score: Float = 0
 	@State private var matched = false
@@ -64,7 +67,8 @@ struct RecognitionTestView: View {
 	}
 
 	var body: some View {
-		RecognitionTestPanel(readout: readout, showsDetail: $showsDetail, next: { challenge.next() }, reset: reset) {
+		RecognitionTestPanel(readout: readout, showsDetail: $showsDetail, next: { challenge.next() }, reset: reset,
+			onSetup: store.isEnrolled ? nil : handleSetup) {
 			cameraPreview
 		} companion: {
 			GazeCompanionView(motion: companionMotion)
@@ -74,6 +78,9 @@ struct RecognitionTestView: View {
 		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
+			// No enrollment means no capture: opening this test must not prompt for
+			// camera access. The setup button owns the path forward instead.
+			guard store.isEnrolled else { return }
 			await camera.start(pinnedDeviceID: store.pinnedCameraID)
 		}
 		.onDisappear {
@@ -158,7 +165,16 @@ struct RecognitionTestView: View {
 	}
 
 	@ViewBuilder private var cameraPreview: some View {
-		if camera.state == .running {
+		if !store.isEnrolled {
+			ZStack {
+				Theme.surface
+				VStack(spacing: 12) {
+					Image(systemName: "person.crop.rectangle").font(.title2)
+					Text("Enroll your face before testing recognition.")
+						.multilineTextAlignment(.center)
+				}.font(.callout).foregroundStyle(Theme.secondaryLabel).padding(24)
+			}
+		} else if camera.state == .running {
 			CameraPreview(controller: camera)
 		} else {
 			ZStack {
@@ -178,6 +194,14 @@ struct RecognitionTestView: View {
 				}.font(.callout).foregroundStyle(Theme.secondaryLabel).padding(24)
 			}
 		}
+	}
+
+	private func handleSetup() {
+		camera.stop()
+		SetupRequest.beginOnboarding()
+		AppActivation.bringToFront(userInitiated: true)
+		openWindow(id: "enrollment")
+		dismissWindow(id: "test")
 	}
 
 	private func reset() {
@@ -218,7 +242,7 @@ struct RecognitionTestView: View {
 	private var statusText: String {
 		if case .failed(let reason) = camera.state { return reason }
 		if camera.state == .denied { return "Camera access is off" }
-		if camera.state == .idle { return "Starting camera…" }
+		if camera.state == .idle { return store.isEnrolled ? "Starting camera…" : "Not enrolled" }
 		if camera.lastFrameCapturedAt == nil { return "Waiting for camera frames…" }
 		if !store.isEnrolled { return "Not enrolled" }
 		// The reason, not just the fact. This window exists to explain why recognition is or

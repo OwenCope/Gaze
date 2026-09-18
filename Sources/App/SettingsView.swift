@@ -291,11 +291,11 @@ struct SettingsView: View {
 			// on screen, not wider ones.
 			.frame(maxWidth: Self.contentWidth, alignment: .leading)
 			.frame(maxWidth: .infinity)
-			.padding(.horizontal, 22)
+			.padding(.horizontal, 24)
 			// The toolbar owns the traffic-light clearance now, so this is just the gap
 			// under the glass rather than a hand-measured dodge around the buttons.
-			.padding(.top, 18)
-			.padding(.bottom, 26)
+			.padding(.top, 20)
+			.padding(.bottom, 24)
 		}
 		.scrollIndicators(.never)
 			// Scrolls to a search result's section after the pane switch lays out,
@@ -355,9 +355,9 @@ struct SettingsView: View {
 			}
 			.frame(maxWidth: Self.contentWidth, alignment: .leading)
 			.frame(maxWidth: .infinity)
-			.padding(.horizontal, 22)
-			.padding(.top, 18)
-			.padding(.bottom, 26)
+			.padding(.horizontal, 24)
+			.padding(.top, 20)
+			.padding(.bottom, 24)
 		}
 		.scrollIndicators(.never)
 	}
@@ -1689,6 +1689,7 @@ private struct FaceTile: View {
 	var setPortrait: (NSImage?) -> Void
 	var remove: () -> Void
 
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 	@State private var hovering = false
 	/// Keep actions in the focus/accessibility tree even before the pointer arrives.
 	@FocusState private var portraitFocused: Bool
@@ -1788,7 +1789,7 @@ private struct FaceTile: View {
 				.allowsHitTesting(controlsVisible)
 				.accessibilityHidden(false)
 				.offset(x: -30, y: 30)
-				.transition(.opacity)
+				.transition(reduceMotion ? .identity : .opacity)
 			}
 
 			// On hover *or* keyboard focus: a control that only exists `if hovering`
@@ -1809,10 +1810,13 @@ private struct FaceTile: View {
 				.allowsHitTesting(controlsVisible)
 				.accessibilityHidden(false)
 				.offset(x: 7, y: -7)
-				.transition(.scale.combined(with: .opacity))
+				.transition(reduceMotion ? .identity : .opacity)
 			}
 		}
-		.animation(.easeOut(duration: 0.15), value: controlsVisible)
+		.animation(
+			reduceMotion || portraitFocused || removeFocused || isEditing
+				? nil : .easeOut(duration: 0.12),
+			value: controlsVisible)
 
 			TextField("Name", text: $draft)
 				.textFieldStyle(.plain)
@@ -1902,6 +1906,7 @@ private struct AddFaceTile: View {
 
 	var action: () -> Void
 
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 	@State private var hovering = false
 
 	var body: some View {
@@ -1941,6 +1946,6 @@ private struct AddFaceTile: View {
 		.buttonStyle(.plain)
 		.onHover { hovering = $0 }
 
-		.animation(.easeOut(duration: 0.15), value: hovering)
+		.animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovering)
 	}
 }
