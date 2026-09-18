@@ -1,6 +1,9 @@
 # Gaze improvement pass, September 18
 
-Latest installation follow-up: the full-window introduction now includes the
+Current tour and installation: [STOCK-TOUR.md](STOCK-TOUR.md). The tour details,
+screenshots, and executable hash below describe the earlier nine-page version.
+
+Earlier installation follow-up: the full-window introduction now includes the
 movement demonstrations in its nine-page tour. The tour is now constrained to
 640x520 points, with 180-point movement demos; other setup stages retain their
 880x660 minimum. It continues directly into the remaining setup steps, and Back

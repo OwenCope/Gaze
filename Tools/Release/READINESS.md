@@ -1,5 +1,17 @@
 # Gaze release gates
 
+Latest local result: [ShipPass20260918/FINAL-LOCAL-RESULT.md](ShipPass20260918/FINAL-LOCAL-RESULT.md).
+The updated app is installed and a matching local-preview DMG is verified. The
+rewritten website passed its build and responsive document checks. Public release
+still needs rights, Developer ID/notarization, and owner-supervised acceptance.
+
+Current tour checkpoint: [ShipPass20260918/STOCK-TOUR.md](ShipPass20260918/STOCK-TOUR.md).
+Unmodified upstream TourKit, proportional sizing, rounded artwork, and a
+borderless host are installed and running. Build, signature, and bundled-artwork
+checks passed; the current five-page borderless interaction fixture also passes
+without clipping. The notes below are
+earlier checkpoints.
+
 September 18 update: [ShipPass20260918/RESULT.md](ShipPass20260918/RESULT.md)
 records the current TourKit/TipKit app candidate, local DMG, backend/admin fixes,
 SEO checks, and remaining acceptance gates. The candidate builds and verifies;

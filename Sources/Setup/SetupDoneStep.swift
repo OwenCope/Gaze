@@ -65,8 +65,6 @@ struct SetupDoneStep: View {
 	/// complete first-run setup; nil keeps existing callers and previews unchanged.
 	var onTestRecognition: (() -> Void)? = nil
 
-	@State private var trigger = 0
-
 	private var didFail: Bool { failure != nil }
 
 	/// Whether the Done screen offers the secondary route into Settings.
@@ -98,42 +96,61 @@ struct SetupDoneStep: View {
 		return unfinished.summary
 	}
 
+	/// The single TourKit page for this outcome, with the existing title and
+	/// message. The artwork follows success vs failure only: a partial setup
+	/// (face saved, password or permission skipped) is not a failure, so it
+	/// keeps the success art. When the recognition test is offered, the page
+	/// carries the same truthful camera-without-locking explanation the old
+	/// detail row showed.
+	private var page: TourPage {
+		let description: String
+		if showsRecognitionAction {
+			description = message + "\n\nTest Recognition uses the camera without locking or unlocking this Mac."
+		} else {
+			description = message
+		}
+		return TourPage(
+			imageName: didFail ? "Art/onboarding-failure.png" : "Art/onboarding-success.png",
+			imageBundle: .main,
+			title: "\(Self.title(failed: didFail, unfinished: unfinished, isAddingFace: isAddingFace))",
+			description: "\(description)"
+		)
+	}
+
+	/// The primary button title for this outcome.
+	///
+	/// Failure retries; a partial setup finishes in Settings; a complete
+	/// first-run setup with a recognition opener offers the test; everything
+	/// else just closes.
+	private var primaryTitle: String {
+		if didFail { return "Try Again" }
+		if showsSettingsAction { return "Finish in Settings" }
+		if showsRecognitionAction { return "Test Recognition" }
+		return "Done"
+	}
+
+	/// The primary action for this outcome, matching `primaryTitle`.
+	///
+	/// TourKit's built-in close control always invokes `onDone`, so the
+	/// recognition test stays optional: closing never tests, it just closes.
+	private var primaryAction: () -> Void {
+		if didFail { return onRetry }
+		if showsSettingsAction { return { onOpenSettings?() } }
+		if showsRecognitionAction, let onTestRecognition { return onTestRecognition }
+		return onDone
+	}
+
 	var body: some View {
-		SetupScaffold(
-			title: Self.title(failed: didFail, unfinished: unfinished, isAddingFace: isAddingFace),
-			message: message,
-			figureHeight: 180
-		) {
-			SetupMark(kind: didFail ? .failure : .success, diameter: 180, trigger: trigger)
-		} detail: {
-			if showsRecognitionAction {
-				Text("Test Recognition uses the camera without locking or unlocking this Mac.")
-					.font(.caption)
-					.foregroundStyle(Theme.setupSecondary)
-					.multilineTextAlignment(.center)
-					.fixedSize(horizontal: false, vertical: true)
-					.frame(maxWidth: 400)
-					.padding(.top, 12)
-			}
-		} actions: {
-			SetupButton(title: didFail ? "Try Again" : "Done", action: didFail ? onRetry : onDone)
-			if didFail {
-				SetupSecondaryButton(title: "Close", action: onDone)
-			} else if showsSettingsAction {
-				SetupSecondaryButton(title: "Finish in Settings", action: { onOpenSettings?() })
-			} else if showsRecognitionAction, let onTestRecognition {
-				SetupSecondaryButton(title: "Test Recognition", action: onTestRecognition)
-					.help("Uses the camera to check your face. It does not lock or unlock the Mac.")
-			}
-		}
-		// Played once the view is actually on screen rather than on appear, so it
-		// does not run underneath the step transition and finish before it is seen.
-		// Later than the scaffold's own arrival, so the tick lands on a settled screen
-		// instead of bouncing while the words are still moving.
-		.task {
-			do { try await Task.sleep(for: .milliseconds(260)) }
-			catch { return }
-			trigger += 1
-		}
+		TourSlideshowView(
+			pages: [page],
+			width: GazeTourSizing.baseWidth,
+			continueButtonTitle: "\(primaryTitle)",
+			finishButtonTitle: "\(primaryTitle)",
+			onFinish: primaryAction,
+			onClose: onDone
+		)
+		.frame(width: GazeTourSizing.baseWidth, height: GazeTourSizing.panelHeight / GazeTourSizing.scale)
+		.scaleEffect(GazeTourSizing.scale)
+		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 }

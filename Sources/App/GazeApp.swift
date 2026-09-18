@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Darwin
 import SwiftUI
 import os
 
@@ -51,6 +52,12 @@ struct GazeApp: App {
 	private let presentsSettingsAtLaunch: Bool
 
 	init() {
+		// Same-bundle foreground handoff: a `--settings` (or bare) launch while this
+		// bundle is already running presents the running app and exits here, before
+		// StartupTiming/AppServices/OnboardingHistory or any service starts. Flagged
+		// launches (notably `--agent`) never take this exit, so KeepAlive relaunches
+		// cannot loop on it.
+		if SettingsLaunchHandoff.redirectIfNeeded() { Darwin.exit(0) }
 		let totalStart = StartupTiming.start()
 		let enrolled = StartupTiming.measure(label: "services") { AppServices.shared.store.isEnrolled }
 		if enrolled { OnboardingHistory.markPresented() }
@@ -130,14 +137,61 @@ struct GazeApp: App {
 		Window("Set Up Gaze", id: "enrollment") {
 			EnrollmentWindow(store: store)
 				.scrollIndicators(.never)
+				.containerBackground(.clear, for: .window)
 		}
 		.windowResizability(.contentSize)
-		.defaultSize(width: 720, height: 560)
+		.defaultSize(width: 760, height: 680)
 		.restorationBehavior(.disabled)
-		.windowStyle(.hiddenTitleBar)
+		.windowStyle(.plain)
 		.defaultLaunchBehavior(!AppActivation.isBackgroundLaunch && !presentsSettingsAtLaunch ? .presented : .suppressed)
+
+		// The camera-free movement guide. Suppressed at launch: it only ever opens
+		// from the guide entries in Settings and Notch settings, never on its own.
+		Window("Movement guide", id: "movement-guide") {
+			GazeMovementGuideWindow()
+		}
+		.windowResizability(.contentSize)
+		.defaultSize(width: 760, height: 680)
+		.restorationBehavior(.disabled)
+		.windowStyle(.plain)
+		.defaultLaunchBehavior(.suppressed)
 	}
 
+}
+
+/// Thin host around `GazeMovementTour`; the window owns presentation, the tour
+/// only owns its pages.
+///
+/// Mirrors `SetupWelcomeStep`: an invisible drag strip along the top edge (a `.plain`
+/// window has no title bar to grab) and a return to accessory activation once the
+/// window is gone. The child identity resets on every appearance so reopening the
+/// guide starts on page one. No camera, no permissions, no enrollment — the tour
+/// never starts any of them.
+private struct GazeMovementGuideWindow: View {
+
+	@Environment(\.dismissWindow) private var dismissWindow
+	@State private var tourRevision = 0
+
+	var body: some View {
+		GazeMovementTour(
+			onClose: { dismissWindow(id: "movement-guide") },
+			movementCount: Preferences.shared.unlockMovementCount.rawValue
+		)
+		.containerBackground(.clear, for: .window)
+		// Recreated on reopening so the tour starts on page one.
+		.id(tourRevision)
+		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+		.overlay(alignment: .top) {
+			Color.clear
+				.frame(height: 10)
+				.contentShape(Rectangle())
+				.gesture(WindowDragGesture())
+				.allowsWindowActivationEvents(true)
+				.accessibilityHidden(true)
+		}
+		.onAppear { tourRevision += 1 }
+		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
+	}
 }
 
 // MARK: - Activation

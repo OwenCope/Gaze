@@ -31,6 +31,8 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(host_target)" \
 	"$ROOT/Sources/Setup/SetupMark.swift" \
 	"$ROOT/Sources/Setup/SetupWelcomeStep.swift" \
 	"$ROOT/Sources/Setup/GazeWelcomeTour.swift" \
+	"$ROOT/Sources/Setup/GazeTourSizing.swift" \
+	"$ROOT/Sources/Setup/GazeMovementTour.swift" \
 	"$ROOT/Sources/Setup/GazeTourMovementPage.swift" \
 	"$ROOT/ThirdParty/TourKit/TourKit.swift" \
 	"$ROOT/Sources/Setup/SetupHowStep.swift" \
@@ -42,7 +44,7 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(host_target)" \
 	-o "$APP/Contents/MacOS/OnboardingReview"
 cp "$ROOT/build/Gaze.app/Contents/Resources/AppIcon.icns" "$APP/Contents/Resources/"
 mkdir -p "$APP/Contents/Resources/Art"
-for artwork in tour-recognition tour-privacy tour-practice; do
+for artwork in tour-recognition tour-privacy how-unlock tour-practice how-keychain tour-rounded-recognition tour-rounded-privacy tour-rounded-unlock tour-rounded-practice tour-rounded-keychain onboarding-recognition onboarding-local onboarding-unlock onboarding-choice onboarding-success onboarding-failure movement-left movement-right movement-nod movement-blink movement-mouth; do
 	cp "$ROOT/Resources/Art/$artwork.png" "$APP/Contents/Resources/Art/"
 done
 cp "$ROOT/ThirdParty/TourKit/LICENSE" "$APP/Contents/Resources/TourKit-LICENSE.txt"

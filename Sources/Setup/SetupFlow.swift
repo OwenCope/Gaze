@@ -52,7 +52,6 @@ struct SetupFlow: View {
 	@State private var camera = CameraController()
 	@State private var model: EnrollmentModel?
 	@State private var step: SetupStep = .welcome
-	@State private var welcomePageIndex = 0
 	@State private var tourRevision = 0
 	@State private var failure: String?
 	@State private var isPresented = false
@@ -76,15 +75,10 @@ struct SetupFlow: View {
 			switch step {
 			case .welcome:
 			SetupWelcomeStep(
-				movementCount: Preferences.shared.unlockMovementCount.rawValue,
-				initialPageIndex: welcomePageIndex,
-				onPageChange: { welcomePageIndex = $0 },
 				onContinue: advance,
-				onSkip: skipTour
+				onClose: onFinish
 			)
-			// Recreated on restart so the tour re-opens on its first page:
-			// TourKit takes the page only at init. Taps inside the tour report
-			// through onPageChange without touching this revision.
+			// Recreated on restart so the tour starts fresh on reopening.
 			.id(tourRevision)
 			case .how:
 				SetupHowStep(
@@ -163,7 +157,12 @@ struct SetupFlow: View {
 		// The user's own wallpaper, blurred and darkened — the same ground the rest of the
 		// app now uses. Setup used to be flat black, which made it the one window in Gaze
 		// that did not belong to the machine it was running on.
-		.background(SetupBackdrop())
+		.background {
+			if step != .welcome && step != .done {
+				SetupBackdrop()
+					.clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+			}
+		}
 		.preferredColorScheme(Preferences.shared.appTheme.colorScheme)
 		// Back to the beginning every time the window is shown.
 		//
@@ -207,7 +206,6 @@ struct SetupFlow: View {
 		captureSession += 1
 		failure = nil
 		isReturning = false
-		welcomePageIndex = 0
 		tourRevision += 1
 		// A screen Settings asked for wins over the launch flag, which wins over the start.
 		let requested = SetupRequest.consumePendingStep() ?? Self.consumeLaunchStep()
@@ -319,18 +317,8 @@ struct SetupFlow: View {
 
 	/// One window size for the whole flow: the tour and the setup steps share it,
 	/// so moving from the tour into capture never resizes the window.
-	private var preferredWidth: CGFloat { 720 }
-	private var preferredHeight: CGFloat { 560 }
-
-	/// Leave the tour for capture without completing setup.
-	private func skipTour() {
-		guard let captureIndex = plan.steps.firstIndex(of: .capture) else {
-			advance()
-			return
-		}
-		isReturning = false
-		withAnimation(stepAnimation) { step = plan.steps[captureIndex] }
-	}
+	private var preferredWidth: CGFloat { 760 }
+	private var preferredHeight: CGFloat { 680 }
 
 	/// What is still missing once the flow reaches the end.
 	///

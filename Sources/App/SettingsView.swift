@@ -464,6 +464,14 @@ struct SettingsView: View {
 				}
 				.gazeButton()
 			}
+			RowDivider()
+			SettingRow(title: "Movement guide", detail: "Preview the prompts with the camera off.") {
+				Button("Open guide") {
+					AppActivation.bringToFront(userInitiated: true)
+					openWindow(id: "movement-guide")
+				}
+				.gazeButton()
+			}
 		}
 	}
 
