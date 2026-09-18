@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/rampatra/TourKit",
+  "commit": "4f2b109506650151d87cd5e84bb9fe2623938781",
+  "upstream_paths": [
+    "Sources/TourKit/TourKit.swift",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "files": {
+    "TourKit.swift": {
+      "upstream": "Sources/TourKit/TourKit.swift",
+      "upstreamSha256": "4d67d1f9eaa13dd63d5dc72044b5a9d28cb707117e0a39ef6070ca6187a76207",
+      "localSha256": "dc633fbae1afd9062ad5cb3c0dbb04a1bc12da8780613d80d71ce4ac83df03be",
+      "localModifications": "see LOCAL-CHANGES.md"
+    },
+    "LICENSE": {
+      "upstream": "LICENSE",
+      "sha256": "16f93985c8cf09d8551c5c8a8dd05ec200fca814529243a5ea0642ec39ef68dc"
+    }
+  },
+  "localModifications": {
+    "baseCommit": "4f2b109506650151d87cd5e84bb9fe2623938781",
+    "modifiedFiles": ["TourKit.swift"],
+    "details": "see LOCAL-CHANGES.md"
+  }
+}

@@ -73,7 +73,7 @@ struct SetupFlow: View {
 		Group {
 			switch step {
 			case .welcome:
-				SetupWelcomeStep(onContinue: advance, onSkip: onFinish)
+				GazeWelcomeTour(onContinue: advance, onClose: onFinish)
 			case .how:
 				SetupHowStep(
 					position: position(of: .how),
@@ -254,7 +254,7 @@ struct SetupFlow: View {
 		if purpose == .addFace { return SetupPlan(hasPassword: false, hasPermission: false, purpose: .addFace) }
 		return SetupPlan(hasPassword: PasswordVault.hasPassword,
 			hasPermission: SetupPermissionStatus.current.isReady, including: forced,
-			hasEnrollment: store.isEnrolled)
+			hasEnrollment: store.isEnrolled, usesWelcomeTour: true)
 	}
 
 	/// Where a step sits in the progress row, or nil for the two ends of the flow.

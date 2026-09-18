@@ -10,13 +10,17 @@ struct SetupPlan {
 	let steps: [SetupStep]
 	let purpose: SetupPurpose
 
-	init(hasPassword: Bool, hasPermission: Bool, including forced: SetupStep? = nil, purpose: SetupPurpose = .onboarding, hasEnrollment: Bool = false) {
+	init(hasPassword: Bool, hasPermission: Bool, including forced: SetupStep? = nil, purpose: SetupPurpose = .onboarding, hasEnrollment: Bool = false, usesWelcomeTour: Bool = false) {
 		self.purpose = purpose
 		guard purpose == .onboarding else {
 			steps = [.capture]
 			return
 		}
-		var steps: [SetupStep] = [.how, .meetGaze]
+		// The welcome tour already says what Gaze does and where the data stays, so the
+		// old explanation screen is redundant — unless diagnostics asked for it outright.
+		var steps: [SetupStep] = []
+		if !usesWelcomeTour || forced == .how { steps.append(.how) }
+		steps.append(.meetGaze)
 		if !hasEnrollment || forced == .capture { steps.append(.capture) }
 		if !hasPassword || forced == .password { steps.append(.password) }
 		if !hasPermission || forced == .permission { steps.append(.permission) }
@@ -31,7 +35,7 @@ struct SetupPlan {
 		guard purpose == .onboarding else { return nil }
 		return switch step {
 		case .how: .welcome
-		case .meetGaze: .how
+		case .meetGaze: steps.contains(.how) ? .how : .welcome
 		case .capture: .meetGaze
 		case .permission: steps.contains(.password) ? .password : nil
 		default: nil

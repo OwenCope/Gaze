@@ -28,6 +28,21 @@ same conclusion about the only route macOS leaves open: there is no API that let
 third-party app authorise a login, so the password is typed. Worth reading if you
 are here for how any of this works.
 
+## Third-party code
+
+### TourKit
+
+Onboarding tour UI, vendored from **TourKit** by Ram Patra:
+
+<https://github.com/rampatra/TourKit> — MIT licence, © 2026 Ram Patra
+
+Pinned at commit `4f2b109506650151d87cd5e84bb9fe2623938781`; the vendored
+source (`ThirdParty/TourKit/TourKit.swift`) and licence (`ThirdParty/TourKit/LICENSE`)
+are verbatim copies of upstream `Sources/TourKit/TourKit.swift` and `LICENSE` — see
+`ThirdParty/TourKit/SOURCE.json` for hashes. The source is compiled into the Gaze
+module directly (no separate TourKit module), and the licence ships in the bundle as
+`Contents/Resources/TourKit-LICENSE.txt`.
+
 ## Not ours to redistribute
 
 ### The recognition model

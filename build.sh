@@ -162,9 +162,12 @@ if [ -d "$ROOT/Resources/Credits" ]; then
 	echo "  ✓ $credit_count portrait(s)"
 fi
 
-# The onboarding animations are our own now (see `SetupMark.swift`) — plain SwiftUI,
-# no third-party framework. FaceIDKit (Aviorrok's, licensed to this app alone) used to be
-# linked here; it was dropped so nothing in the build depends on a file others can't have.
+# TourKit's MIT licence ships in the bundle because its source is compiled in.
+cp "$ROOT/ThirdParty/TourKit/LICENSE" "$STAGE/Contents/Resources/TourKit-LICENSE.txt"
+echo "  ✓ TourKit-LICENSE.txt"
+
+# SetupMark supplies Gaze's animations; TourKit supplies the opening slideshow.
+# The old proprietary FaceIDKit framework is not linked.
 
 # A distribution build links against the oldest SDK installed that still compiles this,
 # so the binary cannot reference a symbol an older Mac lacks. The linker also has to be
