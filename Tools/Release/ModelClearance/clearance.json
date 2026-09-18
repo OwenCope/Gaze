@@ -76,17 +76,24 @@
         "status": "weight-source-matched-upstream-unresolved"
       },
       "license": {
-        "summary": "Pinned Sapphire repository LICENSE is AGPL-3.0, not GPL-3.0. Model-specific/upstream coverage and obligations for the intended Gaze distribution remain unresolved; no clearance inferred from a repository licence or byte match.",
-        "grant": "",
+        "summary": "Shariq permission is now recorded for the Sapphire ArcFace model whose weights match the precompiled model bundled by Gaze. The different raw package and upstream weight/training rights remain unresolved. The pinned repository code licence is AGPL-3.0.",
+        "grant": "Owner-provided conversation records Shariq agreeing to use of the Sapphire ArcFace model in Gaze with app/website attribution, in the context of the upcoming release.",
         "evidenceRefs": [
           "Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md",
-          "Tools/Release/ModelClearance/sapphire-evidence/LICENSE"
+          "Tools/Release/ModelClearance/sapphire-evidence/LICENSE",
+          "Tools/Release/ModelClearance/SHARIQ-PERMISSION-20260918.md"
         ],
         "redistributionScope": [],
-        "status": "unresolved"
+        "status": "permission-recorded-upstream-and-alternate-package-unresolved",
+        "permissionCoverage": {
+          "modelWeightSHA256": "c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545",
+          "scope": "bundled-app-distribution",
+          "condition": "Credit Shariq/Sapphire in the app and website",
+          "evidenceSHA256": "cd059e3d602a8a3590b0d4519f7f72ad65c0627f67f9d05defdea84324ede37a"
+        }
       },
       "clearance": "unresolved",
-      "notes": "Owner must record a per-model permission/licence tied to the hashes above and the intended scope (see OWNER-TEMPLATE.md). Do not paste private grant documents into source; record a pointer."
+      "notes": "Shariq permission recorded on 2026-09-18. Entry still combines the covered Sapphire-derived precompiled weights with a different unresolved raw package, and does not establish upstream rights. See SHARIQ-PERMISSION-20260918.md."
     },
     {
       "id": "spoof-detector",
