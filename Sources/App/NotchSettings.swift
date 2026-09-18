@@ -26,6 +26,7 @@ private struct NotchChoiceMenu<Selection: Hashable, Options: View>: View {
 
 struct NotchSettingsSection: View {
 	@Bindable var settings: Preferences
+	@Environment(\.openWindow) private var openWindow
 	@State private var sizeExpanded = false
 
 	private var isOnEar: Bool {
@@ -92,9 +93,13 @@ struct NotchSettingsSection: View {
 		sizeControls
 
 		SettingsSection(title: "Expressions") {
-			GazeExpressionGuide(compact: true, movementCount: settings.unlockMovementCount.rawValue)
-				.padding(.vertical, 12)
-				.padding(.horizontal, Theme.rowInset)
+			SettingRow(title: "Movement guide", detail: "Preview the prompts with the camera off.") {
+				Button("Open guide") {
+					AppActivation.bringToFront(userInitiated: true)
+					openWindow(id: "movement-guide")
+				}
+				.gazeButton()
+			}
 		}
 	}
 		.onChange(of: settings.panelShape, initial: true) { _, shape in

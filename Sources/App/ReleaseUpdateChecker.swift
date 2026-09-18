@@ -38,11 +38,14 @@ final class ReleaseUpdateChecker {
 	private(set) var state: State = .idle
 	private let defaults: UserDefaults
 	private let sessionConfiguration: () -> URLSessionConfiguration
+	private let startupDelay: Duration
 
 	init(defaults: UserDefaults = .standard,
-		sessionConfiguration: @escaping () -> URLSessionConfiguration = ReleaseURLPolicy.sessionConfiguration) {
+		sessionConfiguration: @escaping () -> URLSessionConfiguration = ReleaseURLPolicy.sessionConfiguration,
+		startupDelay: Duration = .seconds(8)) {
 		self.defaults = defaults
 		self.sessionConfiguration = sessionConfiguration
+		self.startupDelay = startupDelay
 	}
 
 	/// The version this bundle claims to be.
@@ -70,6 +73,16 @@ final class ReleaseUpdateChecker {
 
 	private var timer: Timer?
 
+	/// Outstanding scheduled work: the deferred post-launch check or a
+	/// timer-triggered one. Tracked so stopping the schedule cancels a check
+	/// that is still in flight instead of letting it report into a dead schedule.
+	private var scheduledWork: Task<Void, Never>?
+
+	/// Bumped every time scheduled work is (re)started or stopped. A finished
+	/// task only clears `scheduledWork` when its generation is still current,
+	/// so a slow task from before a stop/restart can never nil out newer work.
+	private var scheduleGeneration = 0
+
     /// Starts the background schedule: one check shortly after launch, then daily.
 	///
 	/// Without this the feature was a button. Somebody who never opens Settings — which is
@@ -81,19 +94,67 @@ final class ReleaseUpdateChecker {
 	/// (the lock watcher, the models) and a release check is the least urgent thing the app
 	/// will do all day; it should not be competing for the network while the camera warms.
 	func startScheduledChecks() {
-		guard timer == nil else { return }
+		guard timer == nil, scheduledWork == nil else { return }
 
-		Task {
-			try? await Task.sleep(for: .seconds(8))
-			await checkIfDue()
+		scheduleGeneration += 1
+		let generation = scheduleGeneration
+		let delay = startupDelay
+		scheduledWork = Task { [weak self] in
+			do {
+				try await Task.sleep(for: delay)
+			} catch {
+				// Stopped before the delay elapsed: never check.
+				return
+			}
+			guard let self else { return }
+			guard generation == self.scheduleGeneration else { return }
+			guard !Task.isCancelled else { return }
+			await self.runScheduledCheck(generation: generation)
 		}
 
-		let timer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { _ in
-			Task { @MainActor in await ReleaseUpdateChecker.shared.checkIfDue() }
+		let timer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in
+			Task { @MainActor [weak self] in
+				guard let self else { return }
+				self.enqueueTimerCheck()
+			}
 		}
 		// Common modes, so it keeps firing while a menu is open.
 		RunLoop.main.add(timer, forMode: .common)
 		self.timer = timer
+	}
+
+	/// Stops the background schedule and cancels any scheduled check in flight.
+	///
+	/// Stopping twice is harmless, and starting again afterwards schedules fresh.
+	func stopScheduledChecks() {
+		scheduleGeneration += 1
+		timer?.invalidate()
+		timer = nil
+		scheduledWork?.cancel()
+		scheduledWork = nil
+	}
+
+	isolated deinit {
+		timer?.invalidate()
+		scheduledWork?.cancel()
+	}
+
+	/// Queues one hourly-timer check as cancellable scheduled work on this instance.
+	private func enqueueTimerCheck() {
+		guard timer != nil else { return }
+		scheduleGeneration += 1
+		let generation = scheduleGeneration
+		scheduledWork = Task { [weak self] in
+			guard let self else { return }
+			await self.runScheduledCheck(generation: generation)
+		}
+	}
+
+	/// Runs one scheduled due-check, releasing the tracked work unless a
+	/// stop/restart (or a newer timer tick) has superseded it meanwhile.
+	private func runScheduledCheck(generation: Int) async {
+		await checkIfDue()
+		if scheduleGeneration == generation { scheduledWork = nil }
 	}
 
 	/// Checks only if enough time has passed, and never while offering an update.
@@ -103,7 +164,10 @@ final class ReleaseUpdateChecker {
 	/// gazeunlock.com", turning a working notification into an error nobody asked for.
 	func checkIfDue() async {
 		if case .available = state { return }
-		if let last = lastCheck, Date().timeIntervalSince(last) < Self.interval { return }
+		if let last = lastCheck {
+			let elapsed = Date().timeIntervalSince(last)
+			if elapsed >= 0, elapsed < Self.interval { return }
+		}
 		await check()
 	}
 
@@ -111,11 +175,19 @@ final class ReleaseUpdateChecker {
 
 	func check() async {
 		guard state != .checking else { return }
+		// A cancelled check restores this rather than reporting an offline
+		// failure: stopping the schedule is not the network being down.
+		let previous = state
 		state = .checking
+		var cancelled = false
 		defer {
-			switch state {
-			case .upToDate, .available: lastCheck = Date()
-			case .idle, .checking, .failed: break
+			if cancelled {
+				state = previous
+			} else {
+				switch state {
+				case .upToDate, .available: lastCheck = Date()
+				case .idle, .checking, .failed: break
+				}
 			}
 		}
 
@@ -131,6 +203,9 @@ final class ReleaseUpdateChecker {
 				delegate: ReleaseFeedRedirectPolicy(), delegateQueue: nil)
 			defer { session.invalidateAndCancel() }
 			let (bytes, response) = try await session.bytes(for: request)
+			// A stop that lands mid-check must surface as a restored prior
+			// state, not as an answer from the server.
+			try Task.checkCancellation()
 			guard let http = response as? HTTPURLResponse, let finalURL = http.url,
 				ReleaseURLPolicy.isTrusted(finalURL), (200..<300).contains(http.statusCode) else {
 				let code = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -150,6 +225,7 @@ final class ReleaseUpdateChecker {
 				}
 				data.append(byte)
 			}
+			try Task.checkCancellation()
 
 			guard let payload = try? JSONDecoder().decode(Feed.self, from: data) else {
 				state = .failed("Couldn't read the update list.")
@@ -181,6 +257,15 @@ final class ReleaseUpdateChecker {
 					downloadURL: ReleaseURLPolicy.download(latest.download?.url)))
 			Self.logger.notice("Update available: \(latest.tag, privacy: .public)")
 		} catch {
+			// A stopped schedule is not an offline Mac. Cancellation — the
+			// task dying, a CancellationError, or the session reporting a
+			// cancelled request — puts the previous state back and leaves
+			// lastReleaseCheck alone.
+			if error is CancellationError
+				|| (error as? URLError)?.code == .cancelled || Task.isCancelled {
+				cancelled = true
+				return
+			}
 			// Offline is not an error worth alarming anyone about — it is the normal state of
 			// a laptop half the time — so this says what happened and stops.
 			state = .failed("Couldn't reach gazeunlock.com.")

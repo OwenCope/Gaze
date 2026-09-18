@@ -8,6 +8,7 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Applications/Gaze.app/Contents/MacOS/Gaze</string>
+		<string>--agent</string>
 	</array>
 
 	<!--

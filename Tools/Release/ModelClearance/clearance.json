@@ -1,6 +1,6 @@
 {
   "schema": "gaze-model-clearance/1",
-  "generated": "2026-09-16",
+  "generated": "2026-09-18",
   "note": "Fingerprints cover all declared model inputs, including precompiled models, package metadata and asset files. No clearance or provenance is inferred from matching bytes.",
   "requiredScopes": [
     "bundled-app-distribution"
@@ -127,7 +127,7 @@
     {
       "id": "setup-art",
       "kind": "image-set",
-      "description": "Setup card art (screenshots/clips of Gaze in use) copied whole from Resources/Art into the bundle. Optional at build time (vector fallback).",
+      "description": "Setup artwork, screenshots, clips, rounded variants and generated companion illustrations copied from Resources/Art into the app bundle.",
       "repoPaths": [
         "Resources/Art"
       ],
@@ -188,13 +188,111 @@
             "path": "Resources/Art/lockscreen-base.png",
             "bytes": 7788315,
             "sha256": "6e91fd10666d898f0f9177fbe20afebcde2610c8bad7e27e1bb57104489b6ef6"
+          },
+          {
+            "path": "Resources/Art/movement-blink.png",
+            "bytes": 63162,
+            "sha256": "2c4e789c27f5739f5cc7b052f8b44f52c5c2ce67f8eaf9191c2f9e2117152912"
+          },
+          {
+            "path": "Resources/Art/movement-left.png",
+            "bytes": 77914,
+            "sha256": "f170b87651a70d030db39412105d53440d468f0a333d808c0c3ea7aef7a72678"
+          },
+          {
+            "path": "Resources/Art/movement-mouth.png",
+            "bytes": 62355,
+            "sha256": "e90069b1cab0f25fb129b294669d23de35842ec422770e5ba33b0d58c258761e"
+          },
+          {
+            "path": "Resources/Art/movement-nod.png",
+            "bytes": 78851,
+            "sha256": "0f28eca4d7c7284bb4acd498ecfd9586aaf8f75b106716f9bf9e9ffa7888eec1"
+          },
+          {
+            "path": "Resources/Art/movement-right.png",
+            "bytes": 79228,
+            "sha256": "26190743e7cfb5c5c2e66e011a3aa43175bb248ddc8b701ed30182c30a553235"
+          },
+          {
+            "path": "Resources/Art/onboarding-choice.png",
+            "bytes": 55304,
+            "sha256": "4d8be27d3d59cd0ed7841366f8836299651cd16c71ece1284245677a12d7018f"
+          },
+          {
+            "path": "Resources/Art/onboarding-failure.png",
+            "bytes": 58892,
+            "sha256": "eac088625b33681ce7a93bb0d7982d8291fe990af4dd13d5cd6b59a9f2a74113"
+          },
+          {
+            "path": "Resources/Art/onboarding-local.png",
+            "bytes": 54492,
+            "sha256": "3fbed062cada40a5dc55239e66fdd8eb8e75aab4d308d426c246d24f286f837f"
+          },
+          {
+            "path": "Resources/Art/onboarding-recognition.png",
+            "bytes": 56499,
+            "sha256": "05b9faccb827cebdf9790f822cb67965f6c354ba4140ef4abb9df2a374ecb9a2"
+          },
+          {
+            "path": "Resources/Art/onboarding-success.png",
+            "bytes": 58377,
+            "sha256": "d8a853c860053832bb3ecdadd517bd732dad59778d54813c404b98b75a8afeee"
+          },
+          {
+            "path": "Resources/Art/onboarding-unlock.png",
+            "bytes": 58690,
+            "sha256": "4a648734b52b86cc0ee2535b90306864e533a4c59baf162df0064894e79110fd"
+          },
+          {
+            "path": "Resources/Art/tour-practice.png",
+            "bytes": 194388,
+            "sha256": "0e839b2bb9e706f9371d1ebe892fb6ebf0c75e305566b98879d9e3ee0ddf2e71"
+          },
+          {
+            "path": "Resources/Art/tour-privacy.png",
+            "bytes": 238161,
+            "sha256": "353fb38b2f857b069b74837b956f3abb5c2ad259572e2b2dcd0f19681696a147"
+          },
+          {
+            "path": "Resources/Art/tour-recognition.png",
+            "bytes": 253643,
+            "sha256": "e5d1b710bf19cd5eb3240674baa2e71ab134bada37be47031c662c52f627697a"
+          },
+          {
+            "path": "Resources/Art/tour-rounded-keychain.png",
+            "bytes": 192021,
+            "sha256": "0e1500174a2fcc85298bf4c614b3618e3bf9d6166c9dc847ea82fad19295243e"
+          },
+          {
+            "path": "Resources/Art/tour-rounded-practice.png",
+            "bytes": 204262,
+            "sha256": "65507c28114e37b08af0701c91cf2d7593eb0a9f03c44c113a40413e4dd77258"
+          },
+          {
+            "path": "Resources/Art/tour-rounded-privacy.png",
+            "bytes": 246156,
+            "sha256": "968982ba8161167c15fe0f99ffbf30287794d680f6f22e4842d696b77ea77bec"
+          },
+          {
+            "path": "Resources/Art/tour-rounded-recognition.png",
+            "bytes": 266513,
+            "sha256": "ce37b870a111d86f2b662912958d37022271519b00d3ec114b9ed0de770f7168"
+          },
+          {
+            "path": "Resources/Art/tour-rounded-unlock.png",
+            "bytes": 1164054,
+            "sha256": "66ee5c9d4de1cacc611db3c24b11ea7c7ed0340bc83cd36a66a5ffad53a13ecf"
           }
         ]
       },
       "provenance": {
-        "summary": "In-repo claim: screenshots of Gaze in use, shot on a real desktop (build.sh). No per-file authorship record.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. New companion illustrations are deterministically rendered from the app code. These records identify sources and bytes; they do not establish redistribution grants.",
         "evidenceRefs": [
-          "build.sh:131-134"
+          "build.sh:131-134",
+          "Tools/OnboardingArt/manifest.json",
+          "Tools/Release/ShipPass20260918/tour-art.json",
+          "Tools/Release/ShipPass20260918/tour-rounded-art.json"
         ],
         "status": "stated-in-repo"
       },
@@ -206,7 +304,7 @@
         "status": "unresolved"
       },
       "clearance": "unresolved",
-      "notes": "If these are first-party screenshots, the owner confirms authorship and scope; otherwise each third-party file needs its own grant."
+      "notes": "Inventory expanded2026-09-18. All existing licence/grant and clearance fields remain unchanged and unresolved. Owner must confirm the applicable rights and distribution scope."
     },
     {
       "id": "credit-portraits",
