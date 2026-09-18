@@ -1,48 +1,52 @@
-import AppKit
 import SwiftUI
 
-/// The mark setup shows: looking, recognised, or not.
-///
-/// It's the app's own icon — the Gaze target — rather than an invented scanner or Apple's
-/// `faceid` glyph. It sits still: a native onboarding screen doesn't breathe or pulse, and an
-/// idle looping animation is decoration with no signal (this one used to scale-breathe the
-/// icon forever). The one beat of motion is the one that means something — a tick or cross
-/// bouncing in on the result. Ours, plain SwiftUI, no framework.
 struct SetupMark: View {
-
 	enum Kind: Equatable {
-		case looking
-		case success
-		case failure
+		case looking, success, failure
 	}
 
 	let kind: Kind
-	var diameter: CGFloat = 180
-	/// Bump to replay the result animation. Ignored while looking.
-	var trigger: Int = 0
+	var diameter: CGFloat = 72
+	var trigger = 0
+	@State private var appeared = false
+	@Environment(\.colorScheme) private var colorScheme
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-	private var icon: NSImage { NSApplication.shared.applicationIconImage ?? NSImage() }
+	private var motion: GazeFaceMotion {
+		switch kind {
+		case .looking: .resting
+		case .success: .accepted
+		case .failure: .rejected
+		}
+	}
 
 	var body: some View {
-		ZStack {
-			Image(nsImage: icon)
-				.resizable()
-				.interpolation(.high)
-				.frame(width: diameter * 0.72, height: diameter * 0.72)
-				.overlay(alignment: .bottomTrailing) {
-					if kind != .looking {
-						Image(systemName: kind == .success ? "checkmark.circle.fill" : "xmark.circle.fill")
-							.font(.system(size: diameter * 0.2, weight: .bold))
-							.symbolRenderingMode(.palette)
-							.foregroundStyle(.white, kind == .success ? Theme.faceID : Theme.danger)
-							.background(Circle().fill(Theme.setupGround).padding(2))
-							.offset(x: diameter * 0.05, y: diameter * 0.05)
-							.transition(.scale(scale: 0.7).combined(with: .opacity))
-							.symbolEffect(.bounce, value: trigger)
-					}
+		HStack {
+			Spacer(minLength: 0)
+			Group {
+				if kind == .looking {
+					GazeLessonAnimation(motion: .resting, paused: true,
+						material: colorScheme == .dark ? .ink : .charcoal)
+				} else {
+					GazeCompanionView(motion: motion, active: true,
+						material: colorScheme == .dark ? .ink : .charcoal, trigger: trigger)
 				}
+			}
+			.frame(width: diameter * 0.94, height: diameter * 0.94)
+			.frame(width: diameter, height: diameter)
+			.opacity(appeared ? 1 : 0)
+			.scaleEffect(appeared ? 1 : 0.96)
+			.onAppear {
+				if reduceMotion {
+					appeared = true
+				} else {
+					withAnimation(.easeOut(duration: 0.35)) { appeared = true }
+				}
+			}
+			.frame(maxWidth: .infinity, alignment: .center)
+			.padding(.top, 12)
+			.accessibilityElement(children: .ignore)
+			.accessibilityLabel(kind == .looking ? "Gaze" : kind == .success ? "Completed" : "Try again")
 		}
-		.frame(width: diameter, height: diameter)
-		.animation(.spring(response: 0.5, dampingFraction: 0.72), value: kind)
 	}
 }

@@ -104,11 +104,11 @@ import SwiftUI
     }
     static func checkPage(_ index: Int, host: NSView) {
         let labels = nodes(host).map(label)
-        precondition(labels.filter { $0 == "Page \(index + 1) of 9" }.count == 1, "One shared progress indicator")
+        precondition(labels.filter { $0 == "Page \(index + 1) of 5" }.count == 1, "One shared progress indicator")
         for title in ["Practice movements", "Continue Setup", "Next", "Previous", "Close introduction"] {
             precondition(button(title, host: host) == nil, "No nested walkthrough controls: \(title)")
         }
-        let action = index == 8 ? "Continue setup" : "Continue"
+        let action = index == 4 ? "Start setup" : "Continue"
         precondition(nodes(host).filter { label($0) == action && (attribute($0, "accessibilityRole") as? String) == "AXButton" }.count == 1)
     }
     static func main() throws {
@@ -145,11 +145,11 @@ import SwiftUI
         precondition(button("Previous page", host: host) == nil)
         press("Continue", host: host)
         press("Continue", host: host)
-        let titles = ["Looking for you", "Turn left", "Turn right", "Nod", "Blink", "Open mouth"]
-        for index in 2...7 {
+        let titles = ["Meet Gaze", "Recognition stays on your Mac", "How unlock works", "A movement, not a photograph", "You choose how to unlock"]
+        for index in 2...3 {
             checkPage(index, host: host)
             precondition(savedPage == index && completed == 0 && closed == 0)
-            precondition(nodes(host).map(label).contains(titles[index - 2]))
+            precondition(nodes(host).map(label).contains(titles[index]))
             precondition(nodes(host).map(label).contains("Just a demonstration · Camera off"))
             precondition(CompanionCapture.surfaces(in: host).count == 1, "Only the current movement owns a renderer")
             press("Pause", host: host)
@@ -164,10 +164,10 @@ import SwiftUI
             try capture(host, path: CommandLine.arguments[1] + "/step-\(index + 1).png")
             press("Continue", host: host)
         }
-        checkPage(8, host: host)
-        precondition(savedPage == 8)
-        try capture(host, path: CommandLine.arguments[1] + "/step-9.png")
-        press("Continue setup", host: host)
+        checkPage(4, host: host)
+        precondition(savedPage == 4)
+        try capture(host, path: CommandLine.arguments[1] + "/step-5.png")
+        press("Start setup", host: host)
         precondition(completed == 1 && closed == 0)
 
         // SetupFlow restores this index when Back leaves capture, then resets it on a fresh run.
@@ -175,9 +175,9 @@ import SwiftUI
         returned.frame = host.frame
         window.contentView = returned
         settle()
-        checkPage(8, host: returned)
+        checkPage(4, host: returned)
         press("Previous page", host: returned)
-        checkPage(7, host: returned)
+        checkPage(3, host: returned)
 
         do {
             let reduced = NSHostingView(rootView: GazeWelcomeTour(onContinue: {}, onClose: {}, movementCount: 1, initialPageIndex: 2)
@@ -198,7 +198,7 @@ import SwiftUI
         settle()
         precondition(!window.isVisible, "The native window close control must dismiss the tour")
         precondition(completed == 1 && closed == 0, "Native close does not invoke a removed in-content close button")
-        print("PASS: nine-page integrated movement tour at 640x520, single navigation/progress, pause/play, Back, saved page restoration, one-movement copy, app Reduce Motion setting, native window close and inert callbacks; system Reduce Motion and raw Escape injection are not covered")
+        print("PASS: five-page integrated movement tour at 640x520, single navigation/progress, pause/play, Back, saved page restoration, one-movement copy, app Reduce Motion setting, native window close and inert callbacks; system Reduce Motion and raw Escape injection are not covered")
     }
 }
 ''')
