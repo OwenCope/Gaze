@@ -1,6 +1,7 @@
+import AppKit
 import SwiftUI
 
-/// The opening screen of first-run setup: a nine-page introduction.
+/// The opening screen of first-run setup: a five-page introduction.
 ///
 /// This is TourKit's embedded `TourSlideshowView`, not a `TourKitWindowController`,
 /// so Gaze keeps its existing window lifecycle — the flow owns the window, the
@@ -8,12 +9,9 @@ import SwiftUI
 /// started, no permissions are requested, no passwords are stored, and nothing here
 /// can enable unlocking. That all happens on the later steps.
 ///
-/// The movement demonstrations live inside this tour rather than as a second
-/// onboarding: pages three through eight show each `GazeExpressionLesson`'s existing
-/// title and explanation in the tour's bottom panel, with `GazeTourMovementPage`
-/// rendering just the animation in the artwork region. There is no duplicate
-/// heading or description inside the media, no waiting/result page, and no lesson
-/// selector — the tour's own navigation and progress are the only way through.
+/// The five steps, in order: hook (with the on-device statement), face data never
+/// leaving this Mac, how unlock works, a single expressions guide, and a get-started
+/// page stating automatic unlocking stays off unless turned on.
 ///
 /// The copy states what Gaze is not: a regular camera, not Apple Face ID's depth
 /// sensing; automatic unlocking stays optional and password-backed.
@@ -26,73 +24,66 @@ struct GazeWelcomeTour: View {
 
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-	/// The movement demonstrations shown inside the tour, in page order.
-	private static let movementLessons: [GazeExpressionLesson] = [
-		.scanning, .turnLeft, .turnRight, .nod, .blink, .openMouth,
-	]
-
-	private func makePages() -> [TourPage] {
-		var pages: [TourPage] = [
-			TourPage(
-				imageName: "Art/tour-recognition.png",
-				imageBundle: .main,
-				title: "Meet Gaze",
-				description: "Use your Mac’s camera to recognize your face at the lock screen."
-			),
-			TourPage(
-				imageName: "Art/tour-privacy.png",
-				imageBundle: .main,
-				title: "Recognition stays on your Mac",
-				description: "Face templates are encrypted locally. Gaze uses a regular camera and does not provide Apple Face ID’s depth sensing."
-			),
-		]
-		for lesson in Self.movementLessons {
-			pages.append(TourPage(
-				imageName: "",
-				title: "\(lesson.title)",
-				description: "\(lesson.explanation(movementCount: movementCount))"
-			))
-		}
-		pages.append(TourPage(
+	private static let pages: [TourPage] = [
+		TourPage(
+			imageName: "Art/tour-recognition.png",
+			imageBundle: .main,
+			title: "Meet Gaze",
+			description: "Use your Mac’s camera to recognize your face at the lock screen. Face data never leaves this Mac."
+		),
+		TourPage(
+			imageName: "Art/tour-privacy.png",
+			imageBundle: .main,
+			title: "Stays on your Mac",
+			description: "Face templates stay encrypted on this Mac. It uses a regular camera, not depth sensing."
+		),
+		TourPage(
+			imageName: "Art/how-unlock.png",
+			imageBundle: .main,
+			title: "How unlock works",
+			description: "Look at the camera and follow the movements. Gaze enters your saved login password after checking."
+		),
+		TourPage(
 			imageName: "Art/tour-practice.png",
 			imageBundle: .main,
-			title: "Choose how to unlock",
-			description: "Automatic unlocking stays off unless you turn it on. It uses a saved Mac password. Next, set up any parts you still need."
-		))
-		return pages
-	}
+			title: "A quick movement check",
+			description: "Gaze asks for a short turn, nod, or blink. Follow along, then face the camera again."
+		),
+		TourPage(
+			imageName: "Art/how-keychain.png",
+			imageBundle: .main,
+			title: "Unlocking stays your choice",
+			description: "It uses your saved Mac password. Automatic unlocking stays off unless you turn it on."
+		),
+	]
 
 	var body: some View {
 		GeometryReader { proxy in
-			TourSlideshowView(
-				pages: makePages(),
-				width: max(proxy.size.width, 1),
-				initialPageIndex: initialPageIndex,
-				continueButtonTitle: "Continue",
-				finishButtonTitle: "Continue setup",
-				onFinish: onContinue,
-				onClose: onClose,
-				presentation: .windowContent,
-				contentHeight: max(proxy.size.height, 1),
-				pageMedia: { index in
-					if index == 8 {
-						return AnyView(Image(systemName: "key.fill")
-							.font(.system(size: 72, weight: .regular))
-							.foregroundStyle(.white.opacity(0.85))
-							.accessibilityHidden(true))
-					}
-					let lessonIndex = index - 2
-					guard lessonIndex >= 0 && lessonIndex < Self.movementLessons.count else { return nil }
-					return AnyView(GazeTourMovementPage(lesson: Self.movementLessons[lessonIndex]))
-				},
-				onPageChange: onPageChange
-			)
-			// The slideshow cross-fades between slides; under Reduce Motion that
-			// movement goes away rather than becoming a lesser movement.
-			.transaction { transaction in
-				if reduceMotion { transaction.disablesAnimations = true }
+			ZStack(alignment: .topTrailing) {
+				TourSlideshowView(
+					pages: Self.pages,
+					width: max(proxy.size.width, 1),
+					initialPageIndex: initialPageIndex,
+					continueButtonTitle: "Next",
+					finishButtonTitle: "Start setup",
+					onFinish: onContinue,
+					onClose: onClose,
+					presentation: .windowContent,
+					contentHeight: max(proxy.size.height, 1),
+					onPageChange: onPageChange
+				)
+				// The slideshow cross-fades between slides; under Reduce Motion that
+				// movement goes away rather than becoming a lesser movement.
+				.transaction { transaction in
+					if reduceMotion { transaction.disablesAnimations = true }
+				}
+				Button("Skip", action: onClose)
+					.buttonStyle(.plain)
+					.foregroundStyle(.secondary)
+					.padding(.horizontal, 14)
+					.padding(.top, 12)
+					.help("Skip the introduction")
 			}
-			.frame(maxWidth: .infinity, maxHeight: .infinity)
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
 		// Escape leaves the flow the same way Not Now did: close without setting up.

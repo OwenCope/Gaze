@@ -53,6 +53,7 @@ struct SetupFlow: View {
 	@State private var model: EnrollmentModel?
 	@State private var step: SetupStep = .welcome
 	@State private var welcomePageIndex = 0
+	@State private var tourRevision = 0
 	@State private var failure: String?
 	@State private var isPresented = false
 	@State private var purpose = SetupPurpose.onboarding
@@ -74,13 +75,61 @@ struct SetupFlow: View {
 		Group {
 			switch step {
 			case .welcome:
+			VStack(spacing: 0) {
+				HStack {
+					if welcomePageIndex > 0 {
+						Button(action: tourBack) {
+							Image(systemName: "chevron.left")
+								.font(.system(size: 12, weight: .semibold))
+								.frame(width: 32, height: 32)
+						}
+						.buttonStyle(.glass)
+						.buttonBorderShape(.circle)
+						.accessibilityLabel("Back")
+						.help("Back")
+						.frame(width: 44)
+					} else {
+						Color.clear.frame(width: 44, height: 32)
+					}
+					Spacer()
+					Text("Gaze")
+						.font(.system(size: 13, weight: .medium))
+						.foregroundStyle(Theme.setupSecondary)
+					Spacer()
+					Button("Skip", action: skipTour)
+						.buttonStyle(.glass)
+						.buttonBorderShape(.capsule)
+						.controlSize(.regular)
+						.foregroundStyle(Theme.setupSecondary)
+						.accessibilityLabel("Skip tour")
+						.help("Skip tour")
+				}
+				.frame(height: 36)
+				.padding(.top, 12)
 				GazeWelcomeTour(
 					onContinue: advance,
-					onClose: onFinish,
+					onClose: skipTour,
 					movementCount: Preferences.shared.unlockMovementCount.rawValue,
 					initialPageIndex: welcomePageIndex,
 					onPageChange: { welcomePageIndex = $0 }
 				)
+				.frame(maxWidth: .infinity, maxHeight: .infinity)
+				// Recreated per explicit Back tap so the Back control above can drive
+				// the tour: TourKit takes the page only at init, so stepping the index
+				// back re-opens the slideshow on the previous page. Taps inside the
+				// tour report through onPageChange without touching this revision.
+				.id(tourRevision)
+				Group {
+					if let tourPosition {
+						SetupProgress(position: tourPosition)
+					} else {
+						Color.clear
+					}
+				}
+				.frame(height: 28)
+			}
+			.padding(.horizontal, 32)
+			.padding(.bottom, 16)
 			case .how:
 				SetupHowStep(
 					position: position(of: .how),
@@ -147,10 +196,9 @@ struct SetupFlow: View {
 				)
 		)
 		.id(step)
-		.frame(minWidth: preferredWidth, idealWidth: preferredWidth,
-			maxWidth: step == .welcome ? 640 : .infinity,
-			minHeight: preferredHeight, idealHeight: preferredHeight,
-			maxHeight: step == .welcome ? 520 : .infinity)
+		.frame(minWidth: preferredWidth, idealWidth: preferredWidth, maxWidth: preferredWidth,
+			minHeight: preferredHeight, idealHeight: preferredHeight, maxHeight: preferredHeight)
+		.animation(.easeInOut(duration: 0.25), value: step)
 		.overlay {
 			if purpose == .addFace && step == .capture {
 				GazePeekingCompanion(isActive: model == nil || model?.phase == .positioning)
@@ -204,6 +252,7 @@ struct SetupFlow: View {
 		failure = nil
 		isReturning = false
 		welcomePageIndex = 0
+		tourRevision += 1
 		// A screen Settings asked for wins over the launch flag, which wins over the start.
 		let requested = SetupRequest.consumePendingStep() ?? Self.consumeLaunchStep()
 		purpose = SetupRequest.presentation.purpose
@@ -275,6 +324,20 @@ struct SetupFlow: View {
 		return SetupPosition(index: index, count: plan.steps.count)
 	}
 
+	/// The tour's place in the same progress row: first of the tour plus the planned steps.
+	private var tourPosition: SetupPosition? {
+		guard purpose == .onboarding else { return nil }
+		return SetupPosition(index: 0, count: plan.steps.count + 1)
+	}
+
+	/// One tour page back, minimum 0.
+	private func tourBack() {
+		guard welcomePageIndex > 0 else { return }
+		isReturning = true
+		welcomePageIndex -= 1
+	}
+
+
 	private func advance() {
 		guard let next = nextStep(after: step) else { return }
 		isReturning = false
@@ -309,11 +372,23 @@ struct SetupFlow: View {
 	}
 
 	private var stepAnimation: Animation? {
-		reduceMotion ? nil : .easeInOut(duration: 0.2)
+		reduceMotion ? nil : .easeInOut(duration: 0.25)
 	}
 
-	private var preferredWidth: CGFloat { step == .welcome ? 640 : 880 }
-	private var preferredHeight: CGFloat { step == .welcome ? 520 : 660 }
+	/// One window size for the whole flow: the tour and the setup steps share it,
+	/// so moving from the tour into capture never resizes the window.
+	private var preferredWidth: CGFloat { 720 }
+	private var preferredHeight: CGFloat { 560 }
+
+	/// Leave the tour for capture without completing setup.
+	private func skipTour() {
+		guard let captureIndex = plan.steps.firstIndex(of: .capture) else {
+			advance()
+			return
+		}
+		isReturning = false
+		withAnimation(stepAnimation) { step = plan.steps[captureIndex] }
+	}
 
 	/// What is still missing once the flow reaches the end.
 	///

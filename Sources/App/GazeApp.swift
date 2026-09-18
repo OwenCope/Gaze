@@ -132,7 +132,7 @@ struct GazeApp: App {
 				.scrollIndicators(.never)
 		}
 		.windowResizability(.contentSize)
-		.defaultSize(width: 640, height: 520)
+		.defaultSize(width: 720, height: 560)
 		.restorationBehavior(.disabled)
 		.windowStyle(.hiddenTitleBar)
 		.defaultLaunchBehavior(!AppActivation.isBackgroundLaunch && !presentsSettingsAtLaunch ? .presented : .suppressed)

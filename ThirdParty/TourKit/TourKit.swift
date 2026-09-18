@@ -81,7 +81,7 @@ public struct TourSlideshowView: View {
 
     public init(
         pages: [TourPage],
-        width: CGFloat = 660,
+        width: CGFloat = 560,
         initialPageIndex: Int = 0,
         continueButtonTitle: LocalizedStringKey = "Continue",
         finishButtonTitle: LocalizedStringKey = "Done",
@@ -90,7 +90,7 @@ public struct TourSlideshowView: View {
         onFinish: (() -> Void)? = nil,
         onClose: (() -> Void)? = nil,
         presentation: TourSlideshowPresentation = .card,
-        contentHeight: CGFloat? = nil,
+        contentHeight: CGFloat? = 480,
         pageMedia: ((Int) -> AnyView?)? = nil,
         onPageChange: ((Int) -> Void)? = nil
     ) {
@@ -203,7 +203,7 @@ public struct TourSlideshowView: View {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
                     }
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, 24)
                     .padding(.vertical, 16)
                     .frame(width: width, height: imageHeight)
                     .id(currentIndex)
@@ -256,24 +256,25 @@ public struct TourSlideshowView: View {
         return Group {
             if presentation == .windowContent {
                 VStack(spacing: 0) {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 16) {
                         Text(currentPage.title, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
-                            .font(.system(size: 24, weight: .semibold))
+                            .font(.title2)
+                            .fontWeight(.semibold)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(currentPage.description, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
-                            .font(.system(size: 14))
+                            .font(.body)
                             .multilineTextAlignment(.center)
-                            .foregroundStyle(Color.white.opacity(0.70))
-                            .lineSpacing(2)
+                            .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: 440, minHeight: 100, alignment: .top)
                     .padding(.top, 12)
 
                     PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 12)
 
                     primaryActionButton
@@ -358,13 +359,13 @@ public struct TourSlideshowView: View {
                         tableName: buttonTableName,
                         bundle: buttonBundle
                     )
-                        .font(.system(size: 14, weight: .semibold))
-                        .frame(minWidth: 140)
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 240, height: 44)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .buttonBorderShape(.capsule)
-                .tint(.accentColor)
+                .buttonBorderShape(.roundedRectangle(radius: 22))
+                .tint(.blue)
                 .keyboardShortcut(.defaultAction)
             } else {
                 Button(action: advance) {
@@ -549,7 +550,7 @@ public final class TourKitWindowController {
     @discardableResult
     public func present(
         pages: [TourPage],
-        width: CGFloat = 660,
+        width: CGFloat = 560,
         continueButtonTitle: LocalizedStringKey = "Continue",
         finishButtonTitle: LocalizedStringKey = "Done",
         buttonTableName: String? = nil,
@@ -733,11 +734,11 @@ public struct PageIndicator: View {
     }
 
     public var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             ForEach(0..<totalPages, id: \.self) { index in
                 Capsule(style: .continuous)
-                    .fill(index == currentIndex ? Color.white.opacity(0.95) : Color.white.opacity(0.32))
-                    .frame(width: index == currentIndex ? 24 : 8, height: 8)
+                    .fill(index == currentIndex ? Color.white.opacity(1) : Color.white.opacity(0.3))
+                    .frame(width: index == currentIndex ? 22 : 7, height: 7)
             }
         }
         .accessibilityElement(children: .ignore)
