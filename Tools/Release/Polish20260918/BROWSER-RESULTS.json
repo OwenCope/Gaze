@@ -1,0 +1,40 @@
+{
+  "preview": "http://127.0.0.1:55524/",
+  "passed": [
+    "restored centered home visible",
+    "five movement captions load with the video",
+    "automatic playback when visible",
+    "Play/Pause",
+    "enlargement pauses underlying clip",
+    "close restores focus and prior pause intent",
+    "offscreen pause",
+    "simulated reduced-motion suppresses autoplay",
+    "explicit Play works with simulated reduced motion",
+    "enabling simulated reduced motion pauses playback",
+    "notch feature card plays existing panel clip"
+  ],
+  "layoutFixtures": [
+    {
+      "width": 320,
+      "scrollWidth": 320,
+      "galleryCenter": 160
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "galleryCenter": 195
+    },
+    {
+      "width": 768,
+      "scrollWidth": 768,
+      "galleryCenter": 384
+    }
+  ],
+  "limits": [
+    "CSS viewport fixtures use a static copy of the rendered page, not a physical phone or Safari",
+    "Reduced-motion behavior tested through a temporary MediaQueryList fixture, not by changing OS preferences",
+    "Native macOS screenshots unavailable; no compositor-level Liquid Glass screenshot captured"
+  ],
+  "cleanup": "Temporary iframe and matchMedia override removed; capture helper window closed.",
+  "artifacts": "/Users/owencope/.aside/u/0/sessions/2026-09-18_EpmesM2kXzeSZABi/artifacts"
+}

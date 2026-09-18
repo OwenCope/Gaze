@@ -13,20 +13,27 @@ import SwiftUI
 struct GazeMovementTour: View {
 	var onClose: () -> Void
 	var movementCount: Int = 2
+	var initialPageIndex: Int = 0
 
 	var body: some View {
 		TourSlideshowView(
 			pages: Self.pages(movementCount: movementCount),
 			width: GazeTourSizing.baseWidth,
+			initialPageIndex: initialPageIndex,
 			continueButtonTitle: "Next",
 			finishButtonTitle: "Done",
 			onFinish: onClose,
-			onClose: onClose
+			onClose: onClose,
+			pageMedia: { index in
+				AnyView(GazeTourMovementPage(lesson: index == 0 ? nil : Self.lessons[index - 1]))
+			}
 		)
 		.frame(width: GazeTourSizing.baseWidth, height: GazeTourSizing.panelHeight / (GazeTourSizing.panelWidth / GazeTourSizing.baseWidth))
 		.scaleEffect(GazeTourSizing.scale)
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
+
+	private static let lessons: [GazeExpressionLesson] = [.turnLeft, .turnRight, .nod, .blink, .openMouth]
 
 	private static func pages(movementCount: Int) -> [TourPage] {
 		var pages = [

@@ -216,33 +216,33 @@
           },
           {
             "path": "Resources/Art/onboarding-choice.png",
-            "bytes": 55304,
-            "sha256": "4d8be27d3d59cd0ed7841366f8836299651cd16c71ece1284245677a12d7018f"
+            "bytes": 55244,
+            "sha256": "527294658034db5f3a2eacfa275944f778d153f469edaef9efb6ec2d53499f98"
           },
           {
             "path": "Resources/Art/onboarding-failure.png",
-            "bytes": 58892,
-            "sha256": "eac088625b33681ce7a93bb0d7982d8291fe990af4dd13d5cd6b59a9f2a74113"
+            "bytes": 58616,
+            "sha256": "79ca612d1a418e7d4f37f0010777fd9a5898a4e6158cd27f26d57ea82906361a"
           },
           {
             "path": "Resources/Art/onboarding-local.png",
-            "bytes": 54492,
-            "sha256": "3fbed062cada40a5dc55239e66fdd8eb8e75aab4d308d426c246d24f286f837f"
+            "bytes": 54422,
+            "sha256": "2a2a7b1b6a1d85f10c001318a173661469da2ad07ba070c9e86297bf6c64b4f3"
           },
           {
             "path": "Resources/Art/onboarding-recognition.png",
-            "bytes": 56499,
-            "sha256": "05b9faccb827cebdf9790f822cb67965f6c354ba4140ef4abb9df2a374ecb9a2"
+            "bytes": 56372,
+            "sha256": "fc17eaa2087e34f98109453dc516247482d3afb2db74c1f398a771cdf3493736"
           },
           {
             "path": "Resources/Art/onboarding-success.png",
-            "bytes": 58377,
-            "sha256": "d8a853c860053832bb3ecdadd517bd732dad59778d54813c404b98b75a8afeee"
+            "bytes": 58169,
+            "sha256": "635d948e293e441a427b41a36d45f7755cf73a7b25441002b7ee969720427676"
           },
           {
             "path": "Resources/Art/onboarding-unlock.png",
-            "bytes": 58690,
-            "sha256": "4a648734b52b86cc0ee2535b90306864e533a4c59baf162df0064894e79110fd"
+            "bytes": 58508,
+            "sha256": "731e56683721068ab5bca6bc1e80a3bda7716303db287b5493974828b895190b"
           },
           {
             "path": "Resources/Art/tour-practice.png",

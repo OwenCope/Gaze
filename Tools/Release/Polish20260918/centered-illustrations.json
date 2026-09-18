@@ -1,0 +1,81 @@
+{
+  "description": "Existing illustrations centered. Not app screenshots; real capture remains blocked by OS permission.",
+  "records": [
+    {
+      "source": "onboarding-recognition",
+      "output": "gaze-recognition",
+      "bounds": [
+        584,
+        314,
+        856,
+        586
+      ],
+      "center": [
+        720.0,
+        450.0
+      ],
+      "dimensions": [
+        1440,
+        900
+      ],
+      "sha256": "0904ab75251c417a5245fe812381af42c8ac481f243c418b7b47ad0ede8c4ca8"
+    },
+    {
+      "source": "onboarding-local",
+      "output": "gaze-local",
+      "bounds": [
+        477,
+        329,
+        963,
+        571
+      ],
+      "center": [
+        720.0,
+        450.0
+      ],
+      "dimensions": [
+        1440,
+        900
+      ],
+      "sha256": "751b03fb1cfc3930e9341ba9e28930c645d8be6048cf2bbf8ecad8359ede41b6"
+    },
+    {
+      "source": "onboarding-unlock",
+      "output": "gaze-unlock",
+      "bounds": [
+        288,
+        336,
+        1152,
+        564
+      ],
+      "center": [
+        720.0,
+        450.0
+      ],
+      "dimensions": [
+        1440,
+        900
+      ],
+      "sha256": "293a097efce19b468c1bbe6896cf16fa3d933017f2df6aa41a9966e2af4cffc1"
+    },
+    {
+      "source": "onboarding-choice",
+      "output": "gaze-choice",
+      "bounds": [
+        482,
+        329,
+        958,
+        571
+      ],
+      "center": [
+        720.0,
+        450.0
+      ],
+      "dimensions": [
+        1440,
+        900
+      ],
+      "sha256": "1335ae442e0ca6d5473432b8f364dd7815f4396106df21d4ad81fcdbf7f674d0"
+    }
+  ]
+}

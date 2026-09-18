@@ -304,7 +304,7 @@ struct OnboardingTests {
 		precondition(GazeCuriosityMotion.pose(at: 1.5).face.turn == 0, "Eyes notice before the body turns")
 		precondition(GazeCuriosityMotion.pose(at: 1.5).drift == 0, "Do not slide before noticing")
 		precondition(GazeCuriosityMotion.pose(at: 3.2).drift > 0, "Body follows the glance")
-		for time in [0.0, 7.0, 8.0, 14.0, 17.9, 18.0] {
+		for time in [0.0, 7.0, 8.0, 12.9, GazeCuriosityMotion.duration, GazeCuriosityMotion.duration + 0.5] {
 			precondition(GazeCuriosityMotion.pose(at: time) == GazeCompanionPose(), "Curiosity includes real resting holds")
 		}
 		for frame in 0..<2160 {

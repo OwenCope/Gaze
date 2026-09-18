@@ -95,43 +95,46 @@ enum OnboardingArt {
             print("wrote \(name) \(info.width)x\(info.height) sha256:\(info.sha)")
         }
 
-        // -- Single-face cards: 360px native face centred at (720, 310). --
-        let centre = CGPoint(x: 720, y: 310)
-        try emit("onboarding-recognition.png", note: "resting pose, charcoal, 360px at (720,310)") {
+        // -- Single-face cards: 360px native face centred at (720, 450). --
+        let centre = CGPoint(x: 720, y: 450)
+        try emit("onboarding-recognition.png", note: "resting pose, charcoal, 360px at (720,450)") {
             try placeFace($0, gpu: gpu, pose: GazeCompanionPose(), side: 360, centre: centre)
         }
-        try emit("onboarding-success.png", note: "accepted stillPose (expression +1), charcoal, 360px at (720,310)") {
+        try emit("onboarding-success.png", note: "accepted stillPose (expression +1), charcoal, 360px at (720,450)") {
             try placeFace($0, gpu: gpu, pose: GazeCompanionPose(face: GazeFaceMotion.accepted.stillPose),
                 side: 360, centre: centre)
         }
-        try emit("onboarding-failure.png", note: "rejected stillPose (expression -1), charcoal, 360px at (720,310)") {
+        try emit("onboarding-failure.png", note: "rejected stillPose (expression -1), charcoal, 360px at (720,450)") {
             try placeFace($0, gpu: gpu, pose: GazeCompanionPose(face: GazeFaceMotion.rejected.stillPose),
                 side: 360, centre: centre)
         }
 
         // -- Two-subject cards. --
-        try emit("onboarding-local.png", note: "resting face 320px at (560,310) + lock.fill ~150px at (880,310)") { ctx in
-            try placeFace(ctx, gpu: gpu, pose: GazeCompanionPose(), side: 320, centre: CGPoint(x: 560, y: 310))
-            try placeSymbol(ctx, name: "lock.fill", side: 150, centre: CGPoint(x: 880, y: 310),
+        try emit("onboarding-local.png", note: "resting face 320px at (560,450) + lock.fill ~150px at (880,450); translated +38px to center visible bounds") { ctx in
+            ctx.translateBy(x: 38, y: 0)
+            try placeFace(ctx, gpu: gpu, pose: GazeCompanionPose(), side: 320, centre: CGPoint(x: 560, y: 450))
+            try placeSymbol(ctx, name: "lock.fill", side: 150, centre: CGPoint(x: 880, y: 450),
                 opacity: symbolOpacity)
         }
-        try emit("onboarding-choice.png", note: "resting face 320px at (560,310) + key.fill ~150px at (880,310); no toggle") { ctx in
-            try placeFace(ctx, gpu: gpu, pose: GazeCompanionPose(), side: 320, centre: CGPoint(x: 560, y: 310))
-            try placeSymbol(ctx, name: "key.fill", side: 150, centre: CGPoint(x: 880, y: 310),
+        try emit("onboarding-choice.png", note: "resting face 320px at (560,450) + key.fill ~150px at (880,450); translated +43px to center visible bounds; no toggle") { ctx in
+            ctx.translateBy(x: 43, y: 0)
+            try placeFace(ctx, gpu: gpu, pose: GazeCompanionPose(), side: 320, centre: CGPoint(x: 560, y: 450))
+            try placeSymbol(ctx, name: "key.fill", side: 150, centre: CGPoint(x: 880, y: 450),
                 opacity: symbolOpacity)
         }
 
         // -- Unlock sequence: camera -> face -> key. --
         try emit("onboarding-unlock.png",
-            note: "camera.fill 130px at (330,300) -> resting face 300px at (720,300) -> key.fill 130px at (1110,300); arrow.right 56px connectors") { ctx in
-            try placeSymbol(ctx, name: "camera.fill", side: 130, centre: CGPoint(x: 330, y: 300),
+            note: "camera.fill 130px at (330,450) -> resting face 300px at (720,450) -> key.fill 130px at (1110,450); arrow.right 56px connectors; translated +12px to center visible bounds") { ctx in
+            ctx.translateBy(x: 12, y: 0)
+            try placeSymbol(ctx, name: "camera.fill", side: 130, centre: CGPoint(x: 330, y: 450),
                 opacity: symbolOpacity)
-            try placeFace(ctx, gpu: gpu, pose: GazeCompanionPose(), side: 300, centre: CGPoint(x: 720, y: 300))
-            try placeSymbol(ctx, name: "key.fill", side: 130, centre: CGPoint(x: 1110, y: 300),
+            try placeFace(ctx, gpu: gpu, pose: GazeCompanionPose(), side: 300, centre: CGPoint(x: 720, y: 450))
+            try placeSymbol(ctx, name: "key.fill", side: 130, centre: CGPoint(x: 1110, y: 450),
                 opacity: symbolOpacity)
-            try placeSymbol(ctx, name: "arrow.right", side: 56, centre: CGPoint(x: 525, y: 300),
+            try placeSymbol(ctx, name: "arrow.right", side: 56, centre: CGPoint(x: 525, y: 450),
                 opacity: arrowOpacity)
-            try placeSymbol(ctx, name: "arrow.right", side: 56, centre: CGPoint(x: 915, y: 300),
+            try placeSymbol(ctx, name: "arrow.right", side: 56, centre: CGPoint(x: 915, y: 450),
                 opacity: arrowOpacity)
         }
 
