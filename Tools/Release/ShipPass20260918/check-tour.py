@@ -261,18 +261,13 @@ struct CompletionScenario {
             ax = axWindow(titled: window.title)
             checkPage(page, host: ax, pageHeadings: movementHeadings, finishTitle: "Done")
             precondition(movementClosed == 0)
-            precondition(axButton("Pause", host: ax) != nil, "Active movement has playback control")
+            precondition(axButton("Pause", host: ax) == nil && axButton("Play", host: ax) == nil, "No playback chrome in the movement guide")
             let surfaces = CompanionCapture.surfaces(in: movementHost)
             precondition(surfaces.count == 1, "Only the current page owns a renderer")
             let mediaFrame = surfaces[0].view.convert(surfaces[0].view.bounds, to: movementHost)
             precondition(abs(mediaFrame.midX - movementHost.bounds.midX) < 1, "Movement is horizontally centered")
-            press("Pause", host: ax)
-            precondition(surfaces[0].view.isPaused, "Pause stops the renderer")
-            precondition(axButton("Play", host: ax) != nil, "Paused control becomes Play")
-            press("Play", host: ax)
-            let resumed = CompanionCapture.surfaces(in: movementHost)
-            precondition(resumed.count == 1 && !resumed[0].view.isPaused, "Play resumes the renderer")
-            let surface = resumed[0]
+            let surface = surfaces[0]
+            precondition(!surface.view.isPaused, "The current movement plays automatically")
             let probe = LessonMotionTests.FrameProbe(renderer: surface.renderer)
             surface.view.delegate = probe
             let start = Date.timeIntervalSinceReferenceDate

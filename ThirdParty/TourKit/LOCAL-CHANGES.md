@@ -27,3 +27,12 @@ Remaining extensions:
 Gaze still uniformly scales the 660-point preset to its 720×680 card.
 The centered live movement guide is retained. Its extra Pause/Play control uses
 its original system bordered style rather than the rejected glass style.
+
+## Later explicit control changes
+
+The user specifically rejected the outlined Back/checkmark circles. The glyphs
+now have clear 32-point hit areas, no circle/background/stroke, and a lighter
+14-point medium weight. Close uses xmark, retains its accessible identifier and
+onClose callback, and responds to Escape. The preset card, text, primary button,
+page layout and indicator remain. The movement content now autoplays without
+extra Play/Pause controls or the separate camera-off caption, as requested.
