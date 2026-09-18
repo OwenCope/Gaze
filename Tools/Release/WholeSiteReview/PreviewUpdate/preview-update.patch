@@ -1,0 +1,1574 @@
+--- a/src/app/credits/page.tsx
++++ b/src/app/credits/page.tsx
+@@ -1,5 +1,6 @@
+ import type { Metadata } from "next";
+ import { TopNav } from "@/components/top-nav";
++import { PageIntro } from "@/components/page-intro";
+ import { Footer } from "@/components/ui/footer-section";
+ import { credits, type Credit } from "@/lib/credits";
+ import { CreditsScroller } from "@/components/credits-scroller";
+@@ -32,19 +33,7 @@
+       className="credits-page min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased"
+     >
+       <TopNav />
+-      <section className="px-6 pb-12 pt-12 sm:pt-14">
+-        <div className="mx-auto max-w-[640px] text-center">
+-          <p className="text-[13px] font-medium uppercase tracking-[0.08em] text-[var(--muted-ink)]">
+-            Credits
+-          </p>
+-          <h1 className="mt-4 text-balance text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-[1.12] tracking-[-0.035em]">
+-            The people behind Gaze.
+-          </h1>
+-          <p className="mx-auto mt-4 max-w-[34rem] text-[17px] leading-[1.6] text-[var(--muted-ink)]">
+-            The projects we learned from, and the people who helped make it happen.
+-          </p>
+-        </div>
+-      </section>
++      <PageIntro title="Credits" description="People and projects that helped shape Gaze." />
+ 
+       <CreditsScroller credits={credits} contributions={contributions} />
+       <Footer
+--- a/src/app/features/page.tsx
++++ b/src/app/features/page.tsx
+@@ -15,10 +15,10 @@
+     <main className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased">
+       <TopNav />
+ 
+-      <PageIntro eyebrow="Features" title="Face unlock, at home on your Mac." description="Local recognition, guided movements, and controls that stay close at hand.">
+-        <nav aria-label="On this page" className="mt-5 flex flex-wrap gap-x-6">
++      <PageIntro title="Features" description="Recognition runs on your Mac, with movement prompts before automatic unlocking.">
++        <nav aria-label="On this page" className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+           <a href="#tour" className="site-link text-[15px] font-medium">Product tour</a>
+-          <a href="#features" className="site-link text-[15px] font-medium">Feature list</a>
++          <a href="#features" className="site-link text-[15px] font-medium">Details</a>
+         </nav>
+       </PageIntro>
+ 
+--- a/src/app/how-it-works/page.tsx
++++ b/src/app/how-it-works/page.tsx
+@@ -14,13 +14,12 @@
+   return (
+     <main className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased">
+       <TopNav />
+-      <PageIntro eyebrow="How it works" title="From setup to your next unlock." description="Enroll your face, choose your settings, and practice the movement prompts before you try them at the lock screen." />
++      <PageIntro title="How Gaze unlocks your Mac" description="Set up recognition, practice the prompts, then choose whether to enable automatic unlocking." />
+       <SetupWalkthrough />
+-      <section className="bg-[var(--surface)] py-16 sm:py-20" aria-labelledby="limits-heading">
++      <section className="bg-[var(--surface)] py-12 sm:py-14" aria-labelledby="limits-heading">
+         <div className="site-container grid gap-10 md:grid-cols-[0.8fr_1.2fr] md:gap-20">
+           <div>
+-            <p className="mb-4 text-sm font-medium text-[var(--muted-ink)]">Before you turn it on</p>
+-            <h2 id="limits-heading" className="site-heading">Convenience, with limits.</h2>
++            <h2 id="limits-heading" className="text-[28px] font-semibold leading-tight tracking-[-0.02em]">Security limits</h2>
+             <Link href="/security" className="site-link mt-5">Read about security <span aria-hidden>→</span></Link>
+           </div>
+           <div className="space-y-8">
+--- a/src/app/releases/[tag]/page.tsx
++++ b/src/app/releases/[tag]/page.tsx
+@@ -23,7 +23,7 @@
+   const release = (await getReleases()).find((r) => r.tag === decodeURIComponent(tag));
+   if (!release) return { title: "Release" };
+   return {
+-    title: `${release.name} — Gaze`,
++    title: release.name,
+     description: release.excerpt || `What changed in ${release.name}.`,
+     openGraph: {
+       title: `${release.name} — Gaze`,
+@@ -54,7 +54,7 @@
+       className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased"
+     >
+       <TopNav />
+-      <article className="px-6 pb-20 pt-16 sm:pt-20">
++      <article className="px-6 pb-14 pt-10 sm:pt-12">
+         <div className="mx-auto max-w-[760px]">
+           <BackLink href="/releases">Releases</BackLink>
+ 
+@@ -78,7 +78,7 @@
+             </time>
+           </div>
+ 
+-          <h1 className="mt-5 text-balance text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
++          <h1 className="mt-4 text-balance text-[clamp(2rem,4vw,3rem)] font-semibold leading-[1.12] tracking-[-0.025em]">
+             {release.name}
+           </h1>
+ 
+--- a/src/app/releases/page.tsx
++++ b/src/app/releases/page.tsx
+@@ -49,7 +49,7 @@
+       className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased"
+     >
+       <TopNav />
+-      <PageIntro eyebrow="Releases" title="What’s new in Gaze." description="Builds, release notes, and the changes behind each update." />
++      <PageIntro title="Releases" description="Builds and release notes." />
+ 
+       <section className="px-6 pb-20">
+         <div className="mx-auto max-w-[1080px]">
+--- a/src/app/security/page.tsx
++++ b/src/app/security/page.tsx
+@@ -3,23 +3,19 @@
+ import Link from "next/link";
+ import { TopNav } from "@/components/top-nav";
+ import { PageLinks } from "@/components/page-links";
+-import { AppIcon } from "@/components/app-icon";
+ 
+ const records = [
+   {
+-    name: "Recognition measurements",
+-    storage: "Encrypted on this Mac",
++    name: "Face data",
+     body: "Your faceprint is encrypted using a key held by this Mac’s Secure Enclave. Camera frames are processed locally.",
+   },
+   {
+-    name: "Mac login password",
+-    storage: "Stored only for automatic unlocking",
++    name: "Saved password",
+     body: "If you enable automatic unlocking, Gaze stores an encrypted copy of your password. After the configured recognition and movement checks pass, it decrypts and submits that password to macOS.",
+   },
+   {
+-    name: "Face-tile portraits",
+-    storage: "Optional local image files",
+-    body: "Pictures you choose for face tiles are saved separately from encrypted recognition templates. They are not uploaded or used to recognize you.",
++    name: "Profile pictures",
++    body: "Optional profile pictures are stored separately from encrypted recognition templates. They are not uploaded or used to recognize you.",
+   },
+ ];
+ 
+@@ -32,39 +28,33 @@
+   return (
+     <main className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased">
+       <TopNav />
+-      <PageIntro eyebrow="Security" title="Recognition stays here." description="Gaze processes your face on your Mac. See what it stores, what protects it, and the choices you control." />
+-      <section aria-labelledby="storage-heading" className="site-container pb-20">
+-        <div className="overflow-hidden rounded-[28px] bg-[var(--surface)] shadow-[var(--card-shadow)]">
+-          <div className="grid gap-8 border-b border-[var(--hairline)] p-6 sm:p-10 md:grid-cols-[0.8fr_1.2fr] md:gap-16">
+-            <div>
+-              <AppIcon size={72} className="mb-6 size-16" />
+-              <h2 id="storage-heading" className="text-[28px] font-semibold leading-tight tracking-[-0.025em]">What stays here.</h2>
+-            </div>
+-            <p className="self-end text-[17px] leading-relaxed text-[var(--muted-ink)]">Your face is not an encryption key. Recognition decides when Gaze may submit your saved password. You can use recognition-only mode without enabling automatic unlocking.</p>
++      <PageIntro title="Security and privacy" description="What Gaze stores on your Mac, when it uses the camera, and its security limits." />
++      <section aria-labelledby="storage-heading" className="site-container pb-14">
++          <div className="mb-7 grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] md:gap-12">
++            <h2 id="storage-heading" className="text-[24px] font-medium leading-tight tracking-[-0.02em]">Stored on this Mac</h2>
++            <p className="max-w-[66ch] text-base leading-relaxed text-[var(--muted-ink)]">Your face is not an encryption key. Recognition decides when Gaze may submit your saved password. You can use recognition-only mode without enabling automatic unlocking.</p>
+           </div>
+-          <dl className="px-6 sm:px-10">
++          <dl className="border-t border-[var(--hairline)]">
+             {records.map((record) => (
+-              <div key={record.name} className="grid gap-3 border-b border-[var(--hairline)] py-7 last:border-0 md:grid-cols-[0.8fr_1.2fr] md:gap-16">
++              <div key={record.name} className="grid gap-3 border-b border-[var(--hairline)] py-5 md:grid-cols-[220px_minmax(0,1fr)] md:gap-12">
+                 <dt>
+-                  <span className="block text-lg font-semibold tracking-[-0.015em]">{record.name}</span>
+-                  <span className="mt-1.5 block text-sm text-[var(--muted-ink)]">{record.storage}</span>
++                  <span className="block text-base font-medium">{record.name}</span>
+                 </dt>
+-                <dd className="leading-relaxed text-[var(--muted-ink)]">{record.body}</dd>
++                <dd className="max-w-[66ch] text-base leading-relaxed text-[var(--muted-ink)]">{record.body}</dd>
+               </div>
+             ))}
+           </dl>
+-        </div>
+       </section>
+-      <section className="site-container grid gap-12 pb-20 md:grid-cols-2 md:gap-20" aria-label="Camera access and security limits">
++      <section className="site-container grid gap-8 pb-14 lg:grid-cols-2 lg:gap-14" aria-label="Camera access and security limits">
+         <div>
+-          <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.025em]">When the camera is used.</h2>
+-          <p className="mt-5 text-[17px] leading-relaxed text-[var(--muted-ink)]">Setup, recognition tests, automatic unlocking and Passwords approvals can use the camera. Optional walk-away locking checks for your presence while the Mac is idle. You control these features in Settings.</p>
++          <h2 className="text-[24px] font-medium leading-tight tracking-[-0.02em]">Camera access</h2>
++          <p className="mt-3 text-base leading-relaxed text-[var(--muted-ink)]">Setup, recognition tests, automatic unlocking and Passwords approvals can use the camera. Optional walk-away locking checks for your presence while the Mac is idle. You control these features in Settings.</p>
+           <Link href="/how-it-works" className="site-link mt-4">See the unlocking flow <span aria-hidden>→</span></Link>
+         </div>
+         <div>
+-          <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.025em]">Know the limits.</h2>
+-          <p className="mt-5 text-[17px] leading-relaxed text-[var(--muted-ink)]">Gaze uses a regular camera. Movement prompts and spoof checks can still be fooled by photos or replay; they do not provide Face ID’s depth sensing.</p>
+-          <p className="mt-4 text-[17px] leading-relaxed text-[var(--muted-ink)]">Your Mac password remains available. After a restart, sign in normally so Gaze can start.</p>
++          <h2 className="text-[24px] font-medium leading-tight tracking-[-0.02em]">Security limits</h2>
++          <p className="mt-3 text-base leading-relaxed text-[var(--muted-ink)]">Gaze uses a regular camera. Movement prompts and spoof checks can still be fooled by photos or replay; they do not provide Face ID’s depth sensing.</p>
++          <p className="mt-4 text-base leading-relaxed text-[var(--muted-ink)]">Your Mac password remains available. After a restart, sign in normally so Gaze can start.</p>
+         </div>
+       </section>
+       <PageLinks current="/security" />
+--- a/src/app/testers/page.tsx
++++ b/src/app/testers/page.tsx
+@@ -6,7 +6,6 @@
+ import { TopNav } from "@/components/top-nav";
+ import { LiquidButton } from "@/components/ui/liquid-glass-button";
+ import { Tag, Cards } from "@/components/icons";
+-import { AppIcon } from "@/components/app-icon";
+ import { getReleases } from "@/lib/releases";
+ import { readReadme } from "@/lib/storage";
+ import { getViewer } from "@/lib/viewer";
+@@ -69,26 +68,24 @@
+       className="min-h-dvh bg-[var(--background)] pt-16 text-[var(--foreground)] antialiased"
+     >
+       <TopNav />
+-      <section className="px-6 py-16">
++      <section className="px-6 py-10 sm:py-12">
+         <div className="mx-auto max-w-[1080px]">
+           <div className="flex flex-wrap items-end justify-between gap-6">
+             <div>
+-              <p className="text-sm text-[var(--muted-ink)]">Tester access</p>
+-              <div className="mt-3 flex items-center gap-3">
+-                <AppIcon size={72} className="size-9" />
++              <div>
+                 <h1 className="text-balance text-[clamp(2rem,4.5vw,3rem)] font-semibold leading-[1.05] tracking-[-0.035em]">
+                   Testing Gaze
+                 </h1>
+               </div>
+-              <p className="mt-4 max-w-xl text-lg leading-relaxed text-[var(--muted-ink)]">
+-                Your builds, testing notes, and recent changes in one place.
++              <p className="mt-3 max-w-xl text-base leading-relaxed text-[var(--muted-ink)]">
++                Builds and testing notes.
+               </p>
+             </div>
+ 
+             {latest?.download && (
+               <LiquidButton variant="solid" asChild>
+-                <a href={latest.download.url} download>
+-                  Download {latest.tag}
++                <a href={latest.download.url} download aria-label={`Download Gaze ${latest.tag}`}>
++                  Download Gaze
+                 </a>
+               </LiquidButton>
+             )}
+@@ -96,11 +93,11 @@
+         </div>
+       </section>
+ 
+-      <section className="px-6 pb-28">
++      <section className="px-6 pb-14">
+         <div className="mx-auto grid max-w-[1080px] gap-10 lg:grid-cols-[1.6fr_1fr] lg:gap-14">
+           {/* Builds. */}
+           <div>
+-            <h2 className="text-[15px] font-semibold uppercase tracking-[0.08em] text-[var(--faint-ink)]">
++            <h2 className="text-lg font-medium">
+               Builds
+             </h2>
+ 
+@@ -110,9 +107,9 @@
+                 before it appears anywhere else.
+               </p>
+             ) : (
+-              <ol className="mt-5 space-y-4">
++              <ol className="mt-3 border-t border-[var(--hairline)]">
+                 {releases.map((r) => (
+-                  <li key={r.tag} className="rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 shadow-[var(--card-shadow)] sm:p-7">
++                  <li key={r.tag} className="border-b border-[var(--hairline)] py-5">
+                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+                       <span className="rounded-full bg-[var(--foreground)]/[0.07] px-2.5 py-0.5 text-[14px] font-medium tabular-nums text-[var(--muted-ink)]">
+                         {r.tag}
+@@ -137,7 +134,7 @@
+                       </span>
+                     </div>
+ 
+-                    <h3 className="mt-3 text-[21px] font-semibold tracking-[-0.02em]">
++                    <h3 className="mt-3 text-[20px] font-medium tracking-[-0.02em]">
+                       {r.name}
+                     </h3>
+                     {r.excerpt && (
+@@ -219,11 +216,11 @@
+ 
+           {/* The notes, and what to do with a build once you have it. */}
+           <aside className="lg:sticky lg:top-24 lg:h-min">
+-            <h2 className="text-[15px] font-semibold uppercase tracking-[0.08em] text-[var(--faint-ink)]">
+-              Read this first
++            <h2 className="text-lg font-medium">
++              Testing notes
+             </h2>
+ 
+-            <div className="mt-5 rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 shadow-[var(--card-shadow)] sm:p-7">
++            <div className="mt-4 text-base leading-relaxed">
+               {html ? (
+                 <div
+                   className="release-notes"
+@@ -244,13 +241,12 @@
+               )}
+             </div>
+ 
+-            <div className="mt-5 rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 shadow-[var(--card-shadow)] sm:p-7">
++            <div className="mt-7 border-t border-[var(--hairline)] pt-6">
+               <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
+-                Reporting something
++                Report an issue
+               </h3>
+               <p className="mt-2 leading-relaxed text-[var(--muted-ink)]">
+-                The Discord is where builds are discussed and where a broken one
+-                gets noticed fastest.
++                Share the build version and what happened in Discord.
+               </p>
+               <div className="mt-5">
+                 <LiquidButton size="default" asChild>
+@@ -259,14 +255,14 @@
+                     target="_blank"
+                     rel="noreferrer"
+                   >
+-                    Open the Discord
++                    Open Discord
+                   </a>
+                 </LiquidButton>
+               </div>
+             </div>
+ 
+             {commits && commits.length > 0 && (
+-              <div className="mt-5 rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 shadow-[var(--card-shadow)] sm:p-7">
++              <div className="mt-7 border-t border-[var(--hairline)] pt-6">
+                 <h3 className="text-[15px] font-semibold tracking-[-0.01em]">
+                   Recent work
+                 </h3>
+@@ -305,7 +301,7 @@
+               </div>
+             )}
+ 
+-            <dl className="mt-5 rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 text-[15px] shadow-[var(--card-shadow)] sm:p-7">
++            <dl className="mt-7 border-t border-[var(--hairline)] pt-5 text-[14px]">
+               <div className="flex items-center justify-between gap-4">
+                 <dt className="flex items-center gap-2 text-[var(--muted-ink)]">
+                   <Tag className="size-[15px] text-[var(--faint-ink)]" />
+--- a/src/components/account-button.tsx
++++ b/src/components/account-button.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useSession, signOut } from "next-auth/react";
+ import Link from "next/link";
+-import { useEffect, useState } from "react";
++import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+ 
+ /**
+@@ -16,6 +16,10 @@
+ export function AccountButton() {
+   const { data: session, status } = useSession();
+   const [open, setOpen] = useState(false);
++  const container = useRef<HTMLDivElement>(null);
++  const trigger = useRef<HTMLButtonElement>(null);
++  const focusLast = useRef(false);
++  const menuId = useId();
+   const reduceMotion = useReducedMotion();
+   const [me, setMe] = useState<{
+     badge: string | null;
+@@ -38,6 +42,44 @@
+     };
+   }, [status]);
+ 
++  useEffect(() => {
++    if (!open) return;
++    const items = container.current?.querySelectorAll<HTMLElement>('[role="menuitem"]');
++    if (items?.length) items[focusLast.current ? items.length - 1 : 0].focus();
++    focusLast.current = false;
++    const outside = (event: PointerEvent) => {
++      if (event.target instanceof Node && !container.current?.contains(event.target)) setOpen(false);
++    };
++    document.addEventListener("pointerdown", outside);
++    return () => document.removeEventListener("pointerdown", outside);
++  }, [open]);
++
++  function handleKeys(event: KeyboardEvent<HTMLDivElement>) {
++    if (event.key === "Escape" && open) {
++      event.preventDefault();
++      event.stopPropagation();
++      setOpen(false);
++      trigger.current?.focus();
++      return;
++    }
++    if (!open) {
++      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
++        event.preventDefault();
++        focusLast.current = event.key === "ArrowUp";
++        setOpen(true);
++      }
++      return;
++    }
++    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
++    const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
++    if (!items.length) return;
++    event.preventDefault();
++    const current = items.findIndex((item) => item === document.activeElement);
++    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
++      : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
++    items[next].focus();
++  }
++
+   if (status === "loading") {
+     return <span className="block size-11" />;
+   }
+@@ -57,14 +99,22 @@
+   const initial = label.charAt(0).toUpperCase();
+ 
+   return (
+-    <div className="relative">
++    <div
++      ref={container}
++      className="relative"
++      onKeyDown={handleKeys}
++      onBlur={(event) => {
++        if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
++      }}
++    >
+       <button
++        ref={trigger}
+         type="button"
+         aria-haspopup="menu"
+         aria-expanded={open}
++        aria-controls={open ? menuId : undefined}
+         aria-label={`Account: ${label}`}
+         onClick={() => setOpen((v) => !v)}
+-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+         className="flex size-11 cursor-pointer items-center justify-center rounded-full text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]"
+       >
+         {/* Google hands back an avatar; the initial is the fallback when a
+@@ -85,7 +135,9 @@
+       <AnimatePresence>
+         {open && (
+           <motion.div
++            id={menuId}
+             role="menu"
++            aria-label="Account"
+             initial={reduceMotion ? false : { opacity: 0, y: -4, scale: 0.98 }}
+             animate={{ opacity: 1, y: 0, scale: 1 }}
+             exit={reduceMotion ? undefined : { opacity: 0, y: -4, scale: 0.98 }}
+@@ -144,6 +196,7 @@
+               <Link
+                 href="/testers"
+                 role="menuitem"
++                onClick={() => setOpen(false)}
+                 className="mt-1 block cursor-pointer rounded-[10px] px-2.5 py-2 text-[14px] transition-colors hover:bg-[var(--foreground)]/[0.06]"
+               >
+                 Builds
+@@ -154,6 +207,7 @@
+               <Link
+                 href="/admin"
+                 role="menuitem"
++                onClick={() => setOpen(false)}
+                 className="mt-1 block cursor-pointer rounded-[10px] px-2.5 py-2 text-[14px] transition-colors hover:bg-[var(--foreground)]/[0.06]"
+               >
+                 Admin
+@@ -163,7 +217,7 @@
+             <button
+               type="button"
+               role="menuitem"
+-              onClick={() => void signOut({ callbackUrl: "/" })}
++              onClick={() => { setOpen(false); void signOut({ callbackUrl: "/" }); }}
+               className="mt-0.5 block w-full cursor-pointer rounded-[10px] px-2.5 py-2 text-left text-[14px] text-[var(--muted-ink)] transition-colors hover:bg-[var(--foreground)]/[0.06] hover:text-[var(--foreground)]"
+             >
+               Sign out
+--- a/src/components/credits-scroller.tsx
++++ b/src/components/credits-scroller.tsx
+@@ -13,16 +13,16 @@
+   const people = credits.filter((credit) => !credit.app);
+ 
+   return (
+-    <div className="px-6 pb-20">
++    <div className="px-6 pb-14">
+       <div className="mx-auto max-w-[1080px]">
+         <section aria-labelledby="project-credits-heading">
+           <h2
+             id="project-credits-heading"
+             className="mb-6 text-[20px] font-semibold tracking-[-0.015em]"
+           >
+-            Projects behind the app
++            Projects
+           </h2>
+-          <div className="grid gap-6 md:grid-cols-2">
++          <div>
+             {projects.map((credit) => (
+               <ProjectCredit
+                 key={credit.name}
+@@ -38,9 +38,9 @@
+             id="people-credits-heading"
+             className="mb-6 text-[20px] font-semibold tracking-[-0.015em]"
+           >
+-            People who shaped it
++            People
+           </h2>
+-          <div className="grid gap-6 sm:grid-cols-2">
++          <div className="grid gap-x-12 gap-y-6 sm:grid-cols-2">
+             {people.map((credit) => (
+               <PersonCredit
+                 key={credit.name}
+@@ -63,11 +63,11 @@
+   contributions?: Contributions | null;
+ }) {
+   return (
+-    <article className="flex h-full flex-col rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-7 shadow-[var(--card-shadow)]">
++    <article className="grid gap-4 border-t border-[var(--hairline)] py-6 md:grid-cols-[280px_minmax(0,1fr)] md:gap-8">
+       <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+         <CreditPortrait credit={credit} size="project" />
+         <div className="min-w-0">
+-          <h3 className="text-pretty text-[28px] font-semibold leading-tight tracking-[-0.025em]">
++          <h3 className="text-pretty text-[24px] font-medium leading-tight tracking-[-0.02em]">
+             {credit.href ? (
+               <a
+                 href={credit.href}
+@@ -87,24 +87,26 @@
+         </div>
+       </div>
+ 
+-      {credit.what && (
+-        <p className="mt-6 text-[15px] leading-[1.6] text-[var(--foreground)]">
+-          {credit.what}
+-        </p>
+-      )}
+-      {credit.contribution && (
+-        <p className="mt-4 text-[16px] leading-[1.6] text-[var(--muted-ink)]">
+-          {credit.contribution}
+-        </p>
+-      )}
+-
+-      <div className="mt-auto pt-1">
+-        <CreditLinks credit={credit} contributions={contributions} />
+-        {credit.rightsHolder && (
+-          <p className="mt-5 text-[12px] leading-[1.6] text-[var(--faint-ink)]">
+-            All rights reserved by {credit.rightsHolder} {credit.year}
++      <div className="min-w-0">
++        {credit.what && (
++          <p className="text-[15px] leading-[1.6] text-[var(--foreground)]">
++            {credit.what}
+           </p>
+         )}
++        {credit.contribution && (
++          <p className="mt-2 text-[16px] leading-[1.6] text-[var(--muted-ink)]">
++            {credit.contribution}
++          </p>
++        )}
++
++        <div className="mt-2">
++          <CreditLinks credit={credit} contributions={contributions} />
++          {credit.rightsHolder && (
++            <p className="mt-5 text-[12px] leading-[1.6] text-[var(--faint-ink)]">
++              All rights reserved by {credit.rightsHolder} {credit.year}
++            </p>
++          )}
++        </div>
+       </div>
+     </article>
+   );
+@@ -118,10 +120,10 @@
+   contributions?: Contributions | null;
+ }) {
+   return (
+-    <article className="flex h-full flex-col rounded-[24px] border border-[var(--hairline)] bg-[var(--surface)] p-6 shadow-[var(--card-shadow)]">
++    <article className="flex flex-col border-t border-[var(--hairline)] py-5">
+       <div className="flex items-center gap-4">
+         <CreditPortrait credit={credit} size="person" />
+-        <h3 className="min-w-0 text-pretty text-[22px] font-semibold leading-tight tracking-[-0.02em]">
++        <h3 className="min-w-0 text-pretty text-[20px] font-medium leading-tight tracking-[-0.02em]">
+           {credit.href ? (
+             <a
+               href={credit.href}
+@@ -138,12 +140,12 @@
+       </div>
+ 
+       {credit.contribution && (
+-        <p className="mt-5 text-[16px] leading-[1.6] text-[var(--muted-ink)]">
++        <p className="mt-3 text-[16px] leading-[1.6] text-[var(--muted-ink)]">
+           {credit.contribution}
+         </p>
+       )}
+ 
+-      <div className="mt-auto flex flex-wrap items-end gap-x-5 pt-1">
++      <div className="mt-2 flex flex-wrap items-end gap-x-5">
+         <CreditLinks credit={credit} contributions={contributions} />
+ 
+         {credit.sideApp && (
+@@ -181,8 +183,8 @@
+     (credit.github ? `https://github.com/${credit.github}.png?size=440` : undefined);
+   const dimensions =
+     size === "project"
+-      ? "size-20 rounded-[20px] text-[26px]"
+-      : "size-14 rounded-[14px] text-[20px]";
++      ? "size-16 rounded-[16px] text-[22px]"
++      : "size-12 rounded-[12px] text-[18px]";
+ 
+   if (!portrait) {
+     return (
+@@ -195,7 +197,7 @@
+     );
+   }
+ 
+-  const pixels = size === "project" ? 160 : 112;
++  const pixels = size === "project" ? 128 : 96;
+   return (
+     // eslint-disable-next-line @next/next/no-img-element
+     <img
+--- a/src/components/email-sign-in.tsx
++++ b/src/components/email-sign-in.tsx
+@@ -1,7 +1,7 @@
+ "use client";
+ 
+ import { signIn } from "next-auth/react";
+-import { useEffect, useRef, useState } from "react";
++import { useEffect, useId, useRef, useState } from "react";
+ 
+ import { safeCallbackPath } from "@/lib/safe-callback";
+ 
+@@ -18,6 +18,10 @@
+   const [error, setError] = useState<string | null>(null);
+   const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+   const [nowMs, setNowMs] = useState(() => Date.now());
++  const uid = useId();
++  const emailInputId = `${uid}-email-input`;
++  const codeInputId = `${uid}-code-input`;
++  const errorMessageId = `${uid}-error-message`;
+ 
+   // Whole seconds left on the resend deadline, derived from wall-clock time so
+   // a throttled background tab still shows the right number on return.
+@@ -98,8 +102,13 @@
+   if (step === "email") {
+     return (
+       <form aria-busy={busy} onSubmit={requestCode} className="flex flex-col gap-2.5">
++        <label htmlFor={emailInputId} className="text-[14px] font-medium text-[var(--foreground)]">
++          Email address
++        </label>
+         <input
++          id={emailInputId}
+           aria-label="Email address"
++          aria-describedby={error ? errorMessageId : undefined}
+           readOnly={busy}
+           type="email"
+           required
+@@ -107,16 +116,16 @@
+           placeholder="you@example.com"
+           value={email}
+           onChange={(e) => setEmail(e.target.value)}
+-          className="w-full rounded-full border border-[var(--panel-edge)] bg-[var(--panel-bg)] px-4 py-2.5 text-[16px] outline-none transition-colors focus:border-[var(--foreground)]/30"
++          className="min-h-11 w-full rounded-xl border border-[var(--panel-edge)] bg-[var(--panel-bg)] px-4 py-2.5 text-[16px] transition-colors focus:border-[var(--foreground)]/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]"
+         />
+         <button
+           type="submit"
+           disabled={busy || !email}
+-          className="w-full rounded-full bg-[var(--foreground)] px-4 py-2.5 text-[15px] font-medium text-[var(--background)] transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] disabled:opacity-40"
++          className="min-h-11 w-full rounded-xl bg-[var(--foreground)] px-4 py-2.5 text-[15px] font-medium text-[var(--background)] transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] disabled:opacity-40"
+         >
+           {busy ? "Sending…" : "Email me a code"}
+         </button>
+-        {error && <Message text={error} />}
++        {error && <Message id={errorMessageId} text={error} />}
+       </form>
+     );
+   }
+@@ -124,11 +133,16 @@
+   return (
+     <form aria-busy={busy} onSubmit={submitCode} className="flex flex-col gap-2.5">
+       <p className="text-[14px] leading-relaxed text-[var(--muted-ink)]">
+-        Six digits are on their way to <span className="text-[var(--foreground)]">{email}</span>.
++        Six digits are on their way to <span className="break-all text-[var(--foreground)]">{email}</span>.
+         They expire in ten minutes.
+       </p>
++      <label htmlFor={codeInputId} className="text-[14px] font-medium text-[var(--foreground)]">
++        Sign-in code
++      </label>
+       <input
++        id={codeInputId}
+         aria-label="Six-digit sign-in code"
++        aria-describedby={error ? errorMessageId : undefined}
+         readOnly={busy}
+         type="text"
+         inputMode="numeric"
+@@ -140,12 +154,12 @@
+         placeholder="123456"
+         value={code}
+         onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+-        className="w-full rounded-full border border-[var(--panel-edge)] bg-[var(--panel-bg)] px-4 py-2.5 text-center text-[17px] tracking-[0.4em] tabular-nums outline-none transition-colors focus:border-[var(--foreground)]/30"
++        className="min-h-11 w-full rounded-xl border border-[var(--panel-edge)] bg-[var(--panel-bg)] px-4 py-2.5 text-center text-[17px] tracking-[0.4em] tabular-nums transition-colors focus:border-[var(--foreground)]/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]"
+       />
+       <button
+         type="submit"
+         disabled={busy || code.length !== 6}
+-        className="w-full rounded-full bg-[var(--foreground)] px-4 py-2.5 text-[15px] font-medium text-[var(--background)] transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] disabled:opacity-40"
++        className="min-h-11 w-full rounded-xl bg-[var(--foreground)] px-4 py-2.5 text-[15px] font-medium text-[var(--background)] transition-opacity hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] disabled:opacity-40"
+       >
+         {busy ? "Checking…" : "Sign in"}
+       </button>
+@@ -166,16 +180,16 @@
+       >
+         Use a different address
+       </button>
+-      {error && <Message text={error} />}
++      {error && <Message id={errorMessageId} text={error} />}
+     </form>
+   );
+ }
+ 
+-function Message({ text }: { text: string }) {
++function Message({ id, text }: { id: string; text: string }) {
+   // `role="alert"` so the failure is announced rather than only drawn — the input keeps
+   // focus after a bad code, so a sighted user sees it and a screen reader would not.
+   return (
+-    <p role="alert" className="text-[13px] text-[var(--destructive)]">
++    <p id={id} role="alert" className="text-[13px] text-[var(--destructive)]">
+       {text}
+     </p>
+   );
+--- a/src/components/feature-list.tsx
++++ b/src/components/feature-list.tsx
+@@ -1,75 +1,61 @@
+-const GROUPS = [
+-  {
+-    title: "Recognition",
+-    rows: [
+-      ["Face unlock", "Look at your Mac and it lets you in"],
+-      ["Movement checks", "Follow the configured prompts before unlocking"],
+-      ["Deliberate look", "The match has to hold, so a glance won't do it"],
+-      ["Up to five faces", "Every enrolled face unlocks the same Mac account"],
+-    ],
+-  },
+-  {
+-    title: "On your machine",
+-    rows: [
+-      ["On-device model", "Recognition is processed on your Mac"],
+-      ["No account", "Nothing to sign up for"],
+-      ["Local recognition", "Recognition works without a network connection"],
+-      ["Optional portraits", "Face-tile pictures are stored separately on your Mac"],
+-    ],
+-  },
+-  {
+-    title: "At the lock screen",
+-    rows: [
+-      ["A panel in the notch", "Appears when your Mac locks, and not before"],
+-      ["Touch ID still works", "Nothing is replaced or turned off"],
+-      ["Your password still works", "It is a faster way in, not the only way"],
+-      ["Three panel styles", "The Mac app offers Solid, Semi-glass, and Liquid Glass; this preview shows Solid and Semi-glass"],
+-    ],
+-  },
+-  {
+-    title: "Kept honest",
+-    rows: [
+-      ["Secure Enclave key", "Your password is encrypted with a key from this Mac"],
+-      ["Revoke access", "Remove the saved password after authorization"],
+-      ["Spoof checks", "Add hurdles but can still be fooled"],
+-      ["Open source", "Every line is readable"],
+-    ],
+-  },
++import Link from "next/link";
++
++const DETAILS = [
++  [
++    "Works offline",
++    "Recognition runs on your Mac. You don’t need an account to use the Mac app.",
++  ],
++  [
++    "Up to five faces",
++    "All enrolled faces unlock the same macOS account.",
++  ],
++  [
++    "Password and Touch ID",
++    "Your usual ways of signing in remain available.",
++  ],
++  [
++    "Three panel styles",
++    "Choose Solid, Semi-glass, or Liquid Glass in the Mac app.",
++  ],
++  [
++    "Stored on your Mac",
++    "Face templates and any saved login password are encrypted locally. Optional face pictures are stored separately.",
++  ],
++  [
++    "Camera-based recognition",
++    "Movement and spoof checks can still be fooled by photos or replay. They don’t provide Apple Face ID’s depth sensing.",
++  ],
+ ];
+ 
+ export function FeatureList() {
+   return (
+-    <section id="features" className="scroll-mt-20 px-6 pb-8 pt-16">
+-      <div className="mx-auto max-w-[1080px]">
+-        <p className="text-[13px] font-medium uppercase tracking-[0.08em] text-[var(--faint-ink)]">
+-          Feature list
+-        </p>
+-        <h2 className="mt-4 max-w-[18ch] text-balance text-[clamp(2rem,4.5vw,3.25rem)] font-bold leading-[1.06] tracking-[-0.035em]">
+-          The details, in one place.
++    <section
++      id="features"
++      aria-labelledby="features-title"
++      className="scroll-mt-24 px-6 py-10"
++    >
++      <div className="mx-auto grid max-w-[1080px] gap-6 md:grid-cols-[180px_minmax(0,1fr)] md:gap-12">
++        <h2
++          id="features-title"
++          className="text-[28px] font-medium leading-tight tracking-[-0.02em]"
++        >
++          Details
+         </h2>
+-        <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-[var(--muted-ink)]">
+-          Recognition stays local. Unlocking still depends on the protections and account already on your Mac.
+-        </p>
+-      </div>
+-      <div className="mx-auto mt-12 grid max-w-[1080px] gap-x-16 gap-y-14 md:grid-cols-2">
+-        {GROUPS.map((group) => (
+-          <div key={group.title}>
+-            <h2 className="text-[13px] font-medium uppercase tracking-[0.08em] text-[var(--faint-ink)]">
+-              {group.title}
+-            </h2>
+-            <dl className="mt-4 border-t border-[var(--hairline)]">
+-              {group.rows.map(([name, detail]) => (
+-                <div
+-                  key={name}
+-                  className="flex flex-col gap-1 border-b border-[var(--hairline)] py-3.5 sm:flex-row sm:items-baseline sm:gap-6"
+-                >
+-                  <dt className="text-[15px] font-medium sm:w-[42%] sm:shrink-0">{name}</dt>
+-                  <dd className="text-[15px] leading-snug text-[var(--muted-ink)]">{detail}</dd>
+-                </div>
+-              ))}
+-            </dl>
+-          </div>
+-        ))}
++        <div>
++          <dl className="grid max-w-[66ch] gap-5 text-[16px] leading-relaxed">
++            {DETAILS.map(([title, description]) => (
++              <div key={title}>
++                <dt className="inline font-medium">{title}. </dt>
++                <dd className="inline text-[var(--muted-ink)]">
++                  {description}
++                </dd>
++              </div>
++            ))}
++          </dl>
++          <Link href="/security" className="site-link mt-6 inline-block text-[15px]">
++            Security and privacy
++          </Link>
++        </div>
+       </div>
+     </section>
+   );
+--- a/src/components/mac-screen.tsx
++++ b/src/components/mac-screen.tsx
+@@ -108,9 +108,6 @@
+       {interactive && (
+         <div className="flex flex-col items-center gap-3">
+           <Segmented value={style} onChange={setStyle} options={STYLES} label="Preview material" />
+-          <p className="text-[12px] text-[var(--muted-ink)]">
+-            Slowed panel preview · camera off
+-          </p>
+         </div>
+       )}
+     </div>
+--- a/src/components/notch-video.tsx
++++ b/src/components/notch-video.tsx
+@@ -15,7 +15,7 @@
+  * continuity between panel materials without lingering past the 220ms budget.
+  */
+ const FADE_SECONDS = 0.2;
+-const PREVIEW_RATE = 0.6;
++const PREVIEW_RATE = 0.25;
+ 
+ const POSTERS: Record<NotchStyle, string> = {
+   normal: "/previews/gaze-panel-normal-poster.png",
+@@ -257,16 +257,15 @@
+         type="button"
+         onClick={toggle}
+         aria-label={isPlaying ? "Pause preview" : "Play preview"}
+-        className="absolute right-3 top-3 flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-white/25 bg-black/60 px-3 text-[13px] font-medium text-white backdrop-blur-[14px] backdrop-saturate-[1.7] transition-colors hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
++        className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white backdrop-blur-[14px] backdrop-saturate-[1.7] transition-colors hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+       >
+-        <svg aria-hidden width="11" height="12" viewBox="0 0 11 12" fill="currentColor">
++        <svg aria-hidden width="14" height="14" viewBox="0 0 11 12" fill="currentColor">
+           {isPlaying ? (
+             <path d="M0 0h3.7v12H0zM7.3 0H11v12H7.3z" />
+           ) : (
+             <path d="M0 0l11 6-11 6z" />
+           )}
+         </svg>
+-        <span aria-hidden>{isPlaying ? "Pause" : "Play"}</span>
+       </button>
+     </div>
+   );
+--- a/src/components/page-intro.tsx
++++ b/src/components/page-intro.tsx
+@@ -1,21 +1,18 @@
+ import type { ReactNode } from "react";
+ 
+ export function PageIntro({
+-  eyebrow,
+   title,
+   description,
+   children,
+ }: {
+-  eyebrow: string;
+   title: string;
+   description: string;
+   children?: ReactNode;
+ }) {
+   return (
+-    <header className="site-container pb-14 pt-14 sm:pb-16 sm:pt-20">
+-      <p className="mb-4 text-sm font-medium text-[var(--muted-ink)]">{eyebrow}</p>
+-      <h1 className="max-w-[22ch] text-balance text-[clamp(2.5rem,6vw,4rem)] font-semibold leading-[1.06] tracking-[-0.035em]">{title}</h1>
+-      <p className="mt-5 max-w-[42ch] text-[17px] leading-[1.55] text-[var(--muted-ink)] sm:text-[19px]">{description}</p>
++    <header className="site-container pb-8 pt-10 sm:pb-10 sm:pt-12">
++      <h1 className="max-w-[24ch] text-balance text-[clamp(2rem,4vw,3rem)] font-semibold leading-[1.12] tracking-[-0.025em]">{title}</h1>
++      <p className="mt-3 max-w-[60ch] text-base leading-relaxed text-[var(--muted-ink)] sm:text-[17px]">{description}</p>
+       {children}
+     </header>
+   );
+--- a/src/components/page-links.tsx
++++ b/src/components/page-links.tsx
+@@ -1,39 +1,22 @@
+-import Link from "next/link";
++import { Footer } from "@/components/ui/footer-section";
+ 
+ const PAGES = [
+-  { href: "/", label: "Overview", blurb: "Meet Gaze." },
+-  { href: "/how-it-works", label: "How it works", blurb: "From setup to unlocking." },
+-  { href: "/features", label: "Features", blurb: "A closer look at the app." },
+-  { href: "/security", label: "Security", blurb: "Your data and your choices." },
+-  { href: "/releases", label: "Releases", blurb: "Builds and release notes." },
+-  { href: "/credits", label: "Credits", blurb: "The people behind the details." },
++  { href: "/", title: "Overview" },
++  { href: "/how-it-works", title: "How it works" },
++  { href: "/features", title: "Features" },
++  { href: "/security", title: "Security" },
++  { href: "/releases", title: "Releases" },
++  { href: "/credits", title: "Credits" },
+ ];
+ 
+ export function PageLinks({ current }: { current: string }) {
+   return (
+-    <footer className="border-t border-[var(--hairline)] py-12 sm:py-16">
+-      <div className="site-container grid gap-10 md:grid-cols-[1fr_2fr] md:gap-16">
+-        <div>
+-          <p className="text-2xl font-semibold tracking-[-0.025em]">More about Gaze.</p>
+-          <p className="mt-3 max-w-xs text-sm leading-relaxed text-[var(--muted-ink)]">Made for your Mac. Independently developed and not affiliated with Apple.</p>
+-          <a href="https://discord.gg/BFgKT5YJH" target="_blank" rel="noreferrer" className="site-link mt-3 text-sm">Questions or feedback? Ask on Discord</a>
+-        </div>
+-        <nav aria-label="More pages">
+-          <ul className="grid gap-x-10 sm:grid-cols-2">
+-            {PAGES.filter((page) => page.href !== current).map((page) => (
+-              <li key={page.href} className="border-b border-[var(--hairline)]">
+-                <Link href={page.href} className="flex min-h-20 w-full items-center gap-6 py-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]">
+-                  <span className="min-w-0 flex-1">
+-                    <span className="block text-[18px] font-semibold tracking-[-0.02em]">{page.label}</span>
+-                    <span className="mt-1 block text-[14px] leading-relaxed text-[var(--muted-ink)]">{page.blurb}</span>
+-                  </span>
+-                  <span aria-hidden className="shrink-0">→</span>
+-                </Link>
+-              </li>
+-            ))}
+-          </ul>
+-        </nav>
+-      </div>
+-    </footer>
++    <Footer
++      note="Gaze is independently developed and is not affiliated with Apple."
++      columns={[
++        { label: "Pages", links: PAGES.filter((page) => page.href !== current) },
++        { label: "Community", links: [{ title: "Discord", href: "https://discord.gg/BFgKT5YJH", external: true }] },
++      ]}
++    />
+   );
+ }
+--- a/src/components/product-tour.tsx
++++ b/src/components/product-tour.tsx
+@@ -6,7 +6,6 @@
+   height: number;
+   poster?: string;
+   alt: string;
+-  eyebrow: string;
+   title: string;
+   body: string;
+ };
+@@ -18,30 +17,27 @@
+     height: 560,
+     poster: "/previews/gaze-panel-detail-poster.png",
+     alt: "Website preview of the Gaze unlock panel and movement prompts",
+-    eyebrow: "Unlock preview",
+-    title: "See what Gaze is looking for.",
++    title: "At the lock screen",
+     body:
+-      "This website preview shows how the lock-screen panel guides you through the configured movement prompts before Gaze unlocks your Mac.",
++      "Gaze checks your face, then guides you through the configured movement prompts.",
+   },
+   {
+     media: "/product/setup-how-detail.webp",
+     width: 1200,
+     height: 765,
+     alt: "Native setup preview explaining Gaze’s local recognition and password storage",
+-    eyebrow: "Your choices",
+-    title: "Know what you’re turning on.",
++    title: "Choose how to use Gaze",
+     body:
+-      "Setup explains what Gaze stores and how unlocking works. Choose recognition-only mode or enable automatic unlocking after reviewing the permissions.",
++      "Use recognition-only mode, or enable automatic unlocking after reviewing camera and Accessibility access.",
+   },
+   {
+     media: "/product/setup-companion-detail.webp",
+     width: 1420,
+     height: 700,
+     alt: "Native preview of Gaze’s companion introduction during setup",
+-    eyebrow: "Setup",
+-    title: "Set it up at your pace.",
++    title: "Practice before unlocking",
+     body:
+-      "Meet the companion and practice the movements before using Gaze at the lock screen. These are previews of the current setup screens.",
++      "Try the movement prompts during setup before using them at the lock screen.",
+   },
+ ];
+ 
+@@ -49,22 +45,21 @@
+   return (
+     <section id="tour" className="scroll-mt-20 px-6 pb-16 pt-2">
+       <div className="mx-auto max-w-[1080px]">
+-        <article>
+-          <Media shot={shots[0]} />
+-          <div className="mt-8 grid gap-5 md:grid-cols-2 md:gap-12">
+-            <div>
+-              <p className="text-[14px] font-medium text-[var(--faint-ink)]">{shots[0].eyebrow}</p>
+-              <h2 className="mt-3 max-w-[16ch] text-balance text-[clamp(1.9rem,4vw,2.75rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
+-                {shots[0].title}
+-              </h2>
+-            </div>
+-            <p className="max-w-lg text-[17px] leading-relaxed text-[var(--muted-ink)] md:pt-8">
++        <article className="grid items-center gap-6 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:gap-10">
++          <div className="min-w-0">
++            <Media shot={shots[0]} />
++          </div>
++          <div className="min-w-0">
++            <h2 className="max-w-[20ch] text-balance text-[clamp(1.5rem,3vw,2rem)] font-medium leading-tight tracking-[-0.02em]">
++              {shots[0].title}
++            </h2>
++            <p className="mt-3 max-w-lg text-base leading-relaxed text-[var(--muted-ink)]">
+               {shots[0].body}
+             </p>
+           </div>
+         </article>
+ 
+-        <div className="mt-16 grid gap-8 md:grid-cols-2">
++        <div className="mt-12 grid gap-8 md:grid-cols-2">
+           {shots.slice(1).map((shot) => (
+             <TourPanel key={shot.title} shot={shot} />
+           ))}
+@@ -78,15 +73,14 @@
+   return (
+     <article className="flex min-w-0 flex-col">
+       <div>
+-        <p className="text-[14px] font-medium text-[var(--faint-ink)]">{shot.eyebrow}</p>
+-        <h2 className="mt-3 text-balance text-[clamp(1.75rem,3.6vw,2.5rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
++        <h2 className="text-balance text-[28px] font-medium leading-tight tracking-[-0.02em]">
+           {shot.title}
+         </h2>
+-        <p className="mt-4 max-w-md text-[16px] leading-relaxed text-[var(--muted-ink)]">
++        <p className="mt-3 max-w-md text-base leading-relaxed text-[var(--muted-ink)]">
+           {shot.body}
+         </p>
+       </div>
+-      <div className="mt-8">
++      <div className="mt-5">
+         <Media shot={shot} />
+       </div>
+     </article>
+@@ -101,7 +95,7 @@
+         width={shot.width}
+         height={shot.height}
+         controls
+-        preload="none"
++        preload="metadata"
+         poster={shot.poster}
+         muted
+         playsInline
+--- a/src/components/release-card.tsx
++++ b/src/components/release-card.tsx
+@@ -9,13 +9,14 @@
+   });
+ 
+   return (
+-    <li className="grid gap-6 border-t border-[var(--hairline)] py-9 md:grid-cols-[180px_1fr] md:gap-12">
+-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2 md:block">
++    <li className="grid gap-4 border-t border-[var(--hairline)] py-6 lg:grid-cols-[140px_minmax(0,1fr)] lg:gap-8">
++      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2 lg:block">
+         <p className="text-lg font-semibold tracking-[-0.02em]">{release.tag}</p>
+-        <time dateTime={release.date} className="text-sm tabular-nums text-[var(--muted-ink)] md:mt-2 md:block">{date}</time>
++        <time dateTime={release.date} className="text-sm tabular-nums text-[var(--muted-ink)] lg:mt-2 lg:block">{date}</time>
+         {release.prerelease && <span className="mt-3 inline-block rounded-md bg-[var(--panel-bg)] px-2 py-1 text-xs font-medium">Beta</span>}
+       </div>
+-      <article className="min-w-0">
++      <article className={cover ? "min-w-0 grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]" : "min-w-0"}>
++        <div className="min-w-0">
+         <div className="flex items-start gap-4">
+           {!cover && <AppIcon size={64} className="size-12 shrink-0" />}
+           <div>
+@@ -25,12 +26,6 @@
+             {release.excerpt && <p className="mt-3 max-w-[65ch] text-[17px] leading-relaxed text-[var(--muted-ink)]">{release.excerpt}</p>}
+           </div>
+         </div>
+-        {cover && (
+-          <Link href={`/releases/${encodeURIComponent(release.tag)}`} aria-label={`Open release ${release.tag}`} className="mt-6 block overflow-hidden rounded-[20px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)]">
+-            {/* eslint-disable-next-line @next/next/no-img-element */}
+-            <img src={cover.src} alt={cover.alt} loading={index === 0 ? "eager" : "lazy"} width={1200} height={750} className="aspect-[16/10] w-full object-contain" />
+-          </Link>
+-        )}
+         <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+           <Link href={`/releases/${encodeURIComponent(release.tag)}`} className="site-link font-medium" aria-label={`Read release notes for ${release.tag}`}>Read release notes <span aria-hidden>→</span></Link>
+           {release.contributors.length > 0 && (
+@@ -46,6 +41,13 @@
+             </div>
+           )}
+         </div>
++        </div>
++        {cover && (
++          <Link href={`/releases/${encodeURIComponent(release.tag)}`} aria-label={`Open release ${release.tag}`} className="block max-w-[560px] overflow-hidden rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--action)] lg:max-w-none">
++            {/* eslint-disable-next-line @next/next/no-img-element */}
++            <img src={cover.src} alt={cover.alt} loading={index === 0 ? "eager" : "lazy"} width={1200} height={750} className="aspect-[16/10] w-full object-contain" />
++          </Link>
++        )}
+       </article>
+     </li>
+   );
+--- a/src/components/release-gallery.tsx
++++ b/src/components/release-gallery.tsx
+@@ -1,46 +1,41 @@
+ "use client";
+ 
+-import { useCallback, useEffect, useState } from "react";
++import { useCallback, useEffect, useId, useRef, useState } from "react";
+ 
+ interface Shot {
+   src: string;
+   alt: string;
+ }
+ 
+-/**
+- * The pictures on a release, and the viewer that opens when you click one.
+- *
+- * The grid was plain `img` tags, so a screenshot of a settings pane was shown
+- * at a third of the width it was captured at and there was no way to see it
+- * properly — which is the one thing a release gallery has to do.
+- */
+ export function ReleaseGallery({ images }: { images: Shot[] }) {
+   const [open, setOpen] = useState<number | null>(null);
++  const dialog = useRef<HTMLDialogElement>(null);
++  const closeButton = useRef<HTMLButtonElement>(null);
++  const opener = useRef<HTMLButtonElement>(null);
++  const positionId = useId();
++  const selected = open === null ? undefined : images[open];
++  const isOpen = selected !== undefined;
+ 
+   const close = useCallback(() => setOpen(null), []);
+   const step = useCallback(
+     (d: number) =>
+-      setOpen((i) => (i === null ? null : (i + d + images.length) % images.length)),
++      setOpen((i) => (i === null || images.length === 0 ? null : (i + d + images.length) % images.length)),
+     [images.length],
+   );
+ 
+   useEffect(() => {
+-    if (open === null) return;
+-    const onKey = (e: KeyboardEvent) => {
+-      if (e.key === "Escape") close();
+-      if (e.key === "ArrowRight") step(1);
+-      if (e.key === "ArrowLeft") step(-1);
+-    };
+-    document.addEventListener("keydown", onKey);
+-    // The page behind must not scroll while the viewer is up, or closing it
+-    // drops you somewhere you did not leave.
++    const viewer = dialog.current;
++    if (!isOpen || !viewer) return;
+     const prev = document.body.style.overflow;
+     document.body.style.overflow = "hidden";
++    viewer.showModal();
++    closeButton.current?.focus();
+     return () => {
+-      document.removeEventListener("keydown", onKey);
++      if (viewer.open) viewer.close();
+       document.body.style.overflow = prev;
++      if (opener.current?.isConnected) opener.current.focus({ preventScroll: true });
+     };
+-  }, [open, close, step]);
++  }, [isOpen]);
+ 
+   return (
+     <>
+@@ -49,8 +44,11 @@
+           <button
+             key={img.src}
+             type="button"
+-            onClick={() => setOpen(i)}
+-            aria-label={`Open ${img.alt || "picture"}`}
++            onClick={(event) => {
++              opener.current = event.currentTarget;
++              setOpen(i);
++            }}
++            aria-label={`Open ${img.alt || `picture ${i + 1}`}`}
+             className={`group block cursor-zoom-in overflow-hidden rounded-[16px] border border-[var(--surface-edge)] outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--foreground)] ${
+               images.length % 2 === 1 && i === 0 ? "sm:col-span-2" : ""
+             }`}
+@@ -60,33 +58,53 @@
+               src={img.src}
+               alt={img.alt}
+               loading={i === 0 ? "eager" : "lazy"}
+-              className="block w-full transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:scale-[1.02] motion-reduce:transform-none"
++              className="block w-full"
+             />
+           </button>
+         ))}
+       </div>
+ 
+-      {open !== null && (
+-        <div
+-          role="dialog"
+-          aria-modal="true"
+-          aria-label={images[open].alt || "Picture"}
+-          onClick={close}
+-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md sm:p-10"
++      <dialog
++          ref={dialog}
++          aria-label={selected?.alt || "Release picture"}
++          aria-describedby={positionId}
++          onClose={close}
++          onCancel={(event) => { event.preventDefault(); close(); }}
++          onClick={(event) => { if (event.target === event.currentTarget) close(); }}
++          onKeyDown={(event) => {
++            if (event.altKey || event.ctrlKey || event.metaKey) return;
++            if (event.key === "Tab") {
++              const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not([disabled])");
++              const first = buttons[0];
++              const last = buttons[buttons.length - 1];
++              if (event.shiftKey && document.activeElement === first) {
++                event.preventDefault();
++                last?.focus();
++              } else if (!event.shiftKey && document.activeElement === last) {
++                event.preventDefault();
++                first?.focus();
++              }
++            }
++            if (event.key === "ArrowRight") { event.preventDefault(); step(1); }
++            if (event.key === "ArrowLeft") { event.preventDefault(); step(-1); }
++          }}
++          className="fixed inset-0 m-0 h-dvh w-dvw max-h-none max-w-none border-0 bg-transparent p-4 text-white outline-none backdrop:bg-black/85 backdrop:backdrop-blur-sm open:flex open:items-center open:justify-center sm:p-10"
+         >
++        {selected && (
++          <>
+           {/* eslint-disable-next-line @next/next/no-img-element */}
+           <img
+-            src={images[open].src}
+-            alt={images[open].alt}
+-            onClick={(e) => e.stopPropagation()}
+-            className="max-h-full max-w-full cursor-default rounded-[14px] object-contain shadow-[0_40px_80px_-20px_rgba(0,0,0,0.8)]"
++            src={selected.src}
++            alt={selected.alt}
++            className="max-h-full max-w-full cursor-default rounded-lg object-contain"
+           />
+ 
+           <button
++            ref={closeButton}
+             type="button"
+             onClick={close}
+             aria-label="Close"
+-            className="absolute right-4 top-4 flex size-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur-[20px] transition-transform hover:scale-105 sm:right-6 sm:top-6"
++            className="absolute right-4 top-4 flex size-11 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white sm:right-6 sm:top-6"
+           >
+             <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden>
+               <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+@@ -99,8 +117,12 @@
+               <Step dir="next" onClick={() => step(1)} />
+             </>
+           )}
+-        </div>
+-      )}
++          <p id={positionId} className="sr-only" aria-live="polite">
++            Picture {(open ?? 0) + 1} of {images.length}
++          </p>
++          </>
++        )}
++      </dialog>
+     </>
+   );
+ }
+@@ -114,7 +136,7 @@
+         e.stopPropagation();
+         onClick();
+       }}
+-      className={`absolute top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur-[20px] transition-transform hover:scale-105 ${
++      className={`absolute top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white ${
+         dir === "prev" ? "left-3 sm:left-6" : "right-3 sm:right-6"
+       }`}
+     >
+--- a/src/components/screenshot-gallery.tsx
++++ b/src/components/screenshot-gallery.tsx
+@@ -47,18 +47,10 @@
+   }
+ 
+   return (
+-    <section id="gallery" aria-labelledby="gallery-title" className="scroll-mt-20 bg-[var(--section-bg)] py-16 sm:py-24">
++    <section id="gallery" aria-labelledby="gallery-title" className="scroll-mt-20 bg-[var(--section-bg)] py-12 sm:py-16">
+       <div className="site-container">
+-        <div className="grid items-center gap-7 lg:grid-cols-[minmax(0,300px)_minmax(0,710px)] lg:gap-14">
+-          <div>
+-            <h2 id="gallery-title" className="text-[32px] leading-[1.15] font-semibold tracking-[-0.025em] text-[var(--foreground)] sm:text-[36px]">Meet your guide.</h2>
+-            <p className="mt-5 max-w-sm text-[17px] leading-relaxed text-[var(--muted-ink)]">A familiar face, from setup to your next unlock.</p>
+-            <div className="mt-8 min-h-[104px] lg:mt-10">
+-              <h3 className="text-[20px] leading-7 font-medium text-[var(--foreground)]">{shot.title}</h3>
+-              <p id="gallery-shot-description" className="mt-2 max-w-sm text-[17px] leading-relaxed text-[var(--muted-ink)]">{shot.caption}</p>
+-            </div>
+-          </div>
+-
++        <h2 id="gallery-title" className="sr-only">Gaze screenshots</h2>
++        <p id="gallery-shot-description" className="sr-only">{shot.caption}</p>
+           <div className="mx-auto w-full min-w-0 max-w-[710px]">
+             <figure
+               id="gallery-panel"
+@@ -66,7 +58,16 @@
+               aria-labelledby={"gallery-tab-" + selected}
+               aria-describedby="gallery-shot-description"
+             >
+-              <div className="relative aspect-[16/10] w-full">
++              <button
++                ref={expandButton}
++                type="button"
++                aria-label={"Enlarge " + shot.title + " preview"}
++                onClick={() => {
++                  dialog.current?.showModal();
++                  setExpanded(true);
++                }}
++                className="relative block aspect-[16/10] w-full cursor-zoom-in rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]"
++              >
+                 {SHOTS.map((preview, index) => (
+                   <div
+                     key={preview.src}
+@@ -87,25 +88,7 @@
+                   </div>
+                 ))}
+ 
+-              </div>
+-              <figcaption className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[13px] text-[var(--muted-ink)]">
+-                <span>Native setup detail · camera off</span>
+-                <button
+-                  ref={expandButton}
+-                  type="button"
+-                  aria-label={"Enlarge " + shot.title + " preview"}
+-                  onClick={() => {
+-                    dialog.current?.showModal();
+-                    setExpanded(true);
+-                  }}
+-                  className="site-link min-h-11 shrink-0 cursor-pointer rounded-sm text-[13px]"
+-                >
+-                  <span>View larger</span>
+-                  <svg width="16" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+-                    <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
+-                  </svg>
+-                </button>
+-              </figcaption>
++              </button>
+             </figure>
+ 
+             <div role="tablist" aria-label="Choose a screenshot" className="relative mx-auto mt-5 grid w-full max-w-[480px] grid-cols-4 rounded-full bg-[var(--panel-bg)] p-1">
+@@ -137,7 +120,6 @@
+               ))}
+             </div>
+           </div>
+-        </div>
+ 
+         <dialog
+           ref={dialog}
+@@ -149,6 +131,12 @@
+             expandButton.current?.focus();
+           }}
+           onClick={(event) => { if (event.target === event.currentTarget) dialog.current?.close(); }}
++          onKeyDown={(event) => {
++            if (event.key === "Tab" && !event.altKey && !event.ctrlKey && !event.metaKey) {
++              event.preventDefault();
++              event.currentTarget.querySelector<HTMLButtonElement>("button")?.focus();
++            }
++          }}
+         >
+           <div className="mb-3 flex items-center justify-between gap-4">
+             <h3 id="gallery-dialog-title" className="text-[16px] font-medium text-white">{shot.title}</h3>
+--- a/src/components/setup-walkthrough.tsx
++++ b/src/components/setup-walkthrough.tsx
+@@ -5,40 +5,38 @@
+ 
+ const steps = [
+   {
+-    title: "Make it yours",
++    title: "Enroll your face",
+     label: "Enroll",
+     body: "Enroll your face from a few angles, review camera access, then choose whether to enable automatic unlocking. You can finish skipped steps in Settings.",
+     image: "/product/setup-welcome-detail.webp",
+     alt: "Native preview of Gaze’s welcome screen during setup",
+-    caption: "Setup gives you control over what you enable.",
+   },
+   {
+-    title: "Lock. Look. Follow along.",
++    title: "Follow the prompts",
+     label: "Recognize",
+     body: "When automatic unlocking is enabled, Gaze opens the camera after your Mac locks. Follow the panel’s movement prompt, then return to your starting pose. Two movements are required by default.",
+     image: "/previews/gaze-panel-detail-poster.png",
+     video: "/previews/gaze-panel-detail.mp4",
+     alt: "Simulated Gaze panel showing recognition and movement prompts",
+-    caption: "Simulated panel preview. Playing it does not use your camera.",
+   },
+   {
+-    title: "Back to what you were doing",
++    title: "Unlock your Mac",
+     label: "Unlock",
+     body: "Once the configured recognition and movement checks pass, Gaze submits your saved Mac password and waits for macOS. Your password and Touch ID remain available. After a restart, sign in normally so Gaze can start.",
+     image: "/product/setup-how-detail.webp",
+     alt: "Native setup preview explaining Gaze’s local recognition and saved password",
+-    caption: "Setup preview. Change or revoke your saved password later in Settings.",
+   },
+ ];
+ 
+ export function SetupWalkthrough() {
+   const [selected, setSelected] = useState(0);
++  const [pointerDriven, setPointerDriven] = useState(false);
+   const id = useId();
+   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
+ 
+   return (
+-    <section aria-label="From setup to unlocking" className="site-container pb-20">
+-      <div role="tablist" aria-label="Unlocking steps" className="mb-6 grid grid-cols-3 gap-2 rounded-2xl bg-[var(--panel-bg)] p-1.5">
++    <section aria-label="From setup to unlocking" className="site-container pb-14">
++      <div role="tablist" aria-label="Unlocking steps" className="mb-5 grid grid-cols-3 gap-2 rounded-2xl bg-[var(--panel-bg)] p-1.5">
+         {steps.map((step, index) => (
+           <button
+             key={step.label}
+@@ -49,8 +47,9 @@
+             aria-selected={selected === index}
+             aria-controls={`${id}-panel-${index}`}
+             tabIndex={selected === index ? 0 : -1}
+-            onClick={() => setSelected(index)}
++            onClick={(event) => { setPointerDriven(event.detail > 0); setSelected(index); }}
+             onKeyDown={(event) => {
++              if (event.altKey || event.ctrlKey || event.metaKey) return;
+               let next = index;
+               if (event.key === "ArrowRight") next = (index + 1) % steps.length;
+               else if (event.key === "ArrowLeft") next = (index + steps.length - 1) % steps.length;
+@@ -58,6 +57,7 @@
+               else if (event.key === "End") next = steps.length - 1;
+               else return;
+               event.preventDefault();
++              setPointerDriven(false);
+               setSelected(next);
+               buttons.current[next]?.focus();
+             }}
+@@ -75,26 +75,24 @@
+           aria-labelledby={`${id}-tab-${index}`}
+           hidden={selected !== index}
+           tabIndex={0}
+-          className="walkthrough-panel focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]"
++          className={`${pointerDriven ? "walkthrough-panel" : ""} focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]`}
+         >
+-          <div className="grid items-center gap-8 md:grid-cols-[0.8fr_1.2fr] md:gap-12">
+-            <div>
+-              <p className="mb-4 text-sm font-medium text-[var(--muted-ink)]">Step {index + 1} of 3</p>
+-              <h2 className="text-balance text-[clamp(1.75rem,3.5vw,2.5rem)] font-semibold leading-[1.12] tracking-[-0.03em]">{step.title}</h2>
+-              <p className="mt-5 text-[17px] leading-relaxed text-[var(--muted-ink)]">{step.body}</p>
+-            </div>
++          <div className="grid items-center gap-6 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] md:gap-10">
+             <figure>
+               <div className="aspect-[16/10]">
+                 {step.video && selected === index ? (
+-                  <video src={step.video} poster={step.image} controls muted playsInline preload="none" aria-label={step.alt} className="h-full w-full rounded-xl object-contain">
++                  <video src={step.video} poster={step.image} controls muted playsInline preload="metadata" aria-label={step.alt} className="h-full w-full rounded-xl object-contain">
+                     <track kind="captions" src="/previews/gaze-panel-preview.vtt" srcLang="en" label="Panel prompts" />
+                   </video>
+                 ) : (
+-                  <Image unoptimized src={step.image} alt={step.alt} width={1352} height={845} className="h-full w-full rounded-xl object-contain" />
++                  <Image unoptimized src={step.image} alt={step.alt} width={1352} height={845} loading={selected === index ? "eager" : "lazy"} className="h-full w-full rounded-xl object-contain" />
+                 )}
+               </div>
+-              <figcaption className="mt-4 text-sm leading-relaxed text-[var(--muted-ink)]">{step.caption}</figcaption>
+             </figure>
++            <div>
++              <h2 className="text-balance text-[clamp(1.5rem,3vw,2rem)] font-medium leading-tight tracking-[-0.02em]">{step.title}</h2>
++              <p className="mt-3 text-base leading-relaxed text-[var(--muted-ink)]">{step.body}</p>
++            </div>
+           </div>
+         </div>
+       ))}
+--- a/src/components/site-nav.tsx
++++ b/src/components/site-nav.tsx
+@@ -26,7 +26,7 @@
+         >
+           <AppIcon size={24} />
+           <span className="text-[18px] font-semibold tracking-[-0.025em]">Gaze</span>
+-          <span className="text-[12px] text-[var(--muted-ink)]">Website</span>
++          <span className="text-[12px] text-[var(--muted-ink)]">Admin</span>
+         </Link>
+         <div className="ml-auto flex shrink-0 items-center">
+           <ThemeToggle />
+--- a/src/components/ui/footer-section.tsx
++++ b/src/components/ui/footer-section.tsx
+@@ -28,22 +28,22 @@
+ 
+ export function Footer({ columns, note }: { columns: FooterColumn[]; note: string }) {
+   return (
+-    <footer className="border-t border-[var(--hairline)] bg-[var(--section-bg)] py-12">
++    <footer className="border-t border-[var(--hairline)] bg-[var(--section-bg)] py-8">
+       <div className="site-container">
+-        <div className="grid gap-10 md:grid-cols-[1fr_2fr]">
++        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-10">
+           <Link
+             href="/"
+             aria-label="Gaze home"
+-            className="flex h-fit w-fit items-center gap-2 rounded-md text-[16px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]"
++            className="flex min-h-11 w-fit shrink-0 items-center gap-2 rounded-md text-[16px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--action)]"
+           >
+             <AppIcon size={48} className="size-6" />
+             Gaze
+           </Link>
+-          <nav aria-label="Footer" className="grid grid-cols-2 gap-x-8 gap-y-8 sm:grid-cols-3">
++          <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-1">
+             {columns.map((section) => (
+               <div key={section.label}>
+-                <h3 className="text-[13px] font-semibold">{section.label}</h3>
+-                <ul className="mt-2 text-[14px] text-[var(--muted-ink)]">
++                <h3 className="sr-only">{section.label}</h3>
++                <ul className="flex flex-wrap gap-x-5 gap-y-1 text-[14px] text-[var(--muted-ink)]">
+                   {section.links.map((link) => (
+                     <li key={link.title}>
+                       {link.external ? (
+@@ -67,7 +67,7 @@
+             ))}
+           </nav>
+         </div>
+-        <p className="mt-10 border-t border-[var(--hairline)] pt-5 text-[12px] leading-relaxed text-[var(--muted-ink)]">{note}</p>
++        <p className="mt-4 text-[12px] leading-relaxed text-[var(--muted-ink)]">{note}</p>
+       </div>
+     </footer>
+   );
+--- a/src/components/ui/sign-in.tsx
++++ b/src/components/ui/sign-in.tsx
+@@ -26,24 +26,24 @@
+   };
+ 
+   return (
+-    <div className="flex min-h-dvh flex-col px-6">
++    <div className="flex min-h-dvh flex-col px-4 sm:px-6">
+       <nav aria-label="Return to website" className="mx-auto w-full max-w-[1080px] py-5">
+         <Link href="/" className="site-link"><span aria-hidden>←</span> Back to Gaze</Link>
+       </nav>
+       <section className="flex flex-1 items-center justify-center pb-16 pt-6">
+-        <div className="w-full max-w-[460px] rounded-[28px] bg-[var(--surface)] p-7 shadow-[var(--card-shadow)] sm:p-10">
+-          <AppIcon size={88} className="mb-7 size-[72px]" />
+-          <h1 className="text-balance text-[clamp(2rem,4vw,2.75rem)] font-semibold leading-[1.08] tracking-[-0.03em]">
++        <div className="w-full max-w-[440px] rounded-[24px] bg-[var(--surface)] p-6 shadow-[var(--card-shadow)] sm:p-8">
++          <AppIcon size={72} className="mb-5 size-14" />
++          <h1 className="text-balance text-[clamp(2rem,4vw,2.25rem)] font-semibold leading-[1.12] tracking-[-0.025em]">
+             {title}
+           </h1>
+           <p className="mt-4 leading-relaxed text-[var(--muted-ink)]">
+             {description}
+           </p>
+           <p className="mt-3 text-sm leading-relaxed text-[var(--muted-ink)]">
+-            This sign-in is for the website. The Mac app’s local recognition needs no account.
++            Website sign-in only. Gaze’s Mac app works without an account.
+           </p>
+ 
+-          <div className="mt-9 space-y-3">
++          <div className="mt-6 space-y-3">
+             {providers.google && (
+               <ProviderButton
+                 busy={busy === "google"}
+@@ -87,9 +87,11 @@
+             )}
+           </div>
+ 
+-          <p className="mt-8 text-sm leading-relaxed text-[var(--muted-ink)]">
+-            Gaze only sees your name, email and avatar.
+-          </p>
++          {(providers.google || providers.github) && (
++            <p className="mt-6 text-sm leading-relaxed text-[var(--muted-ink)]">
++              Gaze only sees your name, email and avatar.
++            </p>
++          )}
+         </div>
+       </section>
+ 
