@@ -1,14 +1,16 @@
 # Gaze improvement pass, September 18
 
 Latest installation follow-up: the full-window introduction now includes the
-movement demonstrations in its nine-page tour. It continues directly into the
-remaining setup steps, and Back from capture restores the last tour page.
+movement demonstrations in its nine-page tour. The tour is now constrained to
+640x520 points, with 180-point movement demos; other setup stages retain their
+880x660 minimum. It continues directly into the remaining setup steps, and Back
+from capture restores the last tour page and compact window constraints.
 The signed build was installed at `build/Gaze.app` and relaunched at
-2026-09-18 03:44 UTC. One running agent, PID 89692, was verified against the
+2026-09-18 04:05 UTC. One running agent, PID 93030, was verified against the
 installed executable. The login agent was temporarily unloaded for the swap and
 restored without changing its plist. The prior bundle is preserved under
-`build/archive/2026-09-18/before-unified-tour-20260918T034153Z/Gaze.app`.
-`build/gaze-ship-20260918/unified-tour-install-result.json` records the replacement.
+`build/archive/2026-09-18/before-compact-tour-20260918T040547Z/Gaze.app`.
+`build/gaze-ship-20260918/compact-tour-install-result.json` records the replacement.
 
 This pass adds native feature guidance, improves onboarding and admin workflows,
 and validates the combined app and website changes. Timing is recorded in
@@ -19,7 +21,7 @@ and validates the combined app and website changes. Timing is recorded in
 - Local app: `build/gaze-ship-20260918/Gaze.app`
 - Earlier installer (predates the unified tour): `build/installers/20260918-tourkit-tipkit/Gaze-0.1-arm64-local-preview.dmg`
 - Website preview: http://127.0.0.1:55524/features
-- Current tour captures: `build/gaze-ship-20260918/tour-interaction/step-1.png` through `step-9.png`
+- Current tour captures: `build/gaze-ship-20260918/compact-tour-interaction/step-1.png` through `step-9.png`
 - Detailed evidence: `build/gaze-ship-20260918/validation-summary.json`
 
 The earlier installer is 98,729,532 bytes and contains an arm64 app targeting macOS 26+.
@@ -28,7 +30,7 @@ release. It has not been repackaged with the unified tour; the installed app and
 local app candidate above contain the latest changes.
 
 App executable SHA-256:
-`91b1a28459a36ea0a97afe202b4c73ccd7e2e83d3887878a5fc4b013734883b6`
+`661efd273ee80ef2fcd50b004b7456d317c9032c9c175e8e346873764ffaa3fb`
 
 DMG SHA-256:
 `0d7f1145acf3237bd61082ab8aadb0897f18c716b93564880d8f65719c0a0b3f`
@@ -85,7 +87,7 @@ DMG SHA-256:
 | Native production-source build | Passed with Xcode-beta; TipKit linked. |
 | Native signature | Deep strict verification passed; established signing requirement retained. |
 | DMG | Checksum, mounted app signature/hash, Applications link, Finder positions and background passed. |
-| Tour fixture | Nine pages, one navigation/progress system, Pause/Play, Back, saved page restoration, one-movement copy, app Reduce Motion, and native window closing passed using actual views and inert callbacks. System Reduce Motion and raw Escape injection were not exercised. |
+| Tour fixture | All nine pages at 640x520, one navigation/progress system, Pause/Play, Back, saved page restoration, one-movement copy, app Reduce Motion, and native window closing passed using actual views and inert callbacks. System Reduce Motion and raw Escape injection were not exercised. |
 | Setup fixture | 54 light/dark renders and plan checks passed; earlier display-driven lesson checks also passed. |
 | Lockout feedback | Actual row/handler compiled with a fake verifier: failure persists, typing clears it, and only verified input clears lockout. |
 | Backend/SEO tests | 82 tests passed with temporary data or mocked services. |

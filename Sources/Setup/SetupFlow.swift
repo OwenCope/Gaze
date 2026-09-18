@@ -146,8 +146,10 @@ struct SetupFlow: View {
 				)
 		)
 		.id(step)
-		.frame(minWidth: 880, idealWidth: 880, maxWidth: .infinity,
-			minHeight: 660, idealHeight: 660, maxHeight: .infinity)
+		.frame(minWidth: preferredWidth, idealWidth: preferredWidth,
+			maxWidth: step == .welcome ? 640 : .infinity,
+			minHeight: preferredHeight, idealHeight: preferredHeight,
+			maxHeight: step == .welcome ? 520 : .infinity)
 		.overlay {
 			if purpose == .addFace && step == .capture {
 				GazePeekingCompanion(isActive: model == nil || model?.phase == .positioning)
@@ -308,6 +310,9 @@ struct SetupFlow: View {
 	private var stepAnimation: Animation? {
 		reduceMotion ? nil : .easeInOut(duration: 0.2)
 	}
+
+	private var preferredWidth: CGFloat { step == .welcome ? 640 : 880 }
+	private var preferredHeight: CGFloat { step == .welcome ? 520 : 660 }
 
 	/// What is still missing once the flow reaches the end.
 	///

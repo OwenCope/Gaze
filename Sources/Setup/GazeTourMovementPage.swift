@@ -1,15 +1,6 @@
 import SwiftUI
 
-/// One movement demonstration inside the welcome tour's artwork region.
-///
-/// The lesson's title and explanation live in the tour's bottom panel (the
-/// `TourPage`), so this shows only the animation, a pause control, and a
-/// camera-off caption — no duplicate heading or description. It stays inside the
-/// media region with room for the tour's own controls and page indicator, and it
-/// adds no border, card, title, Previous/Next, menu, progress, camera,
-/// permissions, persistence, or authentication. Playback reuses
-/// `GazeLessonAnimation`'s lifecycle, which already stills the motion under
-/// Reduce Motion.
+/// A camera-free movement demonstration for the welcome tour.
 struct GazeTourMovementPage: View {
 	let lesson: GazeExpressionLesson
 
@@ -24,7 +15,7 @@ struct GazeTourMovementPage: View {
 		VStack(spacing: 12) {
 			GazeLessonAnimation(motion: lesson.motion, paused: paused,
 				material: colorScheme == .dark ? .ink : .charcoal)
-				.frame(width: 240, height: 240)
+				.frame(width: 180, height: 180)
 			Button { paused.toggle() } label: {
 				Label(paused ? "Play" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")
 					.frame(minWidth: 64)

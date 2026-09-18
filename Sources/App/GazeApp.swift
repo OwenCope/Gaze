@@ -131,8 +131,8 @@ struct GazeApp: App {
 			EnrollmentWindow(store: store)
 				.scrollIndicators(.never)
 		}
-		.windowResizability(.contentMinSize)
-		.defaultSize(width: 880, height: 660)
+		.windowResizability(.contentSize)
+		.defaultSize(width: 640, height: 520)
 		.restorationBehavior(.disabled)
 		.windowStyle(.hiddenTitleBar)
 		.defaultLaunchBehavior(!AppActivation.isBackgroundLaunch && !presentsSettingsAtLaunch ? .presented : .suppressed)
