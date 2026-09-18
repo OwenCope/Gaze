@@ -30,14 +30,15 @@ installed_resources = ROOT / "build/Gaze.app/Contents/Resources"
 if resources.exists():
     shutil.rmtree(resources)
 shutil.copytree(installed_resources, resources)
+shutil.copytree(ROOT / "Resources/Art", resources / "Art", dirs_exist_ok=True)
 with (APP / "Contents/Info.plist").open("wb") as stream:
     plistlib.dump({"CFBundleIdentifier": "com.gazeunlock.ProductCapture", "CFBundleExecutable": "ProductCapture",
-                   "CFBundleName": "Gaze Product Capture", "CFBundlePackageType": "APPL", "CFBundleIconFile": "AppIcon",
+                   "CFBundleName": "Gaze Product Capture", "CFBundlePackageType": "APPL", "CFBundleIconFile": "AppIcon", "CFBundleIconName": "AppIcon",
                    "CFBundleShortVersionString": "0.1", "LSMinimumSystemVersion": "26.0"}, stream)
 subprocess.run(["codesign", "--force", "--sign", "-", str(APP)], check=True)
 (OUT / "sources.json").write_text(json.dumps({
     "sourceHashes": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},
     "resourceBundle": "build/Gaze.app/Contents/Resources",
-    "limits": "Current production views and installed app resources (including icon/model availability), empty enrollment, isolated bundle preferences, stub Keychain. GazeApp declarations compile but its initializer/delegate/services are never run. Screenshots require macOS capture permission; no fallback images are fabricated."
+    "limits": "Current production views and installed app resources, empty enrollment, isolated bundle preferences, stub Keychain. GazeApp declarations compile but its initializer/delegate/services are never run. SCShareableContent.currentProcess captures only this helper's windows over its own system-wallpaper backdrop. No camera or user credentials."
 }, indent=2) + "\n")
 print(APP)

@@ -97,9 +97,8 @@ struct SetupDoneStep: View {
 	}
 
 	/// The single TourKit page for this outcome, with the existing title and
-	/// message. The artwork follows success vs failure only: a partial setup
-	/// (face saved, password or permission skipped) is not a failure, so it
-	/// keeps the success art. When the recognition test is offered, the page
+	/// message. The photo shows Settings; the text reports this setup's outcome.
+	/// When the recognition test is offered, the page
 	/// carries the same truthful camera-without-locking explanation the old
 	/// detail row showed.
 	private var page: TourPage {
@@ -110,7 +109,7 @@ struct SetupDoneStep: View {
 			description = message
 		}
 		return TourPage(
-			imageName: didFail ? "Art/onboarding-failure.png" : "Art/onboarding-success.png",
+			imageName: "Art/tour-general.png",
 			imageBundle: .main,
 			title: "\(Self.title(failed: didFail, unfinished: unfinished, isAddingFace: isAddingFace))",
 			description: "\(description)"

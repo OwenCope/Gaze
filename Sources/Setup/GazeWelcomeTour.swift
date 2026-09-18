@@ -23,25 +23,25 @@ struct GazeWelcomeTour: View {
 
 	private static let pages: [TourPage] = [
 		TourPage(
-			imageName: "Art/onboarding-recognition.png",
+			imageName: "Art/tour-general.png",
 			imageBundle: .main,
 			title: "Meet Gaze",
 			description: "Use your Mac’s camera to recognize your face at the lock screen. Face data never leaves this Mac."
 		),
 		TourPage(
-			imageName: "Art/onboarding-local.png",
+			imageName: "Art/tour-security.png",
 			imageBundle: .main,
 			title: "Stays on your Mac",
 			description: "Face templates stay encrypted on this Mac. It uses a regular camera, not depth sensing."
 		),
 		TourPage(
-			imageName: "Art/onboarding-unlock.png",
+			imageName: "Art/tour-notch.png",
 			imageBundle: .main,
 			title: "How unlock works",
 			description: "Look at the camera and follow the movements. Gaze enters your saved login password after checking."
 		),
 		TourPage(
-			imageName: "Art/onboarding-choice.png",
+			imageName: "Art/tour-unlock.png",
 			imageBundle: .main,
 			title: "Unlocking stays your choice",
 			description: "It uses your saved Mac password. Automatic unlocking stays off unless you turn it on."
