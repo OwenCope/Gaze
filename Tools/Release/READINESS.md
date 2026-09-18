@@ -1,5 +1,12 @@
 # Gaze release gates
 
+September 18 update: [ShipPass20260918/RESULT.md](ShipPass20260918/RESULT.md)
+records the current TourKit/TipKit app candidate, local DMG, backend/admin fixes,
+SEO checks, and remaining acceptance gates. The candidate builds and verifies;
+the normal running app has not been replaced with it. The website production
+build and 82 backend/SEO tests pass. No deployment command was run. The older
+checkpoints below are historical and do not describe this candidate's hash.
+
 Latest app + website UX pass: [UXReview20260917/RESULT.md](UXReview20260917/RESULT.md).
 The new app is now installed and running from the normal `build/Gaze.app` path;
 the previous owner-tested bundle is backed up as `Gaze.before-full-ux-20260917.app`.

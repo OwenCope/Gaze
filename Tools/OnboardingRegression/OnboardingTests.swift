@@ -23,6 +23,7 @@ struct OnboardingTests {
 			return
 		}
 		checkPlan()
+		checkWelcomeTour()
 		checkPermissions()
 		checkFirstUse()
 		checkRequests()
@@ -160,6 +161,47 @@ struct OnboardingTests {
 		let enrolledAddFace = SetupPlan(hasPassword: false, hasPermission: false, purpose: .addFace, hasEnrollment: true)
 		precondition(enrolledAddFace.steps == [.capture],
 			"Add-face must always capture, regardless of enrollment")
+	}
+
+	static func checkWelcomeTour() {
+		// The tour path: welcome slideshow first, then interactive practice. The old
+		// explanation screen is gone unless diagnostics forced it open.
+		let tour = SetupPlan(hasPassword: false, hasPermission: false, hasEnrollment: false, usesWelcomeTour: true)
+		precondition(tour.steps == [.meetGaze, .capture, .password, .permission],
+			"Tour onboarding must practice, capture, then ask for password and permission")
+		precondition(tour.next(after: .welcome) == .meetGaze,
+			"Tour welcome must lead into interactive practice, not the old explanation")
+		precondition(tour.previous(before: .meetGaze) == .welcome,
+			"Back from practice must return to the tour when .how is absent")
+		var traversed: [SetupStep] = []
+		var current = SetupStep.welcome
+		while let next = tour.next(after: current) {
+			precondition(next.rawValue > current.rawValue)
+			traversed.append(next)
+			current = next
+		}
+		precondition(traversed == tour.steps + [.done])
+		// Enrolled users still get the tour and the practice, but no second face.
+		let tourEnrolled = SetupPlan(hasPassword: false, hasPermission: false, hasEnrollment: true, usesWelcomeTour: true)
+		precondition(tourEnrolled.steps == [.meetGaze, .password, .permission],
+			"Enrolled tour onboarding must keep practice and skip capture")
+		precondition(tourEnrolled.next(after: .welcome) == .meetGaze)
+		precondition(tourEnrolled.previous(before: .meetGaze) == .welcome)
+		// An explicitly forced explanation screen is still honoured on the tour path.
+		let tourForcedHow = SetupPlan(hasPassword: false, hasPermission: false, including: .how, hasEnrollment: false, usesWelcomeTour: true)
+		precondition(tourForcedHow.steps.prefix(2) == [.how, .meetGaze],
+			"Forced .how must still open on the tour path")
+		precondition(tourForcedHow.next(after: .welcome) == .how)
+		precondition(tourForcedHow.previous(before: .how) == .welcome)
+		precondition(tourForcedHow.previous(before: .meetGaze) == .how,
+			"Back from practice must return to .how when it was forced open")
+		// The tour flag changes nothing for add-face: always one capture, no way back.
+		let tourAddFace = SetupPlan(hasPassword: false, hasPermission: false, purpose: .addFace, hasEnrollment: true, usesWelcomeTour: true)
+		precondition(tourAddFace.steps == [.capture],
+			"Add-face must always capture, regardless of the tour flag")
+		precondition(tourAddFace.next(after: .capture) == .done)
+		for step in SetupStep.allCases { precondition(tourAddFace.previous(before: step) == nil) }
+		print("PASS: welcome tour plan, enrolled/unenrolled paths, forced .how, Back navigation and add-face isolation")
 	}
 
 	static func checkFirstUse() {
@@ -343,7 +385,7 @@ struct ReviewPageView: View {
 	var body: some View {
 		switch page {
 		case .welcome:
-			SetupWelcomeStep(onContinue: next, onSkip: next)
+			GazeWelcomeTour(onContinue: next, onClose: next)
 		case .how:
 			SetupHowStep(position: .init(index: 0, count: 5), onContinue: next, onBack: previous)
 		case .meetGaze:

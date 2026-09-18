@@ -105,6 +105,7 @@ struct SettingsView: View {
 	/// is already stored.
 	@State private var hasStoredPassword = PasswordVault.hasPassword
 	@State private var lockoutPassword = ""
+	@State private var lockoutError: String?
 	@State private var accessibilityGranted = SetupPermissionStatus.current.isReady
 	@State private var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
 	@State private var loginItemEnabled = LoginItem.isEnabled
@@ -583,16 +584,24 @@ struct SettingsView: View {
 			title: "Locked out",
 			footer: "Gaze is disabled after \(LockoutManager.maxAttempts) failed attempts."
 		) {
-			SettingRow(
-				title: "Account password",
-				symbol: "exclamationmark.lock.fill", symbolTint: Theme.danger
-			) {
-				HStack(spacing: 6) {
-					SettingsField(placeholder: "Required", text: $lockoutPassword)
-						.frame(width: 140)
-					Button("Unlock") { clearLockout() }
-						.gazeButton()
-						.disabled(lockoutPassword.isEmpty)
+			VStack(spacing: 0) {
+				SettingRow(
+					title: "Account password",
+					symbol: "exclamationmark.lock.fill", symbolTint: Theme.danger
+				) {
+					HStack(spacing: 6) {
+						SettingsField(placeholder: "Required", text: $lockoutPassword)
+							.frame(width: 140)
+							.onChange(of: lockoutPassword) { _, value in
+								if !value.isEmpty { lockoutError = nil }
+							}
+						Button("Unlock") { clearLockout() }
+							.gazeButton()
+							.disabled(lockoutPassword.isEmpty)
+					}
+				}
+				if let lockoutError {
+					StatusLine(kind: .error, message: lockoutError)
 				}
 			}
 		}
@@ -1667,9 +1676,11 @@ struct SettingsView: View {
 	private func clearLockout() {
 		if PasswordVault.verify(lockoutPassword) {
 			lockout.clearAfterPasswordAuth()
+			lockoutError = nil
 			lockoutPassword = ""
 		} else {
 			lockoutPassword = ""
+			lockoutError = "That password didn’t match. Try again."
 		}
 	}
 }

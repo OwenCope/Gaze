@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 
 struct NotchAnimationPreview: View {
 	@Environment(\.scenePhase) private var scenePhase
@@ -10,6 +11,13 @@ struct NotchAnimationPreview: View {
 	@State private var isPlaying = false
 	@State private var selectedPhase: PreviewPhase = .scanning
 	@State private var wallpaper = DesktopWallpaper.shared
+	@State private var panelTip = GazePanelPreviewTip()
+
+	/// The preview tip, or nil outside normal launches so review, scan-only and
+	/// browser-only modes neither show tips nor mutate tip history.
+	private var previewTip: (any Tip)? {
+		AppServices.isUIReview ? nil : panelTip
+	}
 
 	private enum PreviewPhase: String, CaseIterable, Identifiable {
 		case locked = "Locked"
@@ -91,6 +99,7 @@ struct NotchAnimationPreview: View {
 		Button(isPlaying ? "Stop" : "Play", systemImage: isPlaying ? "stop.fill" : "play.fill") {
 			if isPlaying { stop() } else { play() }
 		}
+		.popoverTip(previewTip)
 		.help(isPlaying
 			? "Stop the simulated preview. The camera remains off."
 			: "Play a simulated preview. The camera remains off.")
@@ -105,6 +114,12 @@ struct NotchAnimationPreview: View {
 	}
 
 	private func play() {
+		// Explicit Play in normal mode retires the preview tip. Stops driven by
+		// Reduce Motion, scene changes, or view teardown never invalidate, and
+		// review/scan/browser-only modes never mutate tip history.
+		if !AppServices.isUIReview {
+			panelTip.invalidate(reason: .actionPerformed)
+		}
 		playback?.cancel()
 		let animateExpansion = !reduceMotion
 		isPlaying = true
