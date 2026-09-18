@@ -212,7 +212,7 @@ enum NotchAnimation {
 
 	/// How long the controller must leave the window alive after asking it to retract.
 	/// The margin is for the frame the animation finishes on.
-	static var teardownDelay: TimeInterval { max(retractDuration, phaseDuration) + 0.12 }
+	static var teardownDelay: TimeInterval { max(retractDuration, phaseDuration) + 0.16 }
 }
 
 /// The one statement of how the semi-glass tint responds to its slider.
