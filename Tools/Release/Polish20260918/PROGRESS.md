@@ -66,3 +66,14 @@ is saved in build/polish-20260918/native-glass-symbols.txt. This corroborates th
 build contents, but is not a substitute for blocked native visual capture.
 
 Work window ended 2026-09-18T11:54:34.266805+00:00. Elapsed 60.92 minutes, including waiting for capture permission. Local implementation is ready; real app screenshots remain unfinished.
+
+## Superseding correction: preserve TourKit preset styling
+
+The user rejected the custom transparent glass tour and reaffirmed preset styling.
+The pinned upstream dark card, blue primary action, icon circles, text colors,
+static-image fade and page indicators are restored. Live media and centering remain.
+The restored sections were compared byte-for-byte with the pinned source. Build
+and four/six/eight intro/movement/completion interaction scenarios pass.
+Current installed hash: e6ca309966aaac249415249a6caa57701586ba2da9a25297ee36a219a9be294c.
+Current PID at verification: 45776. The previous custom-glass
+UI decisions and installer checkpoints above are historical.

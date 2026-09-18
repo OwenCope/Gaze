@@ -286,7 +286,7 @@ struct CompletionScenario {
             movementPerformance.append(["page": movementHeadings[page], "frames": probe.samples.count,
                 "durationSeconds": 6, "medianMS": intervals[intervals.count / 2], "p95MS": p95])
             surface.view.delegate = surface.renderer
-            print("PASS: glass guide \(movementHeadings[page]), \(probe.samples.count) frames, p95 \(p95)ms")
+            print("PASS: movement guide \(movementHeadings[page]), \(probe.samples.count) frames, p95 \(p95)ms")
             fflush(stdout)
             try capture(container, card: movementHost, path: CommandLine.arguments[1] + "/movement-\(page + 1).png")
             press(page == movementHeadings.count - 1 ? "Done" : "Next", host: ax)
@@ -324,7 +324,7 @@ struct CompletionScenario {
         }
 
         let performanceData = try JSONSerialization.data(withJSONObject: movementPerformance, options: [.prettyPrinted, .sortedKeys])
-        try performanceData.write(to: URL(fileURLWithPath: CommandLine.arguments[1] + "/glass-movement-performance.json"))
+        try performanceData.write(to: URL(fileURLWithPath: CommandLine.arguments[1] + "/movement-performance.json"))
         let layout: [String: Any] = [
             "requestedWindow": ["width": 760, "height": 680],
             "hostFittingSize": ["width": fitting.width, "height": fitting.height],
