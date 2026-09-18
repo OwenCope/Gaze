@@ -1,3 +1,49 @@
+## Active: live release acceptance, September 18 at 23:10
+
+The owner explicitly authorized live unlock, fallback, wake/relock and installation
+checks, and supplied a conversation screenshot recording Shariq's permission to
+use the Sapphire ArcFace model with credit. No need to ask permission again for
+these tests. Physical owner participation is still required for face movements,
+private password/Touch ID fallback and waking the Mac.
+
+Completed: exact installed build signature/hash check, fresh local DMG, actual
+copy to /Applications/Gaze.app (no preexisting app there), all67 file hashes,
+installed launch, same-bundle relaunch without duplicate process, then restored
+original app and original KeepAlive plist unchanged. Current restored PID60290.
+Executable SHA256525de5931abb9e0c41dad0809806c098b703a20a7c7af0930469a5fb3369df7f.
+860 unlock-flow regressions,58 dummy-password submission checks,9 execution-policy
+checks and presence wiring pass. These are NOT live authentication passes.
+
+Live cases are still pending: normal recognition, relock, sleep/wake, covered
+camera, omitted movement, manual-input interruption, disabled-unlock fallback.
+Async prompts asked whether owner is at Mac and then gave first normal-unlock
+Control–Command–Q test. No response or lock event as of this checkpoint.
+Read-only session observer runs for1200sec from15:04:09UTC (tool session3389),
+output build/live-acceptance-20260918/session-events.jsonl. LockWatcher log stream
+session75669 was stopped after the checkpoint; its saved output is lockwatcher-live.jsonl.
+Use /usr/bin/log show for later Gaze events. The bounded session observer remains
+active until15:24:09UTC. No automatic locking,
+credential entry, settings change or camera use has been initiated.
+CUA getApp of exact installed path failed ScreenCaptureKit -3811; do not silently
+retry or claim UI control works. Owner can drive cases; logs/observer can verify.
+
+Preference snapshot: automatic unlocking enabled, keystroke backend, one movement,
+walk-away off. Do not change these as a shortcut. Compare before/after if testing
+changes. Signing remains Apple Development; no Developer ID identity available.
+
+Permission: SHARIQ-PERMISSION-20260918.md and the face-embedding clearance entry
+now record the owner's private evidence (hash/pointer, not screenshot contents).
+Bundled Sapphire weight hash still c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545.
+Different raw package/upstream and unrelated asset entries remain unresolved;
+do not invent grants or claim overall clearance PASS. NOTICE.md updated accordingly.
+
+Results: Tools/Release/LiveAcceptance/RESULT-20260918.md and
+build/live-acceptance-20260918/results.json. Local DMG:
+build/installers/20260918-live-acceptance/Gaze-0.1-arm64-local-preview.dmg.
+User also asked whether passing means fully ready to ship: functional checks can
+support a limited beta on tested hardware; public distribution still needs final
+Developer ID/notarization/Gatekeeper and applicable model/asset clearance.
+
 ## Latest correction: no top bar, blurred photo fade, current icon
 
 User explicitly rejected the 48pt top bar and the hard photo/footer boundary.

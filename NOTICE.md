@@ -43,7 +43,7 @@ are verbatim copies of upstream `Sources/TourKit/TourKit.swift` and `LICENSE` â€
 module directly (no separate TourKit module), and the licence ships in the bundle as
 `Contents/Resources/TourKit-LICENSE.txt`.
 
-## Not ours to redistribute
+## Model and asset redistribution status
 
 ### The recognition model
 
@@ -58,7 +58,7 @@ The repository's pinned LICENSE is **AGPL-3.0**, correcting the earlier GPL-3.0
 reference. The matching bytes identify an available source, not who trained the
 model or which upstream rights cover it. The inspected README and model metadata
 provide no separate weight licence or training provenance. Gaze's MIT licence
-has not been changed, and redistribution is not cleared by this finding.
+has not been changed. Matching bytes alone do not establish redistribution rights.
 
 The raw `Resources/FaceEmbedding.mlpackage` is different: its 7,408,704-byte weight
 file has SHA-256 `f9145f919e28153bee573651d9681d9917858be038998f59233bc7bd28c00da9`.
@@ -75,7 +75,11 @@ not settle those questions.
 
 Evidence and inspected-source limits are recorded in
 [the Sapphire source report](Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md).
-The launch gate remains open pending exact model coverage and distribution terms.
+The owner supplied Shariq's permission to use the Sapphire ArcFace model with
+credit on September 18, 2026. The installed model still matches the Sapphire
+weight hash above. See [the permission record](Tools/Release/ModelClearance/SHARIQ-PERMISSION-20260918.md).
+That evidence does not cover the different raw package or establish upstream
+weight/training rights; those questions remain separate from Shariq's permission.
 The source-archive script excludes model inputs. The geometry fallback is not an
 approved substitute for the Mac-unlock recognition model.
 
