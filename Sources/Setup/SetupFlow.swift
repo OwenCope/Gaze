@@ -14,9 +14,12 @@ import SwiftUI
 /// here, in the order it becomes true — what this does, the face, the password,
 /// the permission — and `done` reports which of it landed.
 ///
-/// The welcome, the explanation and the capture are always shown. Opening setup
+	/// The welcome and the explanation are always shown. Opening setup
 /// is a request to set up, and a short path that skipped ahead to "You're all
-/// set" was how someone got a success screen having done nothing. The password
+/// set" was how someone got a success screen having done nothing. The capture
+/// is shown for a first enrolment or when explicitly requested, and skipped
+/// when a usable enrolment already exists so a repeat run does not save
+/// another face. The password
 /// and permission steps are the exception: they are the only two that can already
 /// be satisfied, and there is nothing to ask when the answer is already stored.
 /// Setup, start to finish.
@@ -117,10 +120,12 @@ struct SetupFlow: View {
 					onOpenSettings: purpose == .onboarding ? {
 						AppActivation.bringToFront(userInitiated: true)
 						openWindow(id: "settings")
+						onFinish()
 					} : nil,
 					onTestRecognition: purpose == .onboarding ? {
 						AppActivation.bringToFront(userInitiated: true)
 						openWindow(id: "test")
+						onFinish()
 					} : nil
 				)
 			}
@@ -235,7 +240,9 @@ struct SetupFlow: View {
 
 	/// The steps this run will show, decided once.
 	///
-	/// The explanation and the capture are always in it. The password and the permission
+	/// The explanation is always in it. The capture is in it for a first enrolment
+	/// or when explicitly requested, and skipped when a usable enrolment already
+	/// exists so reopening setup does not save another face. The password and the permission
 	/// are in it only when they are not already done — there is nothing to ask when the
 	/// answer is already on disk, and a screen that exists only to be skipped past is a
 	/// step in the count that nobody takes.
@@ -246,7 +253,8 @@ struct SetupFlow: View {
 	private func makePlan(including forced: SetupStep? = nil) -> SetupPlan {
 		if purpose == .addFace { return SetupPlan(hasPassword: false, hasPermission: false, purpose: .addFace) }
 		return SetupPlan(hasPassword: PasswordVault.hasPassword,
-			hasPermission: SetupPermissionStatus.current.isReady, including: forced)
+			hasPermission: SetupPermissionStatus.current.isReady, including: forced,
+			hasEnrollment: store.isEnrolled)
 	}
 
 	/// Where a step sits in the progress row, or nil for the two ends of the flow.

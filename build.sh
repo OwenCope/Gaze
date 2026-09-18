@@ -27,6 +27,10 @@ fi
 collect_gaze_main_sources "$ROOT"
 require_toolchain
 APP="${GAZE_BUILD_OUTPUT:-$DEFAULT_OUTPUT}"
+python3 "$ROOT/Tools/Release/check-build-space.py" --output "$APP" --temporary "${TMPDIR:-/tmp}" || {
+	echo "Insufficient disk space for a safe build. The existing app was not replaced." >&2
+	exit 1
+}
 SIGNING_REFERENCE="${GAZE_SIGNING_REFERENCE:-$ROOT/build/Gaze.app}"
 REFERENCE_REQUIREMENT=""
 if [ "${DIST:-}" != "1" ] && [ -d "$SIGNING_REFERENCE" ]; then

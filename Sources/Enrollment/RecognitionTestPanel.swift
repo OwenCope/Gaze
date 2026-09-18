@@ -18,6 +18,7 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 	@Binding var showsDetail: Bool
 	let next: () -> Void
 	let reset: () -> Void
+	var onSetup: (() -> Void)? = nil
 	@ViewBuilder var camera: () -> CameraContent
 	@ViewBuilder var companion: () -> CompanionContent
 	@Environment(\.accessibilityReduceMotion) private var reducedMotion
@@ -49,7 +50,7 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 					}.padding(18).frame(width: 300)
 				}
 			}
-			.padding(.horizontal, 26).padding(.top, 22).padding(.bottom, 16)
+			.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 16)
 
 			// Keep the useful measurements outside the scroll view: opening details
 			// or using a short window must not hide the score/pose being recorded.
@@ -76,7 +77,7 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 			}
 			.padding(12)
 			.background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-			.padding(.horizontal, 26).padding(.bottom, 16)
+			.padding(.horizontal, 24).padding(.bottom, 16)
 
 			ScrollView {
 				VStack(spacing: 16) {
@@ -86,23 +87,36 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 						.overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.separator))
 						.accessibilityLabel("Live camera preview")
 
-					HStack(spacing: 12) {
-						companion().frame(width: 104, height: 104)
-						VStack(alignment: .leading, spacing: 7) {
-							Text(readout.complete ? "Movement complete" : "One small movement")
-								.font(.caption.weight(.medium)).foregroundStyle(Theme.secondaryLabel)
-							Text(readout.instruction)
+					if let onSetup {
+						VStack(alignment: .leading, spacing: 10) {
+							Text("Enroll your face before testing recognition.")
 								.font(.system(size: 16, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
-								.accessibilityLabel(readout.instruction)
-								.help(readout.instruction)
-							Button("Try another movement", action: next)
-								.gazeButton(.standard, size: .small).disabled(!readout.canChallenge)
+							Button("Set Up Gaze", action: onSetup)
+								.gazeButton(.primary, size: .large)
 						}
 						.frame(maxWidth: .infinity, alignment: .leading)
+						.padding(12)
+						.background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
+						.overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.separator))
+					} else {
+						HStack(spacing: 12) {
+							companion().frame(width: 104, height: 104)
+							VStack(alignment: .leading, spacing: 7) {
+								Text(readout.complete ? "Movement complete" : "One small movement")
+									.font(.caption.weight(.medium)).foregroundStyle(Theme.secondaryLabel)
+								Text(readout.instruction)
+									.font(.system(size: 16, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+									.accessibilityLabel(readout.instruction)
+									.help(readout.instruction)
+								Button("Try another movement", action: next)
+									.gazeButton(.standard, size: .small).disabled(!readout.canChallenge)
+							}
+							.frame(maxWidth: .infinity, alignment: .leading)
+						}
+						.padding(12)
+						.background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
+						.overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.separator))
 					}
-					.padding(12)
-					.background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
-					.overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Theme.separator))
 
 					DisclosureGroup(isExpanded: $showsDetail) {
 						VStack(spacing: 0) {
@@ -122,7 +136,7 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 					.tint(Theme.secondaryLabel)
 					.animation(reducedMotion || previewReduceMotion ? nil : .easeOut(duration: 0.2), value: showsDetail)
 				}
-				.padding(.horizontal, 26).padding(.bottom, 18)
+				.padding(.horizontal, 24).padding(.bottom, 18)
 			}
 			.scrollIndicators(.automatic)
 			HStack {
@@ -131,7 +145,7 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 				Spacer()
 				Button("Reset test", action: reset).controlSize(.small)
 			}
-			.padding(.horizontal, 26).padding(.vertical, 16)
+			.padding(.horizontal, 24).padding(.vertical, 16)
 		}
 		.frame(minWidth: 480, idealWidth: 560, maxWidth: .infinity,
 			minHeight: 650, idealHeight: 820, maxHeight: .infinity)

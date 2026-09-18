@@ -70,6 +70,28 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 	}
 }
 
+/// The vault payload in either of its historical shapes.
+///
+/// Current writes are `[FaceEnrollment]`. Records written before the app held more
+/// than one face are a single `FaceEnrollment`. Decoding both shapes from one
+/// decrypted blob keeps startup to a single Keychain read and a single Secure
+/// Enclave decryption, instead of retrying the vault once per shape.
+struct StoredFaceEnrollments: Decodable, Sendable {
+	var records: [FaceEnrollment]
+	var wasSingleRecord: Bool
+
+	init(from decoder: Decoder) throws {
+		let container = try decoder.singleValueContainer()
+		if let list = try? container.decode([FaceEnrollment].self) {
+			records = list
+			wasSingleRecord = false
+			return
+		}
+		records = [try container.decode(FaceEnrollment.self)]
+		wasSingleRecord = true
+	}
+}
+
 /// Loads, saves and matches against the enrolled faces.
 ///
 /// More than one face may be enrolled, and any of them opens the Mac. That is not
@@ -118,6 +140,7 @@ final class FaceEnrollmentStore {
 	/// Set when a record exists but will not decrypt — enrolment is unusable and the UI
 	/// should say so rather than silently offering to enrol again.
 	private(set) var isCorrupted = false
+	private var isAddingFace = false
 
 	let embedder: FaceEmbedder = Embedders.best()
 
@@ -142,30 +165,19 @@ final class FaceEnrollmentStore {
 
 	private func load() {
 		do {
-			if let stored = try SecureVault.load([FaceEnrollment].self, from: Self.account) {
-				faces = usable(stored)
+			// One vault read. `StoredFaceEnrollments` accepts both the list shape
+			// and the legacy single record, so a second read is never needed to
+			// tell an upgrade apart from damage.
+			guard let stored = try SecureVault.load(StoredFaceEnrollments.self, from: Self.account) else {
+				faces = []
 				return
 			}
-			// Nothing stored under the list format. Before falling back, check for a
-			// single record from an older version and adopt it.
-			if let single = try? SecureVault.load(FaceEnrollment.self, from: Self.account) {
-				faces = usable([single])
-				if !faces.isEmpty {
-					Self.logger.notice("Migrated a single enrolment into the face list.")
-					try? persist()
-				}
-				return
-			}
-			faces = []
-		} catch {
-			// A list decode fails on a record written as one face, which is an upgrade
-			// rather than damage. Only report corruption when neither shape opens.
-			if let single = try? SecureVault.load(FaceEnrollment.self, from: Self.account) {
-				faces = usable([single])
+			faces = usable(stored.records)
+			if stored.wasSingleRecord, !faces.isEmpty {
 				Self.logger.notice("Migrated a single enrolment into the face list.")
 				try? persist()
-				return
 			}
+		} catch {
 			Self.logger.error("Enrolment failed to open: \(error)")
 			isCorrupted = true
 		}
@@ -190,7 +202,18 @@ final class FaceEnrollmentStore {
 
 	/// Adds a newly captured face.
 	@discardableResult
-	func add(prints: [Faceprint], cameraID: String, name: String? = nil) throws -> FaceEnrollment {
+	func add(prints: [Faceprint], cameraID: String, name: String? = nil) async throws -> FaceEnrollment {
+		try Task.checkCancellation()
+		guard !isAddingFace else { throw EnrollmentError.busy }
+		guard canAddFace else { throw EnrollmentError.full }
+		isAddingFace = true
+		defer { isAddingFace = false }
+		guard await BiometricGate.require(.addEnrollment) else {
+			throw EnrollmentError.notAuthorized
+		}
+		try Task.checkCancellation()
+		guard canAddFace else { throw EnrollmentError.full }
+		guard !prints.isEmpty, !cameraID.isEmpty else { throw EnrollmentError.invalidCapture }
 		let record = FaceEnrollment(
 			name: name ?? FaceEnrollment.defaultName(ordinal: faces.count + 1),
 			prints: prints,
@@ -207,6 +230,22 @@ final class FaceEnrollmentStore {
 		}
 		Self.logger.notice("Enrolled \(prints.count) faceprint(s) as a new face.")
 		return record
+	}
+
+	private enum EnrollmentError: LocalizedError {
+		case notAuthorized
+		case full
+		case invalidCapture
+		case busy
+
+		var errorDescription: String? {
+			switch self {
+			case .notAuthorized: "Owner authentication is required to enroll a face."
+			case .full: "Remove an enrolled face before adding another."
+			case .invalidCapture: "The face capture is incomplete. Try again."
+			case .busy: "An enrollment is already waiting for approval."
+			}
+		}
 	}
 
 	func rename(_ id: UUID, to name: String) {
@@ -235,8 +274,8 @@ final class FaceEnrollmentStore {
 		}
 	}
 
-	func removeAll() {
-		SecureVault.remove(Self.account)
+	func removeAll() throws {
+		try SecureVault.remove(Self.account)
 		for face in faces {
 			if let url = Self.portraitURL(for: face.id) {
 				try? FileManager.default.removeItem(at: url)

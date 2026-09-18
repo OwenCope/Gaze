@@ -2,6 +2,8 @@ import SwiftUI
 
 struct NotchAnimationPreview: View {
 	@Environment(\.scenePhase) private var scenePhase
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+	@Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 	let settings: Preferences
 	@State private var model = NotchCapsuleModel()
 	@State private var playback: Task<Void, Never>?
@@ -39,22 +41,23 @@ struct NotchAnimationPreview: View {
 				.frame(height: 280)
 				.accessibilityElement(children: .ignore)
 				.accessibilityLabel("Notch preview: \(selectedPhase.rawValue)")
-			HStack {
-				Picker("Preview", selection: $selectedPhase) {
-					ForEach(PreviewPhase.allCases) { Text($0.rawValue).tag($0) }
+			ViewThatFits(in: .horizontal) {
+				HStack {
+					phasePicker
+					Spacer()
+					Text("Camera off").foregroundStyle(.secondary)
+					playbackButton
 				}
-				.fixedSize()
-				.disabled(isPlaying)
-				Spacer()
-				Text("Camera off").foregroundStyle(.secondary)
-				Button(isPlaying ? "Stop" : "Play", systemImage: isPlaying ? "stop.fill" : "play.fill") {
-					if isPlaying { stop() } else { play() }
+				VStack(alignment: .leading, spacing: 10) {
+					phasePicker
+					HStack {
+						Text("Camera off").foregroundStyle(.secondary)
+						Spacer()
+						playbackButton
+					}
 				}
-				.help(isPlaying
-					? "Stop the simulated preview. The camera remains off."
-					: "Play a simulated preview. The camera remains off.")
 			}
-			.padding(.horizontal, 26)
+			.padding(.horizontal, 24)
 			.padding(.vertical, 12)
 		}
 		.onAppear {
@@ -68,10 +71,29 @@ struct NotchAnimationPreview: View {
 		.onChange(of: settings.notchStyle) { _, _ in syncAppearance() }
 		.onChange(of: settings.glyphPlacement) { _, _ in syncAppearance() }
 		.onChange(of: settings.notchTransparency) { _, _ in syncAppearance() }
+		.onChange(of: reduceTransparency) { _, _ in syncAppearance() }
+		.onChange(of: reduceMotion) { _, _ in stop() }
 		.onChange(of: scenePhase) { _, phase in
 			if phase != .active { stop() }
 		}
 		.onDisappear { stop() }
+	}
+
+	private var phasePicker: some View {
+		Picker("Preview", selection: $selectedPhase) {
+			ForEach(PreviewPhase.allCases) { Text($0.rawValue).tag($0) }
+		}
+		.fixedSize()
+		.disabled(isPlaying)
+	}
+
+	private var playbackButton: some View {
+		Button(isPlaying ? "Stop" : "Play", systemImage: isPlaying ? "stop.fill" : "play.fill") {
+			if isPlaying { stop() } else { play() }
+		}
+		.help(isPlaying
+			? "Stop the simulated preview. The camera remains off."
+			: "Play a simulated preview. The camera remains off.")
 	}
 
 	private func syncAppearance() {
@@ -79,18 +101,21 @@ struct NotchAnimationPreview: View {
 		model.style = settings.notchStyle
 		model.glyphPlacement = settings.glyphPlacement
 		model.transparency = settings.notchTransparency
-		model.prefersOpaque = false
+		model.prefersOpaque = reduceTransparency
 	}
 
 	private func play() {
 		playback?.cancel()
+		let animateExpansion = !reduceMotion
 		isPlaying = true
-		model.isExpanded = false
+		model.isExpanded = !animateExpansion
 		selectedPhase = .locked
 		model.phase = .locked
 		playback = Task { @MainActor in
 			do {
-				try await Task.sleep(for: .milliseconds(260))
+				if animateExpansion {
+					try await Task.sleep(for: .milliseconds(260))
+				}
 				model.isExpanded = true
 				let sequence: [PreviewPhase] = [.locked, .scanning, .challenge, .success, .pending, .unlocked]
 				for phase in sequence {
@@ -98,8 +123,10 @@ struct NotchAnimationPreview: View {
 					model.phase = phase.phase
 					try await Task.sleep(for: .seconds(phase == .challenge ? 2 : 1))
 				}
-				model.isExpanded = false
-				try await Task.sleep(for: .milliseconds(400))
+				if animateExpansion {
+					model.isExpanded = false
+					try await Task.sleep(for: .milliseconds(400))
+				}
 			} catch { return }
 			isPlaying = false
 			playback = nil

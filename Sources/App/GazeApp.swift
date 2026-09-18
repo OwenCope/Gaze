@@ -3,6 +3,44 @@ import AVFoundation
 import SwiftUI
 import os
 
+// MARK: - Startup diagnostics
+
+/// Opt-in per-phase startup timing. Enabled only with `--startup-diagnostics`.
+///
+/// Measures startup phases without reordering or deferring any startup work.
+/// Logs only fixed phase labels and numeric durations — never names, paths,
+/// enrollment contents, identifiers, passwords, or camera data. Never logs on
+/// repeating timers; startup only.
+@MainActor
+fileprivate enum StartupTiming {
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Startup")
+
+	static var isEnabled: Bool {
+		CommandLine.arguments.contains("--startup-diagnostics")
+	}
+
+	static func start() -> TimeInterval? {
+		isEnabled ? ProcessInfo.processInfo.systemUptime : nil
+	}
+
+	static func finish(label: String, start: TimeInterval?) {
+		guard let start, isEnabled else { return }
+		let elapsedMs = (ProcessInfo.processInfo.systemUptime - start) * 1000
+		logger.notice("\(label, privacy: .public): \(Int(elapsedMs), privacy: .public)ms")
+	}
+
+	/// Runs `operation` directly with no timing or logging when disabled; otherwise
+	/// logs the elapsed milliseconds under the fixed `label` after completion.
+	static func measure<T>(label: String, operation: () -> T) -> T {
+		guard isEnabled else { return operation() }
+		let start = ProcessInfo.processInfo.systemUptime
+		let result = operation()
+		let elapsedMs = (ProcessInfo.processInfo.systemUptime - start) * 1000
+		logger.notice("\(label, privacy: .public): \(Int(elapsedMs), privacy: .public)ms")
+		return result
+	}
+}
+
 @main
 struct GazeApp: App {
 
@@ -13,10 +51,12 @@ struct GazeApp: App {
 	private let presentsSettingsAtLaunch: Bool
 
 	init() {
-		let enrolled = AppServices.shared.store.isEnrolled
+		let totalStart = StartupTiming.start()
+		let enrolled = StartupTiming.measure(label: "services") { AppServices.shared.store.isEnrolled }
 		if enrolled { OnboardingHistory.markPresented() }
 		presentsSettingsAtLaunch = !AppActivation.isBackgroundLaunch
 			&& !OnboardingHistory.presentsSetup(isEnrolled: enrolled, arguments: CommandLine.arguments)
+		StartupTiming.finish(label: "gazeapp-init-total", start: totalStart)
 	}
 
 	var body: some Scene {
@@ -340,13 +380,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 	func applicationDidFinishLaunching(_ notification: Notification) {
 		MainActor.assumeIsolated {
-			TamperGuard.shared.start()
-			AppServices.shared.startUnlockTrigger()
+			let totalStart = StartupTiming.start()
+			StartupTiming.measure(label: "tamper-guard") { TamperGuard.shared.start() }
+			StartupTiming.measure(label: "unlock-triggers") { AppServices.shared.startUnlockTrigger() }
 			// Looks for a new release shortly after launch, then daily. See
 			// `startScheduledChecks` for why this is not left to the button in Settings.
-			ReleaseUpdateChecker.shared.startScheduledChecks()
-			AppServices.shared.runLockScreenShootIfRequested()
-			startInvisibleWindowSweep()
+			StartupTiming.measure(label: "update-scheduling") { ReleaseUpdateChecker.shared.startScheduledChecks() }
+			StartupTiming.measure(label: "screenshot-mode") { AppServices.shared.runLockScreenShootIfRequested() }
+			StartupTiming.measure(label: "invisible-window-sweep") { self.startInvisibleWindowSweep() }
+			StartupTiming.finish(label: "did-finish-launching-total", start: totalStart)
 		}
 	}
 

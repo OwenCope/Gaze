@@ -19,8 +19,8 @@ struct SetupScaffold<Figure: View, Detail: View, Actions: View>: View {
 				Spacer(minLength: 12)
 				figure
 					.frame(height: figureHeight)
-					.padding(.bottom, figureHeight > 0 ? 24 : 0)
-				VStack(spacing: 12) {
+					.padding(.bottom, figureHeight > 0 ? 20 : 0)
+				VStack(spacing: 10) {
 					Text(title)
 						.font(.largeTitle.weight(.semibold).scaled(by: isHero ? 38.0 / 26.0 : 30.0 / 26.0))
 						.tracking(-0.5)
@@ -41,9 +41,9 @@ struct SetupScaffold<Figure: View, Detail: View, Actions: View>: View {
 			VStack(spacing: 12) {
 				actions
 			}
-			.frame(maxWidth: .infinity)
-			.frame(height: 80, alignment: .top)
-			.padding(.top, 16)
+		.frame(maxWidth: .infinity)
+		.frame(minHeight: 80, alignment: .top)
+		.padding(.top, 16)
 			Group {
 				if let position {
 					SetupProgress(position: position)
@@ -53,7 +53,7 @@ struct SetupScaffold<Figure: View, Detail: View, Actions: View>: View {
 			}
 			.frame(height: 28)
 		}
-		.padding(.horizontal, 40)
+		.padding(.horizontal, 32)
 		.padding(.bottom, 16)
 	}
 
@@ -77,7 +77,7 @@ struct SetupScaffold<Figure: View, Detail: View, Actions: View>: View {
 			Button(action: action) {
 				Image(systemName: symbol)
 					.font(.system(size: 12, weight: .semibold))
-					.frame(width: 24, height: 24)
+					.frame(width: 32, height: 32)
 			}
 			.buttonStyle(.glass)
 			.buttonBorderShape(.circle)
