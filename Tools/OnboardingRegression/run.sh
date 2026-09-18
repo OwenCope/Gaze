@@ -31,6 +31,7 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(host_target)" \
 	"$ROOT/Sources/Setup/SetupMark.swift" \
 	"$ROOT/Sources/Setup/SetupWelcomeStep.swift" \
 	"$ROOT/Sources/Setup/GazeWelcomeTour.swift" \
+	"$ROOT/Sources/Setup/GazeTourMovementPage.swift" \
 	"$ROOT/ThirdParty/TourKit/TourKit.swift" \
 	"$ROOT/Sources/Setup/SetupHowStep.swift" \
 	"$ROOT/Sources/Setup/SetupCaptureStep.swift" \

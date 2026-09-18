@@ -52,6 +52,7 @@ struct SetupFlow: View {
 	@State private var camera = CameraController()
 	@State private var model: EnrollmentModel?
 	@State private var step: SetupStep = .welcome
+	@State private var welcomePageIndex = 0
 	@State private var failure: String?
 	@State private var isPresented = false
 	@State private var purpose = SetupPurpose.onboarding
@@ -73,7 +74,13 @@ struct SetupFlow: View {
 		Group {
 			switch step {
 			case .welcome:
-				GazeWelcomeTour(onContinue: advance, onClose: onFinish)
+				GazeWelcomeTour(
+					onContinue: advance,
+					onClose: onFinish,
+					movementCount: Preferences.shared.unlockMovementCount.rawValue,
+					initialPageIndex: welcomePageIndex,
+					onPageChange: { welcomePageIndex = $0 }
+				)
 			case .how:
 				SetupHowStep(
 					position: position(of: .how),
@@ -193,6 +200,7 @@ struct SetupFlow: View {
 		captureSession += 1
 		failure = nil
 		isReturning = false
+		welcomePageIndex = 0
 		// A screen Settings asked for wins over the launch flag, which wins over the start.
 		let requested = SetupRequest.consumePendingStep() ?? Self.consumeLaunchStep()
 		purpose = SetupRequest.presentation.purpose

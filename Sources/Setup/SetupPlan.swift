@@ -20,7 +20,7 @@ struct SetupPlan {
 		// old explanation screen is redundant — unless diagnostics asked for it outright.
 		var steps: [SetupStep] = []
 		if !usesWelcomeTour || forced == .how { steps.append(.how) }
-		steps.append(.meetGaze)
+		if !usesWelcomeTour || forced == .meetGaze { steps.append(.meetGaze) }
 		if !hasEnrollment || forced == .capture { steps.append(.capture) }
 		if !hasPassword || forced == .password { steps.append(.password) }
 		if !hasPermission || forced == .permission { steps.append(.permission) }
@@ -36,7 +36,7 @@ struct SetupPlan {
 		return switch step {
 		case .how: .welcome
 		case .meetGaze: steps.contains(.how) ? .how : .welcome
-		case .capture: .meetGaze
+		case .capture: steps.contains(.meetGaze) ? .meetGaze : (steps.contains(.how) ? .how : .welcome)
 		case .permission: steps.contains(.password) ? .password : nil
 		default: nil
 		}

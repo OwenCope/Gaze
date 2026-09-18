@@ -52,6 +52,14 @@ public struct TourPage: Identifiable, Hashable, @unchecked Sendable {
     }
 }
 
+public enum TourSlideshowPresentation: Sendable {
+    /// Rounded 660-point card with border and close button (default).
+    case card
+    /// Fills the host window's content area: no rounded clipping, no
+    /// border, no close X (the host window owns closing).
+    case windowContent
+}
+
 public struct TourSlideshowView: View {
     let pages: [TourPage]
     /// Fixed content width of the slideshow card. The image region's height
@@ -64,6 +72,10 @@ public struct TourSlideshowView: View {
     let buttonBundle: Bundle?
     let onFinish: (() -> Void)?
     let onClose: (() -> Void)?
+    let presentation: TourSlideshowPresentation
+    let contentHeight: CGFloat?
+    let pageMedia: ((Int) -> AnyView?)?
+    let onPageChange: ((Int) -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State var currentIndex: Int
 
@@ -76,7 +88,11 @@ public struct TourSlideshowView: View {
         buttonTableName: String? = nil,
         buttonBundle: Bundle? = nil,
         onFinish: (() -> Void)? = nil,
-        onClose: (() -> Void)? = nil
+        onClose: (() -> Void)? = nil,
+        presentation: TourSlideshowPresentation = .card,
+        contentHeight: CGFloat? = nil,
+        pageMedia: ((Int) -> AnyView?)? = nil,
+        onPageChange: ((Int) -> Void)? = nil
     ) {
         self.pages = pages
         self.width = width
@@ -86,13 +102,24 @@ public struct TourSlideshowView: View {
         self.buttonBundle = buttonBundle
         self.onFinish = onFinish
         self.onClose = onClose
+        self.presentation = presentation
+        self.contentHeight = contentHeight
+        self.pageMedia = pageMedia
+        self.onPageChange = onPageChange
         _currentIndex = State(initialValue: Self.clamped(initialPageIndex, pageCount: pages.count))
     }
 
     /// Absolute pixel height of the image region, rounded to whole points
     /// so the artwork's edges never anti-alias against the card background.
+    ///
+    /// In `.windowContent` mode with a supplied `contentHeight`, the image
+    /// shrinks to reserve at least 220 points for the title, description,
+    /// and primary action, with a 120-point floor.
     var imageHeight: CGFloat {
-        (width / Self.imageAspectRatio).rounded()
+        if presentation == .windowContent, let contentHeight {
+            return max(120, min(width / Self.imageAspectRatio, contentHeight - 220)).rounded()
+        }
+        return (width / Self.imageAspectRatio).rounded()
     }
 
     public var body: some View {
@@ -100,23 +127,37 @@ public struct TourSlideshowView: View {
             if pages.isEmpty {
                 emptyState
             } else {
-                VStack(spacing: 0) {
-                    imageSection
-                    bottomPanel
-                }
-                .background(Color(white: 0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                switch presentation {
+                case .card:
+                    content
+                        .background(Color(white: 0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        }
+                        .frame(width: width)
+                case .windowContent:
+                    content
+                        .frame(width: width, height: contentHeight)
+                        .background(Color(white: 0.10))
                 }
             }
         }
-        .frame(width: width)
         // Purely visual animation: drives the slide cross-fade and the
         // page-indicator's active-dot slide. Layout size never changes
         // because the hosting window is locked to the tallest slide.
         .animation(.easeInOut(duration: 0.25), value: currentIndex)
+        .onChange(of: currentIndex) { _, newIndex in
+            onPageChange?(newIndex)
+        }
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            imageSection
+            bottomPanel
+        }
     }
 
     private var emptyState: some View {
@@ -146,30 +187,38 @@ public struct TourSlideshowView: View {
         // if they were `.overlay`s on the image they'd be part of its
         // `.id + .transition(.opacity)` subtree and visibly fade out and
         // back in at the transition's midpoint.
-        ZStack(alignment: .top) {
-            image(for: pages[currentIndex])
-                .resizable()
-                .scaledToFit()
-                .frame(width: width, height: imageHeight)
-                .id(currentIndex)
-                .transition(.opacity)
-                // Decorative: the slide's title and description carry its meaning.
-                .accessibilityHidden(true)
+        let customMedia = pageMedia?(currentIndex)
+        return ZStack(alignment: .top) {
+            if let customMedia {
+                customMedia
+                    .frame(width: width, height: imageHeight)
+                    .id(currentIndex)
+                    .transition(.opacity)
+            } else {
+                image(for: pages[currentIndex])
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: width, height: imageHeight)
+                    .id(currentIndex)
+                    .transition(.opacity)
+                    // Decorative: the slide's title and description carry its meaning.
+                    .accessibilityHidden(true)
 
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: Color(white: 0.10).opacity(0.15), location: 0.25),
-                    .init(color: Color(white: 0.10).opacity(0.45), location: 0.50),
-                    .init(color: Color(white: 0.10).opacity(0.80), location: 0.75),
-                    .init(color: Color(white: 0.10), location: 1.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 220)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .allowsHitTesting(false)
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: Color(white: 0.10).opacity(0.15), location: 0.25),
+                        .init(color: Color(white: 0.10).opacity(0.45), location: 0.50),
+                        .init(color: Color(white: 0.10).opacity(0.80), location: 0.75),
+                        .init(color: Color(white: 0.10), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 220)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .allowsHitTesting(false)
+            }
 
             PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
                 .padding(.bottom, 14)
@@ -229,15 +278,17 @@ public struct TourSlideshowView: View {
 
             Spacer()
 
-            iconButton(systemName: "xmark") {
-                if let onClose {
-                    onClose()
-                } else {
-                    dismiss()
+            if presentation == .card {
+                iconButton(systemName: "xmark") {
+                    if let onClose {
+                        onClose()
+                    } else {
+                        dismiss()
+                    }
                 }
+                .accessibilityLabel("Close introduction")
+                .help("Close introduction")
             }
-            .accessibilityLabel("Close introduction")
-            .help("Close introduction")
         }
         .padding(.horizontal, 14)
         .padding(.top, 12)
