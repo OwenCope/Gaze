@@ -1,189 +1,139 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 
-/// Asks for Accessibility access, which is what lets the password be typed.
-///
-/// macOS has no in-app prompt for this one — the only route is System Settings, and the app
-/// cannot know it has been granted until it is asked again. So the screen watches two
-/// things: coming back to the front, and a slow poll for the case where the toggle is
-/// flipped while Gaze still has focus.
-///
-/// **It shows the row you are looking for.** The first version of this screen was a symbol
-/// in a rounded tile over two lines of prose, which is the shape of every generated
-/// onboarding screen on the internet and says nothing: the person is about to be dropped
-/// into a System Settings list of forty apps, and "turn Gaze on in the list" does not help
-/// them find it. A picture of the row — the app's real icon, its name, a switch — is what
-/// they will actually be scanning for, and it is the difference between an instruction and
-/// a demonstration.
-///
-/// Drawn rather than screenshotted, deliberately. A capture of that pane contains every app
-/// on the machine and the owner's name, and shipping someone else's installed-app list
-/// inside a downloadable binary is not a thing to do for a nicer illustration.
-struct SetupPermissionStep: View {
+struct SetupPermissionStatus: Equatable {
+	var accessibility: Bool
+	var keyboardEvents: Bool
+	var isReady: Bool { accessibility && keyboardEvents }
 
+	static var current: Self {
+		Self(accessibility: AXIsProcessTrusted(), keyboardEvents: CGPreflightPostEventAccess())
+	}
+}
+
+struct SetupPermissionStep: View {
 	var position: SetupPosition?
 	var onContinue: () -> Void
 	var onSkip: () -> Void
 	var onBack: (() -> Void)?
-
-	@State private var isTrusted = Self.initialTrust
-
-	/// `--preview-ungranted` forces the not-yet-allowed state.
-	///
-	/// The screen worth designing is the one that asks, and it is invisible on any machine
-	/// where the permission is already granted — which is every machine this gets worked on
-	/// after the first run. Revoking Accessibility to look at a layout is not a reasonable
-	/// thing to have to do.
-	private static var initialTrust: Bool {
-		CommandLine.arguments.contains("--preview-ungranted") ? false : AXIsProcessTrusted()
-	}
+	@State private var status = SetupPermissionStatus(accessibility: false, keyboardEvents: false)
+	@State private var settingsError: String?
 
 	var body: some View {
-		SetupScaffold(
-			position: position,
-			title: isTrusted ? "Gaze can type for you" : "One switch, in System Settings",
-			message: isTrusted
-				? "Accessibility access is on. Gaze can enter your password at the lock screen."
-				: "macOS won't let any app type at the lock screen until you allow it. Find this row and turn it on.",
-			figureHeight: isTrusted ? 132 : 96,
-			onBack: onBack
-		) {
-			if isTrusted {
-				SetupGlyph(symbol: "checkmark", tint: Theme.faceID)
-			} else {
-				PermissionRowIllustration()
-			}
-		} detail: {
-			if !isTrusted {
-				steps.padding(.top, 26)
-			}
-		} actions: {
-			if isTrusted {
-				SetupButton(action: onContinue)
-			} else {
-				SetupButton(title: "Open System Settings", action: openSettings)
-				Button("Set this up later", action: onSkip)
-					.buttonStyle(.plain)
-					.font(Typography.setupBody)
-					.foregroundStyle(Theme.setupTertiary)
-			}
-		}
-		.animation(Theme.Motion.standard, value: isTrusted)
+		SetupPermissionContent(
+			position: position, status: status, settingsError: settingsError,
+			onContinue: onContinue, onSkip: onSkip, onBack: onBack,
+			onOpenSettings: openSettings,
+			onRevealApp: { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
+		)
 		.onAppear { refresh() }
 		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
 			refresh()
 		}
-		// Settings can be granted without Gaze ever losing focus — the toggle lives in
-		// another window, and returning to it is not an activation.
 		.task {
-			while !Task.isCancelled && !isTrusted {
-				try? await Task.sleep(for: .seconds(1))
+			while !Task.isCancelled {
+				do { try await Task.sleep(for: .seconds(1)) }
+				catch { return }
 				refresh()
 			}
 		}
 	}
 
-	/// Three numbered lines, because this is a procedure carried out somewhere else.
-	///
-	/// Prose is the wrong shape for instructions you have to follow while looking at a
-	/// different window: you come back to it, and a paragraph makes you re-read from the
-	/// start to find your place. A numbered list does not.
-	private var steps: some View {
-		VStack(alignment: .leading, spacing: 13) {
-			step(1, "Open System Settings with the button below.")
-			step(2, "Scroll the list to Gaze.")
-			step(3, "Turn it on. Come back here — this screen notices.")
-		}
-		.frame(maxWidth: 420, alignment: .leading)
-	}
-
-	private func step(_ number: Int, _ text: String) -> some View {
-		HStack(alignment: .firstTextBaseline, spacing: 11) {
-			Text("\(number)")
-				.font(.system(size: 12, weight: .semibold))
-				.monospacedDigit()
-				.foregroundStyle(Theme.setupTertiary)
-				.frame(width: 20, height: 20)
-				.background {
-					Circle().fill(.white.opacity(0.09))
-					Circle().strokeBorder(.white.opacity(0.13), lineWidth: 1)
-				}
-			Text(text)
-				.font(Typography.setupBody)
-				.foregroundStyle(Theme.setupSecondary)
-				.fixedSize(horizontal: false, vertical: true)
-		}
-	}
-
 	private func refresh() {
 		guard !CommandLine.arguments.contains("--preview-ungranted") else { return }
-		let trusted = AXIsProcessTrusted()
-		if trusted != isTrusted { isTrusted = trusted }
+		status = .current
 	}
 
 	private func openSettings() {
-		if let url = URL(
-			string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-		{
-			NSWorkspace.shared.open(url)
-		}
+		let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+		_ = AXIsProcessTrustedWithOptions(options)
+		let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+		settingsError = NSWorkspace.shared.open(url) ? nil : "Open System Settings → Privacy & Security → Accessibility."
+		refresh()
 	}
 }
 
-/// The row they are looking for, drawn, with its switch turning itself on.
-///
-/// The switch animates rather than sitting in one state, because the instruction is an
-/// action. A static picture of a row with a switch already on says "this is what it looks
-/// like when you are finished", which is the one moment they are not in.
-struct PermissionRowIllustration: View {
-
-	@State private var isOn = false
+struct SetupPermissionContent: View {
+	var position: SetupPosition?
+	let status: SetupPermissionStatus
+	var settingsError: String?
+	var onContinue: () -> Void
+	var onSkip: () -> Void
+	var onBack: (() -> Void)?
+	var onOpenSettings: () -> Void
+	var onRevealApp: () -> Void
+	@State private var showsInfo = false
 
 	var body: some View {
-		HStack(spacing: 11) {
-			Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
-				.resizable()
-				.frame(width: 26, height: 26)
+		SetupScaffold(
+			position: position,
+			title: status.isReady ? "Gaze has permission" : "Allow Gaze to enter your password",
+			message: status.isReady
+				? "macOS has confirmed Accessibility access.\nYou can continue with setup."
+				: "Accessibility lets Gaze type your saved password at the lock screen, only after it recognises you.\nYou control this in System Settings, and you can skip it for now.",
+			figureHeight: 84,
+			onBack: onBack
+		) {
+			SetupGlyph(symbol: "hand.raised", tint: status.isReady ? Theme.faceID : nil)
+		} detail: {
+			VStack(alignment: .leading, spacing: 18) {
+				HStack(spacing: 12) {
+					Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
+						.resizable().frame(width: 32, height: 32)
+						.accessibilityHidden(true)
+					VStack(alignment: .leading, spacing: 3) {
+						Text("Gaze").font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
+						Text(status.isReady ? "Access enabled" : status.accessibility ? "Waiting for macOS to confirm" : "Access not enabled")
+							.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
+					}
+					Spacer()
+					Button { showsInfo.toggle() } label: {
+						Image(systemName: "info.circle").font(.system(size: 16))
+					}
+					.buttonStyle(.borderless)
+					.accessibilityLabel("About Accessibility access")
+					.help("Why Gaze needs this permission")
+					.popover(isPresented: $showsInfo) {
+						Text("Gaze checks your face and movement before entering your saved login password. Accessibility enables keyboard events; it does not approve a face or replace macOS authentication. A Keychain password prompt is separate from this permission.")
+							.font(.system(size: 13)).frame(width: 280).padding(20)
+					}
+				}
+				.padding(14)
+				.background(.primary.opacity(0.06), in: .rect(cornerRadius: 12))
 
-			Text("Gaze")
-				.font(.system(size: 14))
-				.foregroundStyle(.white)
-
-			Spacer(minLength: 40)
-
-			// A switch, at the size macOS draws one. Not a `Toggle`: a real one would be
-			// operable, and a control in an illustration that does nothing when clicked is
-			// worse than a picture of one.
-			ZStack(alignment: isOn ? .trailing : .leading) {
-				Capsule()
-					.fill(isOn ? Theme.faceID : Color.white.opacity(0.22))
-				Circle()
-					.fill(.white)
-					.padding(2)
-					.shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
+				if !status.isReady {
+					VStack(alignment: .leading, spacing: 10) {
+						instruction(1, "Open Privacy & Security → Accessibility.")
+						instruction(2, "Turn on Gaze, then return to this window.")
+					}
+					Button("Gaze isn’t listed? Show this app in Finder", action: onRevealApp)
+						.buttonStyle(.link).font(.system(size: 12))
+					Text(settingsError ?? (status.accessibility
+						? "If access stays pending, quit and reopen this copy of Gaze."
+						: "Use + in Accessibility to add this copy of Gaze if needed."))
+						.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
+						.fixedSize(horizontal: false, vertical: true)
+				}
 			}
-			.frame(width: 38, height: 22)
-		}
-		.padding(.horizontal, 14)
-		.padding(.vertical, 11)
-		.frame(width: 320)
-		.background {
-			RoundedRectangle(cornerRadius: 11, style: .continuous)
-				.fill(.white.opacity(0.07))
-			RoundedRectangle(cornerRadius: 11, style: .continuous)
-				.strokeBorder(.white.opacity(0.12), lineWidth: 1)
-		}
-		.glassEffect(.regular, in: .rect(cornerRadius: 11, style: .continuous))
-		.shadow(color: .black.opacity(0.35), radius: 16, y: 7)
-		.task {
-			// Off for a beat, on for longer. Weighted that way because the state being
-			// demonstrated is *on* — the off state is only there to make the change visible.
-			while !Task.isCancelled {
-				try? await Task.sleep(for: .milliseconds(900))
-				withAnimation(Theme.Motion.arrive) { isOn = true }
-				try? await Task.sleep(for: .milliseconds(2200))
-				withAnimation(Theme.Motion.quick) { isOn = false }
+			.frame(maxWidth: 400)
+			.padding(.top, 24)
+		} actions: {
+			if status.isReady {
+				SetupButton(action: onContinue)
+			} else {
+				SetupButton(title: "Open System Settings", action: onOpenSettings)
+				SetupSecondaryButton(title: "Set Up Later", action: onSkip)
 			}
+		}
+	}
+
+	private func instruction(_ number: Int, _ text: String) -> some View {
+		HStack(alignment: .firstTextBaseline, spacing: 12) {
+			Text("\(number).")
+				.font(.system(size: 13, weight: .semibold))
+				.foregroundStyle(Theme.setupTertiary)
+			Text(text).font(.system(size: 13)).foregroundStyle(Theme.setupSecondary)
 		}
 	}
 }

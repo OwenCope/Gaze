@@ -19,8 +19,9 @@ struct GazeTourMovementPage: View {
 			Button { paused.toggle() } label: {
 				Label(paused ? "Play" : "Pause", systemImage: paused ? "play.fill" : "pause.fill")
 					.frame(minWidth: 64)
+					.foregroundStyle(.primary)
 			}
-			.buttonStyle(.glass)
+			.buttonStyle(.bordered)
 			.buttonBorderShape(.capsule)
 			.controlSize(.large)
 			.disabled(reduced)

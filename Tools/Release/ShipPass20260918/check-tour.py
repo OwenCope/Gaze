@@ -8,7 +8,7 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = ROOT / "build/gaze-ship-20260918/compact-tour-interaction"
+OUT = ROOT / "build/gaze-ship-20260918/rounded-tour-interaction"
 APP = OUT / "Tour Fixture.app"
 BIN = APP / "Contents/MacOS/TourFixture"
 BIN.parent.mkdir(parents=True, exist_ok=True)

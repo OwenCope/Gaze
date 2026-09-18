@@ -226,7 +226,7 @@ struct SetupCameraAccessContent: View {
 	private var message: String {
 		switch authorization {
 		case .notDetermined:
-			"Gaze uses your built-in camera to recognise your face.\nChoose Allow when macOS asks for camera access."
+			"Gaze uses your built-in camera to recognise your face.\nYour camera stays off until you choose Allow.\nChoose Allow when macOS asks for camera access."
 		case .denied:
 			"Camera access is off. Enable Gaze in Privacy & Security → Camera, then return here to continue."
 		case .restricted:

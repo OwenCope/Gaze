@@ -32,7 +32,7 @@ struct SetupPasswordStep: View {
 			position: position,
 			title: "Your login password",
 			message:
-				"Use the password you enter to log in to this Mac.\nmacOS checks it before Gaze saves an encrypted copy.\nIf you change your Mac password later, save the new one in Gaze Settings.",
+				"Enter the password you type at login on this Mac.\nmacOS checks it before Gaze saves an encrypted copy in the keychain.\nIf you change your Mac password later, save the new one in Gaze Settings.",
 			figureHeight: 132,
 			onBack: onBack
 		) {

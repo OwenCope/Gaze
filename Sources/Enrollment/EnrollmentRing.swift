@@ -13,6 +13,8 @@ struct EnrollmentRing: View {
 	let currentAngle: Double
 	/// Whether the head is turned far enough to be filling ticks right now.
 	let isEngaged: Bool
+	var targetSegment: Int? = nil
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	/// Apple's Face ID green — the one in `Theme`, not a second copy of it.
 	///
@@ -39,7 +41,8 @@ struct EnrollmentRing: View {
 			}
 			.frame(width: side, height: side)
 			.position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-			.animation(.easeOut(duration: 0.22), value: covered)
+			.animation(reduceMotion ? nil : Theme.Motion.quick, value: covered)
+			.animation(reduceMotion ? nil : Theme.Motion.quick, value: targetSegment)
 		}
 	}
 
@@ -47,17 +50,18 @@ struct EnrollmentRing: View {
 		let angle = Double(index) / Double(covered.count) * 2 * .pi
 		let isFilled = covered[index]
 		let proximity = proximityToHead(at: angle)
+		let isTarget = targetSegment == index && !isFilled
 
 		return Capsule()
-			.fill(isFilled ? filled : empty)
+			.fill(isFilled ? filled : isTarget ? Color.primary : empty)
 			// The ticks nearest the head lengthen and brighten slightly, tying the ring to
 			// where the user is looking. It used to also cast a green glow (a 7pt shadow that
 			// swelled with proximity), which is the decorative bloom the app avoids everywhere
 			// else — the length and opacity change carry the cue on their own.
-			.frame(width: tickWidth, height: tickLength + 8 * proximity)
+			.frame(width: isTarget ? tickWidth + 2 : tickWidth, height: tickLength + 8 * proximity + (isTarget ? 6 : 0))
 			.offset(y: -radius)
 			.rotationEffect(.radians(angle))
-			.opacity(isFilled ? 1 : 0.55 + 0.45 * proximity)
+			.opacity(isFilled || isTarget ? 1 : 0.55 + 0.45 * proximity)
 	}
 
 	/// 1 when this tick is directly under the head's direction, falling to 0 a few ticks

@@ -5,12 +5,15 @@ movement demonstrations in its nine-page tour. The tour is now constrained to
 640x520 points, with 180-point movement demos; other setup stages retain their
 880x660 minimum. It continues directly into the remaining setup steps, and Back
 from capture restores the last tour page and compact window constraints.
+Static artwork has 16-point rounded corners and a subtle outline, without the
+old dark fade. Copy, progress dots and native controls share a compact footer.
+The last page uses a password symbol instead of a screenshot of the old guide.
 The signed build was installed at `build/Gaze.app` and relaunched at
-2026-09-18 04:05 UTC. One running agent, PID 93030, was verified against the
+2026-09-18 04:19 UTC. One running agent, PID 96314, was verified against the
 installed executable. The login agent was temporarily unloaded for the swap and
 restored without changing its plist. The prior bundle is preserved under
-`build/archive/2026-09-18/before-compact-tour-20260918T040547Z/Gaze.app`.
-`build/gaze-ship-20260918/compact-tour-install-result.json` records the replacement.
+`build/archive/2026-09-18/before-rounded-tour-20260918T041936Z/Gaze.app`.
+`build/gaze-ship-20260918/rounded-tour-install-result.json` records the replacement.
 
 This pass adds native feature guidance, improves onboarding and admin workflows,
 and validates the combined app and website changes. Timing is recorded in
@@ -21,7 +24,7 @@ and validates the combined app and website changes. Timing is recorded in
 - Local app: `build/gaze-ship-20260918/Gaze.app`
 - Earlier installer (predates the unified tour): `build/installers/20260918-tourkit-tipkit/Gaze-0.1-arm64-local-preview.dmg`
 - Website preview: http://127.0.0.1:55524/features
-- Current tour captures: `build/gaze-ship-20260918/compact-tour-interaction/step-1.png` through `step-9.png`
+- Current tour captures: `build/gaze-ship-20260918/rounded-tour-interaction/step-1.png` through `step-9.png`
 - Detailed evidence: `build/gaze-ship-20260918/validation-summary.json`
 
 The earlier installer is 98,729,532 bytes and contains an arm64 app targeting macOS 26+.
@@ -30,7 +33,7 @@ release. It has not been repackaged with the unified tour; the installed app and
 local app candidate above contain the latest changes.
 
 App executable SHA-256:
-`661efd273ee80ef2fcd50b004b7456d317c9032c9c175e8e346873764ffaa3fb`
+`94cab55e77827cd51089e95b6085c6e51f02d672e1f156fe3e37395d5183e06c`
 
 DMG SHA-256:
 `0d7f1145acf3237bd61082ab8aadb0897f18c716b93564880d8f65719c0a0b3f`

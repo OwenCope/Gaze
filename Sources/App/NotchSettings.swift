@@ -27,7 +27,6 @@ private struct NotchChoiceMenu<Selection: Hashable, Options: View>: View {
 struct NotchSettingsSection: View {
 	@Bindable var settings: Preferences
 	@State private var sizeExpanded = false
-	@State private var expressionsExpanded = false
 
 	private var isOnEar: Bool {
 		settings.panelShape == .attached && settings.glyphPlacement == .ear
@@ -92,12 +91,10 @@ struct NotchSettingsSection: View {
 
 		sizeControls
 
-		SettingsSection {
-			DisclosureGroup("What Gaze’s expressions mean", isExpanded: $expressionsExpanded) {
-				GazeExpressionGuide(compact: true, movementCount: settings.unlockMovementCount.rawValue)
-					.padding(.vertical, 12)
-			}
-			.padding(Theme.rowInset)
+		SettingsSection(title: "Expressions") {
+			GazeExpressionGuide(compact: true, movementCount: settings.unlockMovementCount.rawValue)
+				.padding(.vertical, 12)
+				.padding(.horizontal, Theme.rowInset)
 		}
 	}
 		.onChange(of: settings.panelShape, initial: true) { _, shape in
@@ -108,7 +105,7 @@ struct NotchSettingsSection: View {
 	}
 
 	private var sizeControls: some View {
-		SettingsSection {
+		SettingsSection(title: "Size") {
 			DisclosureGroup(isExpanded: $sizeExpanded) {
 				VStack(spacing: 0) {
 					if !isOnEar {

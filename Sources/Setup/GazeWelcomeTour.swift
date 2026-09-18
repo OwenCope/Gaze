@@ -57,7 +57,7 @@ struct GazeWelcomeTour: View {
 			imageName: "Art/tour-practice.png",
 			imageBundle: .main,
 			title: "Choose how to unlock",
-			description: "Automatic unlocking is optional and uses a saved Mac password. Next, set up any parts you still need."
+			description: "Automatic unlocking stays off unless you turn it on. It uses a saved Mac password. Next, set up any parts you still need."
 		))
 		return pages
 	}
@@ -75,6 +75,12 @@ struct GazeWelcomeTour: View {
 				presentation: .windowContent,
 				contentHeight: max(proxy.size.height, 1),
 				pageMedia: { index in
+					if index == 8 {
+						return AnyView(Image(systemName: "key.fill")
+							.font(.system(size: 72, weight: .regular))
+							.foregroundStyle(.white.opacity(0.85))
+							.accessibilityHidden(true))
+					}
 					let lessonIndex = index - 2
 					guard lessonIndex >= 0 && lessonIndex < Self.movementLessons.count else { return nil }
 					return AnyView(GazeTourMovementPage(lesson: Self.movementLessons[lessonIndex]))
