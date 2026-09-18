@@ -8,7 +8,7 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = ROOT / "build/gaze-ship-20260918/tour-interaction"
+OUT = ROOT / "build/gaze-ship-20260918/compact-tour-interaction"
 APP = OUT / "Tour Fixture.app"
 BIN = APP / "Contents/MacOS/TourFixture"
 BIN.parent.mkdir(parents=True, exist_ok=True)
@@ -124,7 +124,7 @@ import SwiftUI
             onPageChange: { savedPage = $0 })
             .background(Color(white: 0.06)).preferredColorScheme(.dark)
             .transaction { $0.disablesAnimations = true })
-        host.frame = CGRect(x: 0, y: 0, width: 880, height: 660)
+        host.frame = CGRect(x: 0, y: 0, width: 640, height: 520)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.title = "Gaze Tour Fixture — no camera or credentials"
@@ -198,7 +198,7 @@ import SwiftUI
         settle()
         precondition(!window.isVisible, "The native window close control must dismiss the tour")
         precondition(completed == 1 && closed == 0, "Native close does not invoke a removed in-content close button")
-        print("PASS: nine-page integrated movement tour, single navigation/progress, pause/play, Back, saved page restoration, one-movement copy, app Reduce Motion setting, native window close and inert callbacks; system Reduce Motion and raw Escape injection are not covered")
+        print("PASS: nine-page integrated movement tour at 640x520, single navigation/progress, pause/play, Back, saved page restoration, one-movement copy, app Reduce Motion setting, native window close and inert callbacks; system Reduce Motion and raw Escape injection are not covered")
     }
 }
 ''')

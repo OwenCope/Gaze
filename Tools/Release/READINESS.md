@@ -3,7 +3,7 @@
 September 18 update: [ShipPass20260918/RESULT.md](ShipPass20260918/RESULT.md)
 records the current TourKit/TipKit app candidate, local DMG, backend/admin fixes,
 SEO checks, and remaining acceptance gates. The candidate builds and verifies;
-the latest full-window tour includes movement demonstrations and was installed
+the latest compact 640x520 tour includes movement demonstrations and was installed
 and relaunched at `build/Gaze.app` at the owner's request. The earlier DMG predates
 this unified tour; see the report for the current executable hash. The website production
 build and 82 backend/SEO tests pass. No deployment command was run. The older
