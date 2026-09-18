@@ -26,16 +26,18 @@ env = dict(os.environ, DEVELOPER_DIR="/Applications/Xcode-beta.app/Contents/Deve
 subprocess.run(["xcrun", "swiftc", "-parse-as-library", "-target", "arm64-apple-macos26.0",
                 *map(str, sources), "-o", str(BIN)], env=env, check=True)
 resources = APP / "Contents/Resources"
-resources.mkdir(parents=True, exist_ok=True)
-for name in ["Art", "Credits"]:
-    shutil.copytree(ROOT / "Resources" / name, resources / name, dirs_exist_ok=True)
+installed_resources = ROOT / "build/Gaze.app/Contents/Resources"
+if resources.exists():
+    shutil.rmtree(resources)
+shutil.copytree(installed_resources, resources)
 with (APP / "Contents/Info.plist").open("wb") as stream:
     plistlib.dump({"CFBundleIdentifier": "com.gazeunlock.ProductCapture", "CFBundleExecutable": "ProductCapture",
-                   "CFBundleName": "Gaze Product Capture", "CFBundlePackageType": "APPL",
+                   "CFBundleName": "Gaze Product Capture", "CFBundlePackageType": "APPL", "CFBundleIconFile": "AppIcon",
                    "CFBundleShortVersionString": "0.1", "LSMinimumSystemVersion": "26.0"}, stream)
 subprocess.run(["codesign", "--force", "--sign", "-", str(APP)], check=True)
 (OUT / "sources.json").write_text(json.dumps({
     "sourceHashes": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},
-    "limits": "Current production views, empty enrollment, isolated bundle preferences, stub Keychain. GazeApp declarations compile but its initializer/delegate/services are never run. Screenshots require macOS capture permission; no fallback images are fabricated."
+    "resourceBundle": "build/Gaze.app/Contents/Resources",
+    "limits": "Current production views and installed app resources (including icon/model availability), empty enrollment, isolated bundle preferences, stub Keychain. GazeApp declarations compile but its initializer/delegate/services are never run. Screenshots require macOS capture permission; no fallback images are fabricated."
 }, indent=2) + "\n")
 print(APP)

@@ -1,5 +1,30 @@
 # Gaze handoff, September 18
 
+## Latest UI refinement: autoplay and real app shots
+
+The user explicitly wants previews to autoplay without subtitles, player bars,
+Play/Pause buttons or a visible Enlarge overlay. Marketing video components now
+render plain inline muted loops; gallery media can still be clicked to enlarge.
+OS reduced-motion and offscreen/background pause remain silent. The native
+movement guide also autoplays without its extra playback controls/caption.
+
+The user specifically rejected the Back/check circles. The tour retains the
+preset dark card/blue primary action, but uses a plain back chevron and close X
+with clear hit areas. Build and tour interaction checks passed; installed PID
+51047 at verification, SHA256 883957ab4bee829b72daf6f4233d69cb6f7eb53e0784593acd2c716a13fb5066.
+Evidence: build/seamless-media-20260918.
+
+Website preview: https://gaze-site-3zb7363qw-gaze2.vercel.app, deployment
+dpl_DA3EdxFadVuGrVi2TFD98uz8HJLr READY. Source changes also synced to local55524.
+
+Still unfinished: real CURRENT app screenshots in BOTH tour and website. The
+latest capture retry returned ScreenCaptureKit -3801 and CGPreflight returned
+false. User was asked to enable Screen & System Audio Recording for Droppy Code
+Dev / Gaze Product Capture. No response yet. Do not replace photos with more
+illustrations or old app shots. The capture helper now copies the installed
+app's full resources, including icon/model availability, while keeping empty
+enrollment, a stub Keychain and no production service startup.
+
 ## Website deployment recovery
 
 The failed Vercel preview at commit 3d5bf3f omitted 11 local-only imported modules

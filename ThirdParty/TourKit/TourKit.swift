@@ -239,7 +239,7 @@ public struct TourSlideshowView: View {
 
             Spacer()
 
-            iconButton(systemName: "checkmark") {
+            iconButton(systemName: "xmark") {
                 if let onClose {
                     onClose()
                 } else {
@@ -248,6 +248,8 @@ public struct TourSlideshowView: View {
             }
             .accessibilityLabel("Close tour")
             .accessibilityIdentifier("tour-close")
+            .help("Close tour")
+            .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 14)
         .padding(.top, 12)
@@ -285,26 +287,15 @@ public struct TourSlideshowView: View {
         .keyboardShortcut(.defaultAction)
     }
 
-    // MARK: - Icon button (glass circle)
+    // MARK: - Icon controls
 
     private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.88))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.72))
                 .frame(width: 32, height: 32)
-                .background {
-                    if #available(macOS 26.0, iOS 26.0, *) {
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .overlay {
-                                Circle().stroke(Color.white.opacity(0.25), lineWidth: 0.5)
-                            }
-                    } else {
-                        Circle().fill(Color.white.opacity(0.15))
-                    }
-                }
-                .contentShape(Circle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
