@@ -512,21 +512,15 @@ struct SettingsView: View {
 
 	private var onboardingSection: some View {
 		SettingsSection(title: "Getting Started") {
-			SettingRow(title: "Welcome to Gaze", detail: "Reopen the setup walkthrough.") {
-				Button("Open Onboarding") {
-					SetupRequest.beginOnboarding()
-					AppActivation.bringToFront(userInitiated: true)
-					openWindow(id: "enrollment")
-				}
-				.gazeButton()
+			SettingsNavigationRow(title: "Welcome to Gaze", detail: "Reopen the setup walkthrough.") {
+				SetupRequest.beginOnboarding()
+				AppActivation.bringToFront(userInitiated: true)
+				openWindow(id: "enrollment")
 			}
 			RowDivider()
-			SettingRow(title: "Movement guide", detail: "Preview the prompts with the camera off.") {
-				Button("Open guide") {
-					AppActivation.bringToFront(userInitiated: true)
-					openWindow(id: "movement-guide")
-				}
-				.gazeButton()
+			SettingsNavigationRow(title: "Movement guide", detail: "Preview the prompts with the camera off.") {
+				AppActivation.bringToFront(userInitiated: true)
+				openWindow(id: "movement-guide")
 			}
 		}
 	}
@@ -1177,15 +1171,12 @@ struct SettingsView: View {
 				: "Applies to Settings and onboarding. The recognition test keeps a neutral "
 					+ "camera surround. The notch has its own style in Notch settings."
 		) {
-			SettingRow(title: "Theme", symbol: "circle.lefthalf.filled") {
-				SettingsChoiceMenu(title: "Theme",
-					valueLabel: settings.appTheme.title,
-					selection: $settings.appTheme) {
-					ForEach(Preferences.AppTheme.allCases, id: \.self) { theme in
-						Text(theme.title).tag(theme)
-					}
-				}
+			VStack(alignment: .leading, spacing: 12) {
+				Text("Theme").font(Typography.row).foregroundStyle(Theme.label)
+				ThemePreviewPicker(selection: $settings.appTheme)
 			}
+			.padding(.horizontal, Theme.rowInset)
+			.padding(.vertical, 14)
 		}
 	}
 
