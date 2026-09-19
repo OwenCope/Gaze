@@ -23,7 +23,7 @@ struct ThemePreviewPicker: View {
 						ThemePreviewThumbnail(theme: theme, isSelected: isSelected)
 						Text(theme.title)
 							.font(Typography.control)
-							.foregroundStyle(Theme.secondaryLabel)
+							.foregroundStyle(isSelected ? Theme.label : Theme.secondaryLabel)
 							.multilineTextAlignment(.center)
 					}
 					.frame(minWidth: 104)
@@ -43,29 +43,16 @@ private struct ThemePreviewThumbnail: View {
 	let isSelected: Bool
 
 	var body: some View {
-		ZStack(alignment: .topTrailing) {
-			preview
-				.frame(width: 104, height: 56)
-				.clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-			if isSelected {
-				Circle()
-					.fill(Theme.accent)
-					.frame(width: 16, height: 16)
-					.overlay {
-						Image(systemName: "checkmark")
-							.font(.system(size: 9, weight: .bold))
-							.foregroundStyle(Theme.onAccent)
-					}
-					.padding(4)
+		preview
+			.frame(width: 104, height: 56)
+			.clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+			.overlay {
+				RoundedRectangle(cornerRadius: 8, style: .continuous)
+					.strokeBorder(
+						isSelected ? Color.accentColor : Theme.separator,
+						lineWidth: isSelected ? 2 : 1)
 			}
-		}
-		.overlay {
-			RoundedRectangle(cornerRadius: 8, style: .continuous)
-				.strokeBorder(
-					isSelected ? Theme.accent : Theme.separator,
-					lineWidth: isSelected ? 2 : 1)
-		}
-		.accessibilityHidden(true)
+			.accessibilityHidden(true)
 	}
 
 	@ViewBuilder
