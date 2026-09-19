@@ -61,6 +61,45 @@ enum GuidanceCaptionTests {
 			}
 		}
 		print("PASS: animated return captions hidden without resizing; Reduce Motion and retry captions visible; practice guidance remains visible")
+		try checkCaptionVisibility(directory: directory)
+	}
+
+	private static func checkCaptionVisibility(directory: URL) throws {
+		precondition(NotchCapsuleModel().showsCaptions, "Existing users retain captions by default")
+		let phases: [(String, NotchCapsuleModel.Phase, String)] = [
+			("movement", .challenge(prompt: "Turn slightly left", symbol: "arrowshape.left.fill", hintX: -1, hintY: 0, pulses: false), "Turn"),
+			("pending", .pending, "Waiting"),
+			("unrecognised", .notRecognised, "recognised"),
+			("spoof", .spoofRejected, "Photo")
+		]
+		for (shape, placement) in [(Preferences.PanelShape.attached, Preferences.GlyphPlacement.centred), (.attached, .ear), (.island, .centred)] {
+			for reduced in [false, true] {
+				for (name, phase, marker) in phases {
+					let model = NotchCapsuleModel()
+					model.shape = shape
+					model.glyphPlacement = placement
+					model.isExpanded = true
+					model.phase = phase
+					var visibleSize: CGSize?
+					for enabled in [true, false] {
+						model.showsCaptions = enabled
+						let url = directory.appendingPathComponent("caption-\(name)-\(shape)-\(placement)-reduced-\(reduced)-visible-\(enabled).png")
+						try CompanionCapture.snapshot(NotchCapsule(model: model, width: 278,
+							height: shape == .island ? 244 : 128, notchInset: 32, cutoutWidth: 180)
+							.environment(\.notchReduceMotion, reduced), to: url) { surfaces in
+							precondition(surfaces.count == 1, "The companion remains visible with captions off")
+							let size = surfaces[0].view.bounds.size
+							if enabled { visibleSize = size }
+							else { precondition(size == visibleSize, "Caption visibility must not resize the companion") }
+						}
+						let text = try recognizedText(at: url)
+						precondition(text.localizedCaseInsensitiveContains(marker) == enabled,
+							"Caption visibility mismatch in \(url.lastPathComponent): \(text)")
+					}
+				}
+			}
+		}
+		print("PASS: captions toggle across attached, ear and island layouts, including Reduce Motion; companion geometry retained")
 	}
 
 	private static func recognizedText(at url: URL) throws -> String {

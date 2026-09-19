@@ -185,8 +185,17 @@ struct SettingsInteractionTests {
             ReleaseUpdateChecker.shared.state = .idle
             try withPanel(.updates, scheme: scheme) { host, _ in
                 require(find("Open Source Folder", in: host) == nil, "Installed apps must not show a disabled source-folder button")
-                press("Check", in: host)
+                require(find("Version 1.2.3", in: host) != nil, "The update row identifies the installed version")
+                press("Check for Updates", in: host)
                 require(ReleaseUpdateChecker.shared.state == .upToDate, "The Check button reaches the existing checker action")
+                ReleaseUpdateChecker.shared.state = .failed("The update server answered 404.")
+                settle()
+                require(find("Couldn’t check for updates. Try again.", in: host) != nil, "Failed checks show useful guidance")
+                require(find("The update server answered 404.", in: host) == nil, "HTTP diagnostics do not replace user guidance")
+                let checksBeforeRetry = ReleaseUpdateChecker.shared.checkCount
+                press("Retry", in: host)
+                require(ReleaseUpdateChecker.shared.checkCount == checksBeforeRetry + 1, "Retry invokes the checker once")
+                require(ReleaseUpdateChecker.shared.state == .upToDate, "A successful retry clears the error")
                 ReleaseUpdateChecker.shared.state = .checking
                 settle()
                 require(find("Checking…", in: host).map { !boolean($0, "isAccessibilityEnabled") } == true, "Checking disables the action")
@@ -206,8 +215,20 @@ struct SettingsInteractionTests {
                 try snapshot(host, to: output.appendingPathComponent("updates-\(expanded ? "notes" : "collapsed")-\(scheme == .dark ? "dark" : "light").png"))
                 UpdateChecker.shared.repositoryURL = URL(fileURLWithPath: "/fixture/Gaze")
                 settle()
+                require(find("Open Source Folder", in: host) == nil, "Source tools stay out of the compact Updates section")
+                ReleaseUpdateChecker.shared.state = .available(.init(tag: "1.3.0", name: "A useful update", notes: "", downloadURL: nil))
+                settle()
+                require(find("Download", in: host) == nil, "A release without a download does not promise a download")
+                let pagesBefore = ReleaseUpdateChecker.shared.downloadCount
+                press("View Release", in: host)
+                require(ReleaseUpdateChecker.shared.downloadCount == pagesBefore + 1, "View Release invokes the existing release-page fallback")
+            }
+            try withPanel(.sourceBuild, scheme: scheme) { host, _ in
                 press("Open Source Folder", in: host)
-                require(UpdateChecker.shared.revealCount > 0, "Source builds retain their folder action")
+                require(UpdateChecker.shared.revealCount > 0, "About retains the source-folder action")
+                UpdateChecker.shared.repositoryURL = nil
+                settle()
+                require(find("Open Source Folder", in: host) == nil, "Installed apps omit source-build tools")
             }
         }
         try checkCapture(output: output)

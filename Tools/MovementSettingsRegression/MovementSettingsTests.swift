@@ -59,6 +59,20 @@ enum MovementSettingsTests {
 			defaults.set(invalid, forKey: "unlockMovementCount")
 			try expect(Preferences(defaults: defaults).unlockMovementCount == .two, "invalid persisted value requires two: \(invalid)")
 		}
-		print("\(checks) movement-settings checks passed; isolated defaults only")
+		try expect(Preferences(defaults: defaults).showNotchCaptions, "captions default to visible")
+		try expect(defaults.object(forKey: "showNotchCaptions") == nil, "reading the caption default does not persist it")
+		for invalid: Any in [0, 2, "false", ["invalid"]] {
+			defaults.set(invalid, forKey: "showNotchCaptions")
+			try expect(Preferences(defaults: defaults).showNotchCaptions, "invalid caption preference preserves visible guidance: \(invalid)")
+		}
+		for enabled in [false, true, false] {
+			let loaded = Preferences(defaults: defaults)
+			let movementCount = loaded.unlockMovementCount
+			loaded.showNotchCaptions = enabled
+			let reloaded = Preferences(defaults: defaults)
+			try expect(reloaded.showNotchCaptions == enabled, "caption choice survives reload: \(enabled)")
+			try expect(reloaded.unlockMovementCount == movementCount, "caption choice leaves movement requirements unchanged")
+		}
+		print("\(checks) movement/caption preference checks passed; isolated defaults only")
 	}
 }

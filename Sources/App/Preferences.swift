@@ -151,6 +151,7 @@ final class Preferences {
 		static let panelShape = "notchPanelShape"
 		static let notchStyle = "notchStyle"
 		static let notchTransparency = "notchTransparency"
+		static let showNotchCaptions = "showNotchCaptions"
 		static let notchHeightAdjust = "notchHeightAdjust"
 		static let notchWidthAdjust = "notchWidthAdjust"
 		static let liveness = "livenessEnabled"
@@ -301,6 +302,14 @@ final class Preferences {
 		didSet { defaults.set(notchTransparency, forKey: Key.notchTransparency) }
 	}
 
+	/// Whether the notch companion shows movement guidance and status text.
+	///
+	/// Display only: it hides the caption words and their symbols, never the mark
+	/// itself, and it changes nothing about what Gaze checks or when it unlocks.
+	var showNotchCaptions: Bool {
+		didSet { defaults.set(showNotchCaptions, forKey: Key.showNotchCaptions) }
+	}
+
 	/// Points added to the measured notch size, so a panel that sits slightly wrong on
 	/// unusual hardware can be nudged rather than requiring a rebuild.
 	var notchHeightAdjust: Double {
@@ -343,6 +352,12 @@ final class Preferences {
 			defaults.string(forKey: Key.appTheme)
 			.flatMap(AppTheme.init(rawValue:)) ?? .system
 		notchTransparency = defaults.object(forKey: Key.notchTransparency) as? Double ?? 0.3
+		if let storedCaptions = defaults.object(forKey: Key.showNotchCaptions) as? NSNumber,
+			CFGetTypeID(storedCaptions) == CFBooleanGetTypeID() {
+			showNotchCaptions = storedCaptions.boolValue
+		} else {
+			showNotchCaptions = true
+		}
 		notchHeightAdjust = defaults.double(forKey: Key.notchHeightAdjust)
 		notchWidthAdjust = defaults.double(forKey: Key.notchWidthAdjust)
 	}

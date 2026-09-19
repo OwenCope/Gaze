@@ -17,4 +17,4 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(uname -m)-apple-macos26.0"
 	"$ROOT/Tools/GazePreview/Tests/MovementProgressTests.swift" \
 	"$ROOT/Tools/GazePreview/Tests/RenderDiagnosticsTests.swift" \
 	"$ROOT/Tools/GazePreview/Tests/CompanionIntegrationTests.swift" -o "$BUILD/integration-tests"
-"$BUILD/integration-tests" "${1:-$BUILD/renders}"
+"$BUILD/integration-tests" "${1:-$BUILD/renders}" "${@:2}"

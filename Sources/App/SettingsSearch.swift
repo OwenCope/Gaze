@@ -130,7 +130,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 		SettingsSearchItem(
 			id: "updates",
 			title: "Updates",
-			subtitle: "Version, source folder and released builds",
+			subtitle: "Installed version and released builds",
 			keywords: ["update", "updates", "release", "releases", "version", "download", "check"],
 			pane: "general",
 			section: "updatesSection"
@@ -147,7 +147,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			id: "notch",
 			title: "Notch panel",
 			subtitle: "How the panel under the notch looks",
-			keywords: ["notch", "panel", "style", "island"],
+			keywords: ["notch", "panel", "style", "island", "caption", "captions", "instructions"],
 			pane: "notch",
 			section: "NotchSettingsSection"
 		),
@@ -155,7 +155,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			id: "about",
 			title: "About Gaze",
 			subtitle: "What this app is, and what it isn't",
-			keywords: ["about", "version", "model", "website", "release notes", "support", "face id"],
+			keywords: ["about", "version", "model", "website", "release notes", "support", "face id", "source", "source folder", "checkout", "rebuild", "repository"],
 			pane: "about",
 			section: "aboutSection"
 		),

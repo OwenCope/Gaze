@@ -69,6 +69,11 @@ struct NotchSettingsSection: View {
 		sizeControls
 
 		SettingsSection(title: "Expressions") {
+			SettingToggle(
+				title: "Show captions",
+				detail: "Shows movement guidance and status text under Gaze.",
+				isOn: $settings.showNotchCaptions)
+			RowDivider()
 			SettingsNavigationRow(title: "Movement guide", detail: "Preview the prompts with the camera off.") {
 				AppActivation.bringToFront(userInitiated: true)
 				openWindow(id: "movement-guide")
@@ -156,6 +161,7 @@ private struct NotchAppearancePreview: View {
 		model.style = settings.notchStyle
 		model.glyphPlacement = settings.panelShape == .island ? .centred : settings.glyphPlacement
 		model.transparency = settings.notchTransparency
+		model.showsCaptions = settings.showNotchCaptions
 		model.isExpanded = true
 		_model = State(initialValue: model)
 	}
@@ -188,6 +194,7 @@ private struct NotchAppearancePreview: View {
 		.onChange(of: settings.notchStyle) { _, _ in syncAppearance() }
 		.onChange(of: settings.glyphPlacement) { _, _ in syncAppearance() }
 		.onChange(of: settings.notchTransparency) { _, _ in syncAppearance() }
+		.onChange(of: settings.showNotchCaptions) { _, _ in syncAppearance() }
 		.onAppear { syncAppearance(); model.isExpanded = true }
 		.onDisappear { model.isExpanded = false }
 	}
@@ -202,6 +209,7 @@ private struct NotchAppearancePreview: View {
 		model.style = settings.notchStyle
 		model.glyphPlacement = settings.panelShape == .island ? .centred : settings.glyphPlacement
 		model.transparency = settings.notchTransparency
+		model.showsCaptions = settings.showNotchCaptions
 	}
 }
 
