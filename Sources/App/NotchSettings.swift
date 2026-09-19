@@ -69,12 +69,9 @@ struct NotchSettingsSection: View {
 		sizeControls
 
 		SettingsSection(title: "Expressions") {
-			SettingRow(title: "Movement guide", detail: "Preview the prompts with the camera off.") {
-				Button("Open guide") {
-					AppActivation.bringToFront(userInitiated: true)
-					openWindow(id: "movement-guide")
-				}
-				.gazeButton()
+			SettingsNavigationRow(title: "Movement guide", detail: "Preview the prompts with the camera off.") {
+				AppActivation.bringToFront(userInitiated: true)
+				openWindow(id: "movement-guide")
 			}
 		}
 	}

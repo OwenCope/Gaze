@@ -53,6 +53,9 @@ enum Theme {
 	/// is a step you can actually see.
 	static let surface = dynamic(light: .white.opacity(0.62), dark: .white.opacity(0.12))
 	static let surfaceRaised = dynamic(light: .white.opacity(0.88), dark: .white.opacity(0.18))
+	/// Settings groups only: a calmer, more solid neutral fill so rows stay readable over
+	/// wallpaper. White in light, neutral grey in dark, both at 0.86.
+	static let settingsGroupFill = dynamic(light: .white.opacity(0.86), dark: Color(white: 0.14).opacity(0.86))
 	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
 
 	static let setupGround = dynamic(light: Color(white: 0.96), dark: .black)
@@ -552,7 +555,7 @@ struct SettingsSection<Content: View>: View {
 			VStack(spacing: 0) {
 				content
 			}
-			.glassSurface()
+			.glassSurface(fill: Theme.settingsGroupFill)
 
 			if let footer, !footer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
 				Text(footer)
