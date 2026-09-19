@@ -121,6 +121,16 @@ struct SettingsView: View {
 	/// on the detail scroll view scrolls to it after layout, then clears it.
 	/// Navigation only — it never reads the vault or flips a setting.
 	@State private var pendingSearchSection: SettingsSearchItem?
+	/// The section a search navigation just revealed, outlined briefly.
+	///
+	/// Owned separately from `pendingSearchSection` so the scroll task clearing
+	/// on arrival never cuts the highlight short. Set together with the pane so
+	/// a search-driven pane change keeps it; a manual pane switch, a new search
+	/// or disappearance clears it instead. Never read for anything but display.
+	@State private var highlightedSearchSection: SettingsSearchItem?
+	/// Restarts the highlight expiry on every selection, including a repeat of
+	/// the same section.
+	@State private var highlightToken: UUID?
 
 	@Environment(\.openWindow) private var openWindow
 	@Environment(\.colorScheme) private var colorScheme
@@ -138,7 +148,23 @@ struct SettingsView: View {
 			}
 		}
 			.searchable(text: $searchQuery, placement: .toolbar, prompt: "Find a setting")
-			.onChange(of: pane) { _, _ in searchQuery = "" }
+			.onChange(of: pane) { _, next in
+				searchQuery = ""
+				// A manual pane switch drops the highlight; a search-driven one
+				// lands on the highlighted section's own pane and keeps it.
+				if highlightedSearchSection?.pane != next.rawValue {
+					highlightedSearchSection = nil
+					highlightToken = nil
+				}
+			}
+			.onChange(of: searchQuery) { _, query in
+				// Typing a new search supersedes the previous destination.
+				// (Selections set the query back to empty, so they keep it.)
+				if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+					highlightedSearchSection = nil
+					highlightToken = nil
+				}
+			}
 			.onSubmit(of: .search) {
 				if let first = SettingsSearchItem.results(for: searchQuery).first {
 					selectSearchResult(first)
@@ -229,7 +255,19 @@ struct SettingsView: View {
 			// Pause expiry changes with time, without changing the stored preference.
 			pauseExpiryRevision &+= 1
 		}
-		.onDisappear { AppActivation.returnToBackgroundIfIdle() }
+		.task(id: highlightToken) {
+			// The highlight's own lifetime: a newer selection replaces the token
+			// and cancels this, so only the latest destination stays outlined.
+			guard highlightToken != nil else { return }
+			try? await Task.sleep(for: .seconds(1.8))
+			guard !Task.isCancelled else { return }
+			highlightedSearchSection = nil
+		}
+		.onDisappear {
+			highlightedSearchSection = nil
+			highlightToken = nil
+			AppActivation.returnToBackgroundIfIdle()
+		}
 	}
 
 	// MARK: - Detail
@@ -263,22 +301,22 @@ struct SettingsView: View {
 				// three, and split one subject across two panes.
 				case .face:
 					if lockout.isLockedOut { lockoutSection }
-					hero.id("hero")
+					hero.id("hero").modifier(searchDestination("hero"))
 					if store.isEnrolled { manageSection }
-					unlockSection.id("unlockSection")
-					permissionsSection.id("permissionsSection")
-					securitySection.id("securitySection")
+					unlockSection.id("unlockSection").modifier(searchDestination("unlockSection"))
+					permissionsSection.id("permissionsSection").modifier(searchDestination("permissionsSection"))
+					securitySection.id("securitySection").modifier(searchDestination("securitySection"))
 				case .general:
-					behaviourSection.id("behaviourSection")
-					appearanceSection.id("appearanceSection")
-					updatesSection.id("updatesSection")
-					onboardingSection.id("onboardingSection")
+					behaviourSection.id("behaviourSection").modifier(searchDestination("behaviourSection"))
+					appearanceSection.id("appearanceSection").modifier(searchDestination("appearanceSection"))
+					updatesSection.id("updatesSection").modifier(searchDestination("updatesSection"))
+					onboardingSection.id("onboardingSection").modifier(searchDestination("onboardingSection"))
 				case .notch:
-					NotchSettingsSection(settings: settings).id("NotchSettingsSection")
+					NotchSettingsSection(settings: settings).id("NotchSettingsSection").modifier(searchDestination("NotchSettingsSection"))
 				case .credits:
-					creditsSection.id("creditsSection")
+					creditsSection.id("creditsSection").modifier(searchDestination("creditsSection"))
 				case .about:
-					aboutSection.id("aboutSection")
+					aboutSection.id("aboutSection").modifier(searchDestination("aboutSection"))
 					DisclosureGroup("Credits & Acknowledgements") { creditsSection }
 				}
 
@@ -328,7 +366,11 @@ struct SettingsView: View {
 						.foregroundStyle(Theme.secondaryLabel)
 						.padding(.horizontal, Theme.rowInset)
 						.padding(.vertical, 14)
-					Button("Clear search") { searchQuery = "" }
+					Button("Clear search") {
+						searchQuery = ""
+						highlightedSearchSection = nil
+						highlightToken = nil
+					}
 						.gazeButton()
 						.padding(.horizontal, Theme.rowInset)
 				} else {
@@ -368,11 +410,19 @@ struct SettingsView: View {
 		if let next = SettingsPane(rawValue: item.pane) { pane = next }
 		searchQuery = ""
 		pendingSearchSection = item
+		highlightedSearchSection = item
+		highlightToken = UUID()
 	}
 
 	private func revealSettingsSection(_ section: String) {
 		guard let item = SettingsSearchItem.all.first(where: { $0.pane == "face" && $0.section == section }) else { return }
 		selectSearchResult(item)
+	}
+
+	/// The outline for one searchable section, active only while it is the
+	/// latest search destination.
+	private func searchDestination(_ section: String) -> SearchDestinationOutline {
+		SearchDestinationOutline(section: section, highlightedSection: highlightedSearchSection?.section)
 	}
 
 	// MARK: - Overview
@@ -1693,6 +1743,27 @@ struct SettingsView: View {
 		} else {
 			lockoutPassword = ""
 			lockoutError = "That password didn’t match. Try again."
+		}
+	}
+}
+
+/// A brief neutral outline marking a search result's destination section.
+///
+/// An overlay in the section's own corner radius, so it follows the existing
+/// geometry without moving layout; neutral grey, never the recognition green.
+/// Shown and cleared without animation — no movement, no flashing.
+private struct SearchDestinationOutline: ViewModifier {
+	let section: String
+	let highlightedSection: String?
+
+	func body(content: Content) -> some View {
+		content.overlay {
+			if highlightedSection == section {
+				RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+					.stroke(Theme.secondaryLabel, lineWidth: 1.5)
+					.allowsHitTesting(false)
+					.accessibilityHidden(true)
+			}
 		}
 	}
 }

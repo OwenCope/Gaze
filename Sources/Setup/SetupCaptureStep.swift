@@ -125,20 +125,25 @@ struct SetupCaptureStep: View {
 
 	private var caption: String {
 		if case .failed = camera.state {
-			if onRetry != nil {
-				return "Make sure the built-in camera is available, then try again. Your face hasn’t been saved."
+			if onRetry != nil, model?.phase != .complete {
+				return "Make sure the built-in camera is available, then choose Try Again. Your face hasn’t been saved."
 			}
-			return "Make sure the built-in camera is available. Go back and try again. Your face hasn’t been saved."
+			if onBack != nil {
+				return "Make sure the built-in camera is available. Go back and try again. Your face hasn’t been saved."
+			}
+			return "Make sure the built-in camera is available and the lens is unobstructed. Your face hasn’t been saved."
 		}
 		guard isAuthorized else {
 			return "Nothing is recorded, and no images ever leave this Mac."
 		}
-		guard let model else { return " " }
+		guard let model else { return "Starting the camera…" }
 		if camera.faceMissing {
 			switch camera.absence {
 			case .multipleFaces: return "Gaze found more than one face. Only the person being enrolled should be in view."
 			case .analysisFailed: return "Your face was found, but its details couldn’t be measured. Face the camera in even light."
-			case .detectionFailed: return "Face analysis is unavailable for this frame. If it persists, go back and reopen capture."
+			case .detectionFailed:
+				if onBack != nil { return "Face analysis is unavailable for this frame. If it persists, go back and reopen capture." }
+				return "Face analysis is unavailable for this frame. Check the camera and lighting, then continue."
 			default: return "Look at the camera and fill the circle. Your captured progress is kept."
 			}
 		}

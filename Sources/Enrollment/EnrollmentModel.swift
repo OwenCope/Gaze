@@ -188,7 +188,7 @@ final class EnrollmentModel {
 		} else {
 			phase = prints.count >= 8
 				? .complete
-				: .failed("Not enough of your face was captured. Go back and try again in brighter, even light.")
+				: .failed("Not enough of your face was captured. Choose Try Again and use brighter, even light.")
 		}
 	}
 

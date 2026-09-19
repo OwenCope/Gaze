@@ -161,7 +161,8 @@ struct RecognitionTestView: View {
 		return RecognitionTestReadout(status: statusText, matched: matched, score: score,
 			threshold: store.embedder.matchThreshold, instruction: instruction,
 			complete: canChallenge && challenge.isComplete, canChallenge: canChallenge, diagnosticRows: rows,
-			yaw: currentYaw, pitch: currentPitch)
+			yaw: currentYaw, pitch: currentPitch,
+			isCollectingBaseline: canChallenge && !challenge.isBaselineReady)
 	}
 
 	@ViewBuilder private var cameraPreview: some View {
@@ -249,6 +250,7 @@ struct RecognitionTestView: View {
 		// is not happening, and "No face" over a picture of your own face — which is what a
 		// second face in the background produced — is the least useful thing it could say.
 		if camera.faceMissing { return camera.absence?.summary ?? "No face" }
+		if canChallenge && !challenge.isBaselineReady { return "Scanning. Hold still." }
 		return matched ? "Recognised" : "Not recognised"
 	}
 
