@@ -317,7 +317,12 @@ struct SettingsView: View {
 					creditsSection.id("creditsSection").modifier(searchDestination("creditsSection"))
 				case .about:
 					aboutSection.id("aboutSection").modifier(searchDestination("aboutSection"))
-					DisclosureGroup("Credits & Acknowledgements") { creditsSection }
+					DisclosureGroup {
+						creditsSection
+					} label: {
+						Theme.disclosureLabel("Credits & Acknowledgements")
+					}
+					.settingsDisclosureRow()
 				}
 
 				Spacer(minLength: 0)
@@ -965,23 +970,13 @@ struct SettingsView: View {
 				detail: "One is quicker; two asks for another completed response",
 				symbol: "figure.walk.motion"
 			) {
-				Menu {
-					Picker("Movements to unlock this Mac", selection: $settings.unlockMovementCount) {
-						ForEach(Preferences.UnlockMovementCount.allCases, id: \.self) { count in
-							Text(count.title).tag(count)
-						}
+				SettingsChoiceMenu(title: "Movements to unlock this Mac",
+					valueLabel: settings.unlockMovementCount.title,
+					selection: $settings.unlockMovementCount) {
+					ForEach(Preferences.UnlockMovementCount.allCases, id: \.self) { count in
+						Text(count.title).tag(count)
 					}
-					.pickerStyle(.inline)
-				} label: {
-					Text(settings.unlockMovementCount.title).lineLimit(1)
 				}
-				.menuStyle(.button)
-				.buttonStyle(.glass)
-				.buttonBorderShape(.capsule)
-				.controlSize(.large)
-				.accessibilityLabel("Movements to unlock this Mac")
-				.accessibilityValue(settings.unlockMovementCount.title)
-				.fixedSize()
 			}
 
 			RowDivider()
@@ -1183,22 +1178,13 @@ struct SettingsView: View {
 					+ "camera surround. The notch has its own style in Notch settings."
 		) {
 			SettingRow(title: "Theme", symbol: "circle.lefthalf.filled") {
-				Menu {
-					Picker("Theme", selection: $settings.appTheme) {
-						ForEach(Preferences.AppTheme.allCases, id: \.self) { theme in
-							Text(theme.title).tag(theme)
-						}
+				SettingsChoiceMenu(title: "Theme",
+					valueLabel: settings.appTheme.title,
+					selection: $settings.appTheme) {
+					ForEach(Preferences.AppTheme.allCases, id: \.self) { theme in
+						Text(theme.title).tag(theme)
 					}
-					.pickerStyle(.inline)
-				} label: {
-					Text(settings.appTheme.title).lineLimit(1)
 				}
-				.buttonStyle(.glass)
-				.buttonBorderShape(.capsule)
-				.controlSize(.large)
-				.accessibilityLabel("Theme")
-				.accessibilityValue(settings.appTheme.title)
-				.fixedSize()
 			}
 		}
 	}
@@ -1236,7 +1222,7 @@ struct SettingsView: View {
 					!release.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 				{
 					RowDivider(inset: 0)
-					DisclosureGroup("Release Notes") {
+					DisclosureGroup {
 						Text(release.notes)
 							.font(Typography.detail)
 							.foregroundStyle(Theme.secondaryLabel)
@@ -1244,9 +1230,10 @@ struct SettingsView: View {
 							.frame(maxWidth: .infinity, alignment: .leading)
 							.fixedSize(horizontal: false, vertical: true)
 							.textSelection(.enabled)
+					} label: {
+						Theme.disclosureLabel("Release Notes")
 					}
-					.padding(.horizontal, Theme.rowInset)
-					.padding(.vertical, 11)
+					.settingsDisclosureRow()
 				}
 			}
 

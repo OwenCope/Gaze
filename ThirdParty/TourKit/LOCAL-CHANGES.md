@@ -57,3 +57,17 @@ exception to the styling preference above; the card itself stays opaque.
 Single-page setup results retain only the X so closing never retries capture or
 starts the optional recognition test. The final tour page keeps X beside the
 completion checkmark, making cancel and completion separate visible actions.
+
+## Correction: visible glass at rest
+
+The user reported the circular Back/X buttons looked flat until hovered and
+explicitly asked for visible Apple Liquid Glass at rest. The top controls now
+use an explicit, always-present native glass surface on each 40pt circular
+label instead of relying on the default `.glass`/`.glassProminent` button
+bezel: Back/Close use `.glassEffect(.regular.interactive(), in: .circle)` and
+completion uses the same real glass tinted system blue, with `.buttonStyle(.plain)`
+so no second bezel stacks over the glass. The effect is applied
+unconditionally, never keyed off hover. The controls sit in one
+`GlassEffectContainer(spacing: 8)` with the existing HStack 12pt spacing,
+insets, and invisible first-page Back slot preserved. Card, artwork,
+typography, page transitions, and all actions/labels/shortcuts are unchanged.
