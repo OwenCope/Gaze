@@ -63,7 +63,6 @@ struct SetupPermissionContent: View {
 	var onBack: (() -> Void)?
 	var onOpenSettings: () -> Void
 	var onRevealApp: () -> Void
-	@State private var showsInfo = false
 
 	var body: some View {
 		SetupScaffold(
@@ -88,15 +87,8 @@ struct SetupPermissionContent: View {
 							.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
 					}
 					Spacer()
-					Button { showsInfo.toggle() } label: {
-						Image(systemName: "info.circle").font(.system(size: 16))
-					}
-					.buttonStyle(.borderless)
-					.accessibilityLabel("About Accessibility access")
-					.help("Why Gaze needs this permission")
-					.popover(isPresented: $showsInfo) {
+					InfoButton(title: "About Accessibility access") {
 						Text("Gaze checks your face and movement before entering your saved login password. Accessibility enables keyboard events; it does not approve a face or replace macOS authentication. A Keychain password prompt is separate from this permission.")
-							.font(.system(size: 13)).frame(width: 280).padding(20)
 					}
 				}
 				.padding(14)

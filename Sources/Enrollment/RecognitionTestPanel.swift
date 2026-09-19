@@ -134,9 +134,9 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 							}
 						}.padding(.top, 10)
 					} label: {
-						Text("Recognition details").font(.callout).foregroundStyle(Theme.secondaryLabel)
+						Theme.disclosureLabel("Recognition details")
 					}
-					.tint(Theme.secondaryLabel)
+					.settingsDisclosureRow()
 					.animation(reducedMotion || previewReduceMotion ? nil : .easeOut(duration: 0.2), value: showsDetail)
 				}
 				.padding(.horizontal, 24).padding(.bottom, 18)
