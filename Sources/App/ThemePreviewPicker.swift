@@ -77,8 +77,8 @@ private struct ThemePreviewThumbnail: View {
 					ground: Color(white: 0.92), bar: .white,
 					row: .white, label: .black.opacity(0.65))
 				miniWindow(
-					ground: Color(white: 0.09), bar: .white.opacity(0.12),
-					row: .white.opacity(0.14), label: .white.opacity(0.75))
+					ground: Color(white: 0.07), bar: Color(white: 0.10),
+					row: Color(white: 0.14), label: .white.opacity(0.75))
 			}
 		case .light:
 			miniWindow(
@@ -86,17 +86,12 @@ private struct ThemePreviewThumbnail: View {
 				row: .white, label: .black.opacity(0.65))
 		case .dark:
 			miniWindow(
-				ground: Color(white: 0.09), bar: .white.opacity(0.12),
-				row: .white.opacity(0.14), label: .white.opacity(0.75))
+				ground: Color(white: 0.07), bar: Color(white: 0.10),
+				row: Color(white: 0.14), label: .white.opacity(0.75))
 		case .glass:
-			// Same dark ground as the notch panel, with a solid highlight band
-			// across the top instead of a gradient.
-			VStack(spacing: 0) {
-				Color.white.opacity(0.16).frame(height: 4)
-				miniWindow(
-					ground: .black, bar: .white.opacity(0.10),
-					row: .white.opacity(0.14), label: .white.opacity(0.8))
-			}
+			miniWindow(
+				ground: Color(white: 0.28), bar: .white.opacity(0.35),
+				row: Color(white: 0.22).opacity(0.82), label: .white.opacity(0.8))
 		}
 	}
 
