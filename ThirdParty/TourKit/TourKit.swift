@@ -241,9 +241,7 @@ public struct TourSlideshowView: View {
 
     private var topControls: some View {
         HStack {
-            iconButton(systemName: "chevron.left") {
-                goBack()
-            }
+            iconButton(systemName: "chevron.left", action: goBack)
             .opacity(currentIndex > 0 ? 1 : 0)
             .disabled(currentIndex == 0)
             .accessibilityHidden(currentIndex == 0)
@@ -251,20 +249,45 @@ public struct TourSlideshowView: View {
 
             Spacer()
 
-            iconButton(systemName: "xmark") {
-                if let onClose {
-                    onClose()
-                } else {
-                    dismiss()
-                }
+            iconButton(systemName: "xmark", action: performClose)
+                .accessibilityLabel("Close tour")
+                .accessibilityIdentifier("tour-close")
+                .help("Close tour")
+                .keyboardShortcut(.cancelAction)
+
+            if isLastPage && pages.count > 1 {
+                finishCircleButton
             }
-            .accessibilityLabel("Close tour")
-            .accessibilityIdentifier("tour-close")
-            .help("Close tour")
-            .keyboardShortcut(.cancelAction)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+    }
+
+    /// Circular blue completion control on the final page. Calls `advance()`,
+    /// so it runs exactly the same onFinish fallback chain as the bottom
+    /// final action. Escape remains assigned to the separate Close button.
+    private var finishCircleButton: some View {
+        Button(action: advance) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .tint(.blue)
+        .accessibilityLabel(Text(finishButtonTitle, tableName: buttonTableName, bundle: buttonBundle))
+        .accessibilityIdentifier("tour-finish")
+        .help(Text(finishButtonTitle, tableName: buttonTableName, bundle: buttonBundle))
+    }
+
+    private func performClose() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
     }
 
     // MARK: - Primary CTA
@@ -304,12 +327,12 @@ public struct TourSlideshowView: View {
     private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.72))
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 20, height: 20)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
     }
 
     var isLastPage: Bool {

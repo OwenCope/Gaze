@@ -36,3 +36,24 @@ now have clear 32-point hit areas, no circle/background/stroke, and a lighter
 onClose callback, and responds to Escape. The preset card, text, primary button,
 page layout and indicator remain. The movement content now autoplays without
 extra Play/Pause controls or the separate camera-off caption, as requested.
+
+## Latest explicit request: native Liquid Glass tour navigation
+
+The user asked for Apple-style circular Liquid Glass Back and Close controls
+(Clock-editor reference: neutral translucent X, accent-filled white checkmark),
+with Gaze's completion circle in blue rather than orange. `topControls` and
+`iconButton` now use genuine system `.glass` circular buttons
+(`.buttonBorderShape(.circle)`, `.controlSize(.large)`, ~36-40pt) instead of
+faked glass, gradients, outlines or blur layers. Every page keeps the
+neutral glass X (`tour-close`, Escape to close). The final page of a multi-page tour adds a
+circular blue `.glassProminent` checkmark (`tour-finish`) that calls
+`advance()`, running exactly the same onFinish fallback chain as the bottom
+final action; its accessible label follows the localized `finishButtonTitle`
+so 'Start setup'/'Done' stay truthful. Escape always closes via
+the Close button's onClose/dismiss action and never triggers the checkmark. Bottom CTA, card, image
+fade, typography, indicators and timing are unchanged. Controls-only
+exception to the styling preference above; the card itself stays opaque.
+
+Single-page setup results retain only the X so closing never retries capture or
+starts the optional recognition test. The final tour page keeps X beside the
+completion checkmark, making cancel and completion separate visible actions.
