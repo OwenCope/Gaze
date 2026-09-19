@@ -156,7 +156,7 @@ final class NotchCapsuleModel {
 	var glyphPlacement: Preferences.GlyphPlacement = .centred
 	var transparency: Double = 0.3
 	/// Mirrors `Preferences.showNotchCaptions`, captured when the panel is shown.
-	/// Display only: hides the caption words, never the mark or the panel geometry.
+	/// Display only: captions reserve space only when enabled.
 	var showsCaptions = true
 	/// Drives the grow-out and retract-back. False collapses the panel to the notch's own
 	/// height, where it is hidden behind the cutout.
@@ -515,7 +515,7 @@ struct NotchCapsule: View {
 	}
 
 	private var showsChallengeCaption: Bool {
-		model.phase.captionText != nil
+		model.showsCaptions && model.phase.captionText != nil
 	}
 
 	private var hidesReturnCaption: Bool {
