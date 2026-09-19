@@ -1,29 +1,5 @@
 import SwiftUI
 
-private struct NotchChoiceMenu<Selection: Hashable, Options: View>: View {
-	let title: String
-	let valueLabel: String
-	@Binding var selection: Selection
-	@ViewBuilder var options: () -> Options
-
-	var body: some View {
-		Menu {
-			Picker(title, selection: $selection) { options() }
-				.pickerStyle(.inline)
-		} label: {
-			Text(valueLabel)
-				.font(.system(size: 13))
-				.frame(width: 140, alignment: .leading)
-		}
-		.menuStyle(.button)
-		.buttonStyle(.glass)
-		.buttonBorderShape(.capsule)
-		.controlSize(.large)
-		.accessibilityLabel(title)
-		.accessibilityValue(valueLabel)
-	}
-}
-
 struct NotchSettingsSection: View {
 	@Bindable var settings: Preferences
 	@Environment(\.openWindow) private var openWindow
@@ -54,7 +30,7 @@ struct NotchSettingsSection: View {
 				if settings.panelShape == .attached {
 					RowDivider(inset: Theme.rowInset)
 					SettingRow(title: "Face position") {
-						NotchChoiceMenu(title: "Face position",
+						SettingsChoiceMenu(title: "Face position",
 							valueLabel: settings.glyphPlacement == .centred ? "In the panel" : "Beside the camera",
 							selection: $settings.glyphPlacement) {
 							ForEach(Preferences.GlyphPlacement.allCases, id: \.self) { placement in
@@ -138,13 +114,9 @@ struct NotchSettingsSection: View {
 					.padding(.bottom, 12)
 				}
 			} label: {
-				Text("Fine-tune size")
-					.font(Typography.row)
-					.foregroundStyle(Theme.label)
+				Theme.disclosureLabel("Fine-tune size")
 			}
-			.padding(.horizontal, Theme.rowInset)
-			.padding(.vertical, 14)
-			.tint(Theme.secondaryLabel)
+			.settingsDisclosureRow()
 		}
 	}
 

@@ -1057,6 +1057,68 @@ struct GazeButtonModifier: ViewModifier {
 	}
 }
 
+/// A choice shown as a native pop-up menu: a `Menu` holding an inline `Picker`.
+///
+/// One type for every "pick one of a few" row, so Face position, Movements and Theme share
+/// the same sizing, typography and button treatment. The displayed value is the row's own
+/// type scale with intrinsic sizing — no fixed width, so a longer value grows the capsule
+/// instead of clipping.
+struct SettingsChoiceMenu<Selection: Hashable, Options: View>: View {
+	let title: String
+	let valueLabel: String
+	@Binding var selection: Selection
+	@ViewBuilder var options: () -> Options
+
+	var body: some View {
+		Menu {
+			Picker(title, selection: $selection) { options() }
+				.pickerStyle(.inline)
+		} label: {
+			Text(valueLabel)
+				.font(Typography.control)
+				.lineLimit(1)
+		}
+		.menuStyle(.button)
+		.buttonStyle(.glass)
+		.buttonBorderShape(.capsule)
+		.controlSize(.large)
+		.accessibilityLabel(title)
+		.accessibilityValue(valueLabel)
+		.fixedSize()
+	}
+}
+
+/// The shared expandable-row treatment for the three native `DisclosureGroup`s.
+///
+/// Label styling lives in `Theme.disclosureLabel(_:)`; this modifier carries the native
+/// disclosure tint and the row padding. Inside a native `Form` it applies neither padding:
+/// the form owns row insets there, and adding its own would double them.
+struct SettingsDisclosureRowStyle: ViewModifier {
+	@Environment(\.nativeSettingsForm) private var nativeForm
+
+	func body(content: Content) -> some View {
+		content
+			.tint(Theme.secondaryLabel)
+			.padding(.horizontal, nativeForm ? 0 : Theme.rowInset)
+			.padding(.vertical, nativeForm ? 0 : 14)
+	}
+}
+
+extension Theme {
+	/// An expandable row's label: the row type scale in the primary label colour.
+	static func disclosureLabel(_ title: String) -> some View {
+		Text(title)
+			.font(Typography.row)
+			.foregroundStyle(Theme.label)
+	}
+}
+
+extension View {
+	func settingsDisclosureRow() -> some View {
+		modifier(SettingsDisclosureRowStyle())
+	}
+}
+
 /// A small ⓘ that opens a popover.
 ///
 /// For the explanation that is too long to sit in a row's subtitle but too important to leave
