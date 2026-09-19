@@ -56,6 +56,9 @@ enum Theme {
 	/// Settings groups only: a calmer, more solid neutral fill so rows stay readable over
 	/// wallpaper. White in light, neutral grey in dark, both at 0.86.
 	static let settingsGroupFill = dynamic(light: .white.opacity(0.86), dark: Color(white: 0.14).opacity(0.86))
+	/// Settings groups only in the Semi Liquid Glass theme: a lighter, slightly more
+	/// translucent neutral so rows stay readable over the dark material.
+	static let settingsGlassGroupFill = Color(white: 0.22).opacity(0.82)
 	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
 
 	static let setupGround = dynamic(light: Color(white: 0.96), dark: .black)
@@ -509,15 +512,24 @@ private struct NativeSettingsFormKey: EnvironmentKey {
 	static let defaultValue = false
 }
 
+private struct SettingsGroupFillKey: EnvironmentKey {
+	static let defaultValue = Theme.settingsGroupFill
+}
+
 extension EnvironmentValues {
 	var nativeSettingsForm: Bool {
 		get { self[NativeSettingsFormKey.self] }
 		set { self[NativeSettingsFormKey.self] = newValue }
 	}
+	var settingsGroupFill: Color {
+		get { self[SettingsGroupFillKey.self] }
+		set { self[SettingsGroupFillKey.self] = newValue }
+	}
 }
 
 struct SettingsSection<Content: View>: View {
 	@Environment(\.nativeSettingsForm) private var nativeForm
+	@Environment(\.settingsGroupFill) private var groupFill
 
 	let title: String?
 	var footer: String?
@@ -555,7 +567,7 @@ struct SettingsSection<Content: View>: View {
 			VStack(spacing: 0) {
 				content
 			}
-			.glassSurface(fill: Theme.settingsGroupFill)
+			.glassSurface(fill: groupFill)
 
 			if let footer, !footer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
 				Text(footer)

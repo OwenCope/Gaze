@@ -235,6 +235,7 @@ struct SettingsView: View {
 		// Nil for "follow system", which is what following the system means — forcing a
 		// scheme is the thing this setting exists to make optional.
 		.preferredColorScheme(settings.appTheme.colorScheme)
+		.environment(\.settingsGroupFill, settings.appTheme == .glass ? Theme.settingsGlassGroupFill : Theme.settingsGroupFill)
 		.onAppear {
 			AppActivation.bringToFront()
 			refreshExternalState()
