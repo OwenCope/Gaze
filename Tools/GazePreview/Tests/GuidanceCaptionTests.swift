@@ -68,19 +68,32 @@ enum GuidanceCaptionTests {
 		precondition(NotchCapsuleModel().showsCaptions, "Existing users retain captions by default")
 		let phases: [(String, NotchCapsuleModel.Phase, String)] = [
 			("movement", .challenge(prompt: "Turn slightly left", symbol: "arrowshape.left.fill", hintX: -1, hintY: 0, pulses: false), "Turn"),
+			("return", .challenge(prompt: "Return to your starting position", symbol: "viewfinder", hintX: 0, hintY: 0, pulses: false, isReturningToRest: true), "Return"),
 			("pending", .pending, "Waiting"),
 			("unrecognised", .notRecognised, "recognised"),
 			("spoof", .spoofRejected, "Photo")
 		]
 		for (shape, placement) in [(Preferences.PanelShape.attached, Preferences.GlyphPlacement.centred), (.attached, .ear), (.island, .centred)] {
 			for reduced in [false, true] {
+				let scanning = NotchCapsuleModel()
+				scanning.shape = shape
+				scanning.glyphPlacement = placement
+				scanning.isExpanded = true
+				scanning.showsCaptions = false
+				var scanningSize: CGSize?
+				try CompanionCapture.snapshot(NotchCapsule(model: scanning, width: 278,
+					height: shape == .island ? 244 : 128, notchInset: 32, cutoutWidth: 180)
+					.environment(\.notchReduceMotion, reduced),
+					to: directory.appendingPathComponent("caption-scanning-\(shape)-\(placement)-reduced-\(reduced).png")) { surfaces in
+					precondition(surfaces.count == 1)
+					scanningSize = surfaces[0].view.bounds.size
+				}
 				for (name, phase, marker) in phases {
 					let model = NotchCapsuleModel()
 					model.shape = shape
 					model.glyphPlacement = placement
 					model.isExpanded = true
 					model.phase = phase
-					var visibleSize: CGSize?
 					for enabled in [true, false] {
 						model.showsCaptions = enabled
 						let url = directory.appendingPathComponent("caption-\(name)-\(shape)-\(placement)-reduced-\(reduced)-visible-\(enabled).png")
@@ -89,17 +102,21 @@ enum GuidanceCaptionTests {
 							.environment(\.notchReduceMotion, reduced), to: url) { surfaces in
 							precondition(surfaces.count == 1, "The companion remains visible with captions off")
 							let size = surfaces[0].view.bounds.size
-							if enabled { visibleSize = size }
-							else { precondition(size == visibleSize, "Caption visibility must not resize the companion") }
+							if !enabled {
+								precondition(size == scanningSize, "Captions off must retain the normal scanning size during \(name)")
+							} else if shape == .attached && placement == .centred, let scanningSize {
+								precondition(size.width < scanningSize.width, "Only enabled captions reserve space in the attached panel")
+							}
 						}
 						let text = try recognizedText(at: url)
-						precondition(text.localizedCaseInsensitiveContains(marker) == enabled,
+						let expectsText = enabled && (!phase.isReturningToRest || reduced)
+						precondition(text.localizedCaseInsensitiveContains(marker) == expectsText,
 							"Caption visibility mismatch in \(url.lastPathComponent): \(text)")
 					}
 				}
 			}
 		}
-		print("PASS: captions toggle across attached, ear and island layouts, including Reduce Motion; companion geometry retained")
+		print("PASS: captions off retain normal scanning size through movement, return and result phases; enabled caption behavior preserved")
 	}
 
 	private static func recognizedText(at url: URL) throws -> String {
