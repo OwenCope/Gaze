@@ -209,6 +209,7 @@ final class ReleaseUpdateChecker {
 			guard let http = response as? HTTPURLResponse, let finalURL = http.url,
 				ReleaseURLPolicy.isTrusted(finalURL), (200..<300).contains(http.statusCode) else {
 				let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+				Self.logger.error("Release check failed: HTTP \(code, privacy: .public)")
 				state = .failed("The update server answered \(code).")
 				return
 			}

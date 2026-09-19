@@ -7,6 +7,10 @@ struct CompanionIntegrationTests {
 	@MainActor static func main() throws {
 		let directory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		if CommandLine.arguments.contains("--captions-only") {
+			try GuidanceCaptionTests.run(directory: directory)
+			return
+		}
 		try verifyRecognitionPanelSizing(directory: directory)
 		try GuidanceCaptionTests.run(directory: directory)
 		try MovementProgressTests.run(directory: directory)

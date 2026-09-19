@@ -55,6 +55,7 @@ final class NotchCapsuleController {
 		model.shape = Preferences.shared.panelShape
 		model.glyphPlacement = Preferences.shared.glyphPlacement
 		model.transparency = Preferences.shared.notchTransparency
+		model.showsCaptions = Preferences.shared.showNotchCaptions
 
 		let needsMount = window == nil
 		if needsMount {
@@ -96,6 +97,7 @@ final class NotchCapsuleController {
 	func update(phase: NotchCapsuleModel.Phase) {
 		guard window != nil else { return }
 		model.phase = phase
+		model.showsCaptions = Preferences.shared.showNotchCaptions
 	}
 
 	var canPresentGuidance: Bool {

@@ -81,6 +81,7 @@ struct NotchAnimationPreview: View {
 		.onChange(of: settings.notchStyle) { _, _ in syncAppearance() }
 		.onChange(of: settings.glyphPlacement) { _, _ in syncAppearance() }
 		.onChange(of: settings.notchTransparency) { _, _ in syncAppearance() }
+		.onChange(of: settings.showNotchCaptions) { _, _ in syncAppearance() }
 		.onChange(of: reduceTransparency) { _, _ in syncAppearance() }
 		.onChange(of: reduceMotion) { _, _ in stop() }
 		.onChange(of: scenePhase) { _, phase in
@@ -112,6 +113,7 @@ struct NotchAnimationPreview: View {
 		model.style = settings.notchStyle
 		model.glyphPlacement = settings.glyphPlacement
 		model.transparency = settings.notchTransparency
+		model.showsCaptions = settings.showNotchCaptions
 		model.prefersOpaque = reduceTransparency
 	}
 

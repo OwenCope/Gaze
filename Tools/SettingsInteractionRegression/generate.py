@@ -28,18 +28,27 @@ for name in state_names:
     state_lines.append(matches[0])
 
 assert "refreshLoginItemState()" in member("private func refreshExternalState(")
+about = member("private var aboutSection:")
+source_start = about.index("\t\t\tif updates.repositoryURL != nil {")
+source_end = about.index("\n\t\t\t}", source_start) + len("\n\t\t\t}")
+source_build = about[source_start:source_end]
+assert 'title: "Source build"' in source_build
 
 body = """import AppKit
 import SwiftUI
 
 struct SettingsFixture: View {
-    enum Section { case behaviour, updates }
+    enum Section { case behaviour, updates, sourceBuild }
     let section: Section
     let driver: FixtureDriver
 """ + "\n".join(state_lines) + """
     var body: some View {
         Form {
-            if section == .behaviour { behaviourSection } else { updatesSection }
+            switch section {
+            case .behaviour: behaviourSection
+            case .updates: updatesSection
+            case .sourceBuild: sourceBuildSection
+            }
         }
         .formStyle(.grouped)
         .environment(\\.nativeSettingsForm, true)
@@ -50,12 +59,13 @@ struct SettingsFixture: View {
         }
         .onDisappear { driver.changeLoginItem = nil; driver.refresh = nil }
     }
-""" + "\n\n".join(member(anchor) for anchor in members) + "\n}\n"
+""" + "\n\n".join(member(anchor) for anchor in members) + "\n    @ViewBuilder private var sourceBuildSection: some View {\n" + source_build + "\n    }\n}\n"
 destination.write_text(body)
 destination.with_suffix(".json").write_text(json.dumps({
     "source": "Sources/App/SettingsView.swift",
     "sha256": hashlib.sha256(source.encode()).hexdigest(),
     "members": {anchor: hashlib.sha256(member(anchor).encode()).hexdigest() for anchor in members},
+    "sourceBuildSectionHash": hashlib.sha256(source_build.encode()).hexdigest(),
     "limits": "Extracted native panels and handlers with fake services; not the full Settings lifecycle."
 }, indent=2) + "\n")
 

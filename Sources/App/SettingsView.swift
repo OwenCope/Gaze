@@ -1184,67 +1184,42 @@ struct SettingsView: View {
 	// MARK: - Updates
 
 	private var updatesSection: some View {
-		VStack(alignment: .leading, spacing: 7) {
-			SettingsSection(
-				title: "Updates",
-				footer: "Downloads open in your browser. Gaze does not install updates automatically."
+		SettingsSection(
+			title: "Updates",
+			footer: "Downloads open in your browser. Gaze does not install updates automatically."
+		) {
+			SettingRow(
+				title: releaseRowTitle,
+				detail: releaseRowDetail,
+				symbol: "arrow.trianglehead.2.clockwise"
 			) {
-				SettingRow(
-					title: "Version \(updates.currentVersion)",
-					symbol: "arrow.trianglehead.2.clockwise"
-				) {
-					if updates.repositoryURL != nil {
-						Button("Open Source Folder") { updates.revealRepository() }
-							.gazeButton()
-					}
-				}
-
-				RowDivider(inset: 0)
-				SettingRow(
-					title: releaseRowTitle,
-					detail: releaseRowDetail,
-					symbol: "sparkles"
-				) {
-					Button(releaseButtonTitle) { releaseAction() }
-						.gazeButton()
-						.disabled(releases.state == .checking)
-				}
-
-				if case .available(let release) = releases.state,
-					!release.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-				{
-					RowDivider(inset: 0)
-					DisclosureGroup {
-						Text(release.notes)
-							.font(Typography.detail)
-							.foregroundStyle(Theme.secondaryLabel)
-							.multilineTextAlignment(.leading)
-							.frame(maxWidth: .infinity, alignment: .leading)
-							.fixedSize(horizontal: false, vertical: true)
-							.textSelection(.enabled)
-					} label: {
-						Theme.disclosureLabel("Release Notes")
-					}
-					.settingsDisclosureRow()
-				}
+				Button(releaseButtonTitle) { releaseAction() }
+					.gazeButton()
+					.disabled(releases.state == .checking)
 			}
 
-			if updates.repositoryURL != nil {
-				Text("For source builds, review and rebuild in your trusted checkout.")
-					.font(Typography.detail)
-					.foregroundStyle(Theme.secondaryLabel)
-					.multilineTextAlignment(.leading)
-					.fixedSize(horizontal: false, vertical: true)
-					.padding(.horizontal, Theme.rowInset)
+			if case .available(let release) = releases.state,
+				!release.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+			{
+				RowDivider(inset: 0)
+				DisclosureGroup {
+					Text(release.notes)
+						.font(Typography.detail)
+						.foregroundStyle(Theme.secondaryLabel)
+						.multilineTextAlignment(.leading)
+						.frame(maxWidth: .infinity, alignment: .leading)
+						.fixedSize(horizontal: false, vertical: true)
+						.textSelection(.enabled)
+				} label: {
+					Theme.disclosureLabel("Release Notes")
+				}
+				.settingsDisclosureRow()
 			}
 		}
 	}
 
 	private var releaseRowTitle: String {
-		if case .available(let release) = releases.state {
-			return "Gaze \(release.tag) is available"
-		}
-		return "Released version on gazeunlock.com"
+		"Version \(updates.currentVersion)"
 	}
 
 	private var releaseRowDetail: String? {
@@ -1253,18 +1228,21 @@ struct SettingsView: View {
 		case .checking: return "Checking gazeunlock.com…"
 		case .upToDate: return "You're on the latest release."
 		case .available(let release):
-			// The release's own title, when it has one worth showing. A tag on its own says
-			// a number changed; the title says what changed.
-			return release.name.isEmpty ? "A newer build is published." : release.name
-		case .failed(let message): return message
+			// The tag names the build; the release's own title, when it has one
+			// worth showing, says what changed.
+			return release.name.isEmpty
+				? "Gaze \(release.tag) is available." : "Gaze \(release.tag) is available — \(release.name)"
+		// Concise on purpose: the raw HTTP status stays in the log, not on screen.
+		case .failed: return "Couldn’t check for updates. Try again."
 		}
 	}
 
 	private var releaseButtonTitle: String {
 		switch releases.state {
-		case .available: return "Download"
+		case .available(let release): return release.downloadURL != nil ? "Download" : "View Release"
 		case .checking: return "Checking…"
-		default: return "Check"
+		case .failed: return "Retry"
+		default: return "Check for Updates"
 		}
 	}
 
@@ -1425,6 +1403,21 @@ struct SettingsView: View {
 					Text(store.embedder.identifier)
 						.font(Typography.control)
 						.foregroundStyle(Theme.secondaryLabel)
+				}
+			}
+
+			if updates.repositoryURL != nil {
+				SettingsSection(
+					title: "Source build",
+					footer: "For source builds, review and rebuild in your trusted checkout."
+				) {
+					SettingRow(
+						title: "Source folder",
+						symbol: "folder"
+					) {
+						Button("Open Source Folder") { updates.revealRepository() }
+							.gazeButton()
+					}
 				}
 			}
 

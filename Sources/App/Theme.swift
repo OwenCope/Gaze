@@ -56,9 +56,8 @@ enum Theme {
 	/// Settings groups only: a calmer, more solid neutral fill so rows stay readable over
 	/// wallpaper. White in light, neutral grey in dark, both at 0.86.
 	static let settingsGroupFill = dynamic(light: .white.opacity(0.86), dark: Color(white: 0.14).opacity(0.86))
-	/// Settings groups only in the Semi Liquid Glass theme: a lighter, slightly more
-	/// translucent neutral so rows stay readable over the dark material.
-	static let settingsGlassGroupFill = Color(white: 0.22).opacity(0.56)
+	/// Keep the original group tint over the Semi Liquid Glass backdrop.
+	static let settingsGlassGroupFill = surface
 	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
 
 	static let setupGround = dynamic(light: Color(white: 0.96), dark: .black)
@@ -213,7 +212,6 @@ struct WindowGlass: View {
 	var keepsTitle = false
 	/// The Semi Liquid Glass theme: the notch panel's material, on a window.
 	var extraTranslucent = false
-	@Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
 	/// Black, always, when this is the glass theme.
 	///
@@ -250,8 +248,7 @@ struct WindowGlass: View {
 			VibrantBackground(
 				material: extraTranslucent ? .hudWindow : .underWindowBackground,
 				hidesTitle: !keepsTitle,
-				blending: .behindWindow,
-				effectOpacity: extraTranslucent && !reduceTransparency ? 0.80 : 1)
+				blending: .behindWindow)
 
 			if extraTranslucent {
 				// A fall from top to bottom, not a blackout.
@@ -267,9 +264,9 @@ struct WindowGlass: View {
 				// gradient, so it starts under half and reaches clear.
 				LinearGradient(
 					stops: [
-						.init(color: scrim(0.14), location: 0),
-						.init(color: scrim(0.09), location: 0.32),
-						.init(color: scrim(0.03), location: 0.68),
+						.init(color: scrim(0.22), location: 0),
+						.init(color: scrim(0.14), location: 0.32),
+						.init(color: scrim(0.05), location: 0.68),
 						.init(color: scrim(0), location: 1),
 					],
 					startPoint: .top,
@@ -460,9 +457,6 @@ struct VibrantBackground: NSViewRepresentable {
 	/// behind the window, and over a dark desktop that is a flat grey slab, which is
 	/// precisely the "painted rather than glazed" failure this type was written to avoid.
 	var blending: NSVisualEffectView.BlendingMode = .behindWindow
-	/// Opacity of the effect view itself, not the window or its content. Lowered only for
-	/// the Semi Liquid Glass theme so more of the desktop shows through the material.
-	var effectOpacity: CGFloat = 1
 
 	func makeNSView(context: Context) -> NSVisualEffectView {
 		let view = TransparentHostView()
@@ -470,14 +464,12 @@ struct VibrantBackground: NSViewRepresentable {
 		view.material = material
 		view.blendingMode = blending
 		view.state = .active
-		view.alphaValue = effectOpacity
 		return view
 	}
 
 	func updateNSView(_ view: NSVisualEffectView, context: Context) {
 		view.material = material
 		view.blendingMode = blending
-		view.alphaValue = effectOpacity
 	}
 
 	/// Clears the window behind itself, and takes the title bar out of the way.

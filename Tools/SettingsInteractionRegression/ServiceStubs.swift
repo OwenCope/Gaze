@@ -50,7 +50,12 @@ import AVFoundation
 
 @Observable @MainActor final class ReleaseUpdateChecker {
     static let shared = ReleaseUpdateChecker()
-    struct Release: Equatable { let tag: String; let name: String; let notes: String }
+    struct Release: Equatable {
+        let tag: String
+        let name: String
+        let notes: String
+        var downloadURL: URL? = URL(string: "https://gazeunlock.com/dl/Gaze.dmg")
+    }
     enum State: Equatable {
         case idle, checking, upToDate, available(Release), failed(String)
     }

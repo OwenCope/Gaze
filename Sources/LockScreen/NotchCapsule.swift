@@ -155,6 +155,9 @@ final class NotchCapsuleModel {
 	/// Mirrors `Preferences.glyphPlacement`.
 	var glyphPlacement: Preferences.GlyphPlacement = .centred
 	var transparency: Double = 0.3
+	/// Mirrors `Preferences.showNotchCaptions`, captured when the panel is shown.
+	/// Display only: hides the caption words, never the mark or the panel geometry.
+	var showsCaptions = true
 	/// Drives the grow-out and retract-back. False collapses the panel to the notch's own
 	/// height, where it is hidden behind the cutout.
 	var isExpanded = false
@@ -499,7 +502,7 @@ struct NotchCapsule: View {
 					.padding(.vertical, 8)
 					.background(.black, in: Capsule())
 					.padding(.top, restingBarHeight + 8)
-					.opacity(expanded && !hidesReturnCaption ? 1 : 0)
+					.opacity(expanded && !hidesReturnCaption && model.showsCaptions ? 1 : 0)
 					.transition(.opacity)
 			}
 		}
@@ -535,8 +538,8 @@ struct NotchCapsule: View {
 						.fixedSize(horizontal: false, vertical: true)
 				}
 				.foregroundStyle(.white)
-				.opacity(hidesReturnCaption ? 0 : 1)
-				.accessibilityHidden(hidesReturnCaption)
+				.opacity(hidesReturnCaption || !model.showsCaptions ? 0 : 1)
+				.accessibilityHidden(hidesReturnCaption || !model.showsCaptions)
 				.id(prompt)
 				.transition(.opacity)
 			}
