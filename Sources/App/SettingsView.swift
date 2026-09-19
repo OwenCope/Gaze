@@ -121,7 +121,7 @@ struct SettingsView: View {
 	/// on the detail scroll view scrolls to it after layout, then clears it.
 	/// Navigation only — it never reads the vault or flips a setting.
 	@State private var pendingSearchSection: SettingsSearchItem?
-	/// The section a search navigation just revealed, outlined briefly.
+	/// The section a search navigation just revealed, highlighted briefly.
 	///
 	/// Owned separately from `pendingSearchSection` so the scroll task clearing
 	/// on arrival never cuts the highlight short. Set together with the pane so
@@ -257,7 +257,7 @@ struct SettingsView: View {
 		}
 		.task(id: highlightToken) {
 			// The highlight's own lifetime: a newer selection replaces the token
-			// and cancels this, so only the latest destination stays outlined.
+			// and cancels this, so only the latest destination stays highlighted.
 			guard highlightToken != nil else { return }
 			try? await Task.sleep(for: .seconds(1.8))
 			guard !Task.isCancelled else { return }
@@ -419,10 +419,10 @@ struct SettingsView: View {
 		selectSearchResult(item)
 	}
 
-	/// The outline for one searchable section, active only while it is the
+	/// The highlight for one searchable section, active only while it is the
 	/// latest search destination.
-	private func searchDestination(_ section: String) -> SearchDestinationOutline {
-		SearchDestinationOutline(section: section, highlightedSection: highlightedSearchSection?.section)
+	private func searchDestination(_ section: String) -> SearchDestinationHighlight {
+		SearchDestinationHighlight(section: section, highlightedSection: highlightedSearchSection?.section)
 	}
 
 	// MARK: - Overview
@@ -1747,23 +1747,19 @@ struct SettingsView: View {
 	}
 }
 
-/// A brief neutral outline marking a search result's destination section.
-///
-/// An overlay in the section's own corner radius, so it follows the existing
-/// geometry without moving layout; neutral grey, never the recognition green.
-/// Shown and cleared without animation — no movement, no flashing.
-private struct SearchDestinationOutline: ViewModifier {
+private struct SearchDestinationHighlight: ViewModifier {
 	let section: String
 	let highlightedSection: String?
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	func body(content: Content) -> some View {
 		content.overlay {
-			if highlightedSection == section {
-				RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
-					.stroke(Theme.secondaryLabel, lineWidth: 1.5)
-					.allowsHitTesting(false)
-					.accessibilityHidden(true)
-			}
+			RoundedRectangle(cornerRadius: Theme.cornerRadius)
+				.fill(Theme.selection)
+				.opacity(highlightedSection == section ? 1 : 0)
+				.animation(reduceMotion ? nil : Theme.Motion.quick, value: highlightedSection == section)
+				.allowsHitTesting(false)
+				.accessibilityHidden(true)
 		}
 	}
 }
