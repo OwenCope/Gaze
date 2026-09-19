@@ -590,8 +590,45 @@ struct MenuBarContent: View {
 		}
 	}
 
+	/// Whether the status row opens Settings: the same conditions as
+	/// `menuStatus`, minus the informational states (ready, paused,
+	/// recognition-only, restricted execution modes). Matched on conditions,
+	/// never on the displayed strings.
+	private var menuStatusOpensSettings: Bool {
+		switch AppServices.executionPolicy {
+		case .uiReview, .scanOnly, .browserOnly: return false
+		case .normal: break
+		}
+		if lockout.isLockedOut { return true }
+		if !store.isEnrolled { return true }
+		if preferences.isPaused { return false }
+		if AVCaptureDevice.authorizationStatus(for: .video) != .authorized { return true }
+		if !PasswordReplaySafety.isEnabled { return true }
+		if preferences.unlockBackend == .none { return false }
+		let backend: UnlockBackend = switch preferences.unlockBackend {
+		case .none: NoUnlockBackend()
+		case .authPlugin: AuthPluginUnlockBackend()
+		case .keystroke: KeystrokeUnlockBackend()
+		}
+		switch backend.readiness() {
+		case .ready: return false
+		case .needsSetup, .unavailable: return true
+		}
+	}
+
 	var body: some View {
-		Text(menuStatus)
+		// Problem states open Settings; informational states stay text. The row
+		// never toggles, enrolls, or unlocks — it only presents Settings.
+		if menuStatusOpensSettings {
+			Button {
+				AppActivation.bringToFront(userInitiated: true)
+				openWindow(id: "settings")
+			} label: {
+				Text(menuStatus)
+			}
+		} else {
+			Text(menuStatus)
+		}
 
 		Divider()
 

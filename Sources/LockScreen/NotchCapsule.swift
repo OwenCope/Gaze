@@ -67,6 +67,14 @@ final class NotchCapsuleModel {
 		static let pendingCaption = "Waiting for macOS"
 		/// Neutral waiting symbol: an hourglass, never a tick or an opening padlock.
 		static let pendingSymbol = "hourglass"
+		/// The words shown when the face does not match, with a retry cue.
+		static let notRecognisedCaption = "Not recognised. Try again."
+		/// The mark's own symbol for a miss, matching the Settings face glyph.
+		static let notRecognisedSymbol = "faceid"
+		/// The words shown when the anti-spoof model rejects a photo or screen.
+		static let spoofRejectedCaption = "Photo rejected. Use your password."
+		/// Photo-specific symbol, as used for held-photo states elsewhere.
+		static let spoofRejectedSymbol = "photo.badge.exclamationmark"
 
 		/// The words the panel shows, where the phase carries its own.
 		var challengePrompt: String? {
@@ -74,11 +82,14 @@ final class NotchCapsuleModel {
 			return nil
 		}
 
-		/// Every caption the panel can show: challenge words, or the neutral pending
-		/// message. The padlock-closed states carry no other caption.
+		/// Every caption the panel can show: challenge words, the neutral pending
+		/// message, or the two rejection captions. Other padlock-closed states
+		/// carry no caption.
 		var captionText: String? {
 			if let prompt = challengePrompt { return prompt }
 			if case .pending = self { return Self.pendingCaption }
+			if case .notRecognised = self { return Self.notRecognisedCaption }
+			if case .spoofRejected = self { return Self.spoofRejectedCaption }
 			return nil
 		}
 
@@ -86,6 +97,8 @@ final class NotchCapsuleModel {
 		var captionSymbol: String? {
 			if case .challenge(_, let symbol, _, _, _, _) = self { return symbol }
 			if case .pending = self { return Self.pendingSymbol }
+			if case .notRecognised = self { return Self.notRecognisedSymbol }
+			if case .spoofRejected = self { return Self.spoofRejectedSymbol }
 			return nil
 		}
 

@@ -11,6 +11,9 @@ struct RecognitionTestReadout {
 	var diagnosticRows: [(String, String)]
 	var yaw: Double? = nil
 	var pitch: Double? = nil
+	/// Presentation-only: true while the practice view is establishing its baseline.
+	/// Keeps the status indicator neutral; raw matched/score stay untouched for diagnostics.
+	var isCollectingBaseline: Bool = false
 }
 
 struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
@@ -56,7 +59,7 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 			// or using a short window must not hide the score/pose being recorded.
 			VStack(spacing: 12) {
 				HStack(spacing: 10) {
-					Circle().fill(readout.matched ? Theme.faceID : Theme.tertiaryLabel).frame(width: 6, height: 6)
+					Circle().fill(!readout.isCollectingBaseline && readout.matched ? Theme.faceID : Theme.tertiaryLabel).frame(width: 6, height: 6)
 					Text(readout.status).font(.callout.weight(.medium))
 					Spacer(minLength: 8)
 					Text("Face match").font(.caption).foregroundStyle(Theme.secondaryLabel)

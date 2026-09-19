@@ -23,8 +23,9 @@ struct NotchAnimationPreview: View {
 		case locked = "Locked"
 		case scanning = "Scanning"
 		case challenge = "Turn head"
-		case rejected = "Rejected"
-		case success = "Verified"
+		case notRecognised = "Not recognised"
+		case spoofRejected = "Photo rejected"
+		case success = "Autofill verified"
 		case pending = "Waiting for macOS"
 		case unlocked = "Unlocked"
 		var id: String { rawValue }
@@ -34,7 +35,8 @@ struct NotchAnimationPreview: View {
 			case .scanning: return .scanning
 			case .challenge:
 				return .challenge(prompt: "Turn your head left", symbol: "arrowshape.left.fill", hintX: -1, hintY: 0, pulses: false)
-			case .rejected: return .spoofRejected
+			case .notRecognised: return .notRecognised
+			case .spoofRejected: return .spoofRejected
 			case .success: return .success
 			case .pending: return .pending
 			case .unlocked: return .unlocked
@@ -132,7 +134,7 @@ struct NotchAnimationPreview: View {
 					try await Task.sleep(for: .milliseconds(260))
 				}
 				model.isExpanded = true
-				let sequence: [PreviewPhase] = [.locked, .scanning, .challenge, .success, .pending, .unlocked]
+				let sequence: [PreviewPhase] = [.locked, .scanning, .challenge, .pending, .unlocked]
 				for phase in sequence {
 					selectedPhase = phase
 					model.phase = phase.phase
