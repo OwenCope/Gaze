@@ -240,29 +240,27 @@ public struct TourSlideshowView: View {
     // MARK: - Top controls (back / close overlaying the image)
 
     private var topControls: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 12) {
-                iconButton(systemName: "chevron.left", action: goBack)
+        HStack(spacing: 12) {
+            iconButton(systemName: "chevron.left", action: goBack)
                 .opacity(currentIndex > 0 ? 1 : 0)
                 .disabled(currentIndex == 0)
                 .accessibilityHidden(currentIndex == 0)
                 .accessibilityLabel("Back")
 
-                Spacer()
+            Spacer()
 
-                iconButton(systemName: "xmark", action: performClose)
-                    .accessibilityLabel("Close tour")
-                    .accessibilityIdentifier("tour-close")
-                    .help("Close tour")
-                    .keyboardShortcut(.cancelAction)
+            iconButton(systemName: "xmark", action: performClose)
+                .accessibilityLabel("Close tour")
+                .accessibilityIdentifier("tour-close")
+                .help("Close tour")
+                .keyboardShortcut(.cancelAction)
 
-                if isLastPage && pages.count > 1 {
-                    finishCircleButton
-                }
+            if isLastPage && pages.count > 1 {
+                finishCircleButton
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
     }
 
     /// Circular blue completion control on the final page. Calls `advance()`,
@@ -271,12 +269,14 @@ public struct TourSlideshowView: View {
     private var finishCircleButton: some View {
         Button(action: advance) {
             Image(systemName: "checkmark")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .glassEffect(.regular.tint(.blue).interactive(), in: .circle)
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .controlSize(.regular)
+        .tint(.blue)
         .accessibilityLabel(Text(finishButtonTitle, tableName: buttonTableName, bundle: buttonBundle))
         .accessibilityIdentifier("tour-finish")
         .help(Text(finishButtonTitle, tableName: buttonTableName, bundle: buttonBundle))
@@ -327,12 +327,13 @@ public struct TourSlideshowView: View {
     private func iconButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass(.clear))
+        .buttonBorderShape(.circle)
+        .controlSize(.regular)
     }
 
     var isLastPage: Bool {
