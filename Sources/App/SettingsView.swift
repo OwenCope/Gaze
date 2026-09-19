@@ -1840,12 +1840,6 @@ private struct FaceTile: View {
 						}
 					}
 					.overlay { Circle().strokeBorder(Theme.separator, lineWidth: 1) }
-					.contextMenu {
-						Button("Choose Photo…") { choosePortrait() }
-						if portrait != nil {
-							Button("Remove Photo", role: .destructive) { setPortrait(nil) }
-						}
-					}
 
 			// A camera badge on hover or keyboard focus, because a context menu nobody
 			// right-clicks is a feature nobody finds. Bottom-leading so it cannot
@@ -1915,6 +1909,13 @@ private struct FaceTile: View {
 				// reloading — should show here rather than being overwritten by a
 				// draft the user never touched.
 				.onChange(of: face.name) { _, name in if !isEditing { draft = name } }
+		}
+		.contentShape(Rectangle())
+		.contextMenu {
+			Button("Choose Photo…") { choosePortrait() }
+			if portrait != nil {
+				Button("Remove Photo", role: .destructive) { setPortrait(nil) }
+			}
 		}
 		.onHover { hovering = $0 }
 		.accessibilityElement(children: .contain)
