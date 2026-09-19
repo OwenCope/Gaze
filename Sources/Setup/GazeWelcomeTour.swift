@@ -35,7 +35,7 @@ struct GazeWelcomeTour: View {
 			description: "Face templates stay encrypted on this Mac. It uses a regular camera, not depth sensing."
 		),
 		TourPage(
-			imageName: "Art/tour-notch.png",
+			imageName: "Art/tour-how-unlock.png",
 			imageBundle: .main,
 			title: "How unlock works",
 			description: "Look at the camera and follow the movements. Gaze enters your saved login password after checking."

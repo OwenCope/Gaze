@@ -16,7 +16,7 @@ resources = APP / "Contents/Resources/Art"
 resources.mkdir(parents=True, exist_ok=True)
 for name in ("onboarding-recognition.png", "onboarding-local.png", "onboarding-unlock.png", "onboarding-choice.png", "onboarding-success.png", "onboarding-failure.png", "movement-left.png", "movement-right.png", "movement-nod.png", "movement-blink.png", "movement-mouth.png"):
     shutil.copyfile(ROOT / "Resources/Art" / name, resources / name)
-for name in ("general", "notch", "unlock", "security"):
+for name in ("general", "notch", "unlock", "security", "how-unlock"):
     shutil.copyfile(ROOT / f"Resources/Art/tour-{name}.png", resources / f"tour-{name}.png")
 with (APP / "Contents/Info.plist").open("wb") as stream:
     plistlib.dump({"CFBundleIdentifier": "local.gaze.tour-validation", "CFBundleExecutable": "TourFixture",
@@ -24,6 +24,7 @@ with (APP / "Contents/Info.plist").open("wb") as stream:
 swift = OUT / "TourFixture.swift"
 swift.write_text(r'''
 import AppKit
+import ScreenCaptureKit
 import SwiftUI
 
 final class FixtureWindow: NSWindow {
@@ -101,7 +102,9 @@ struct CompletionScenario {
         }
     }
     static func axButton(_ label: String, host: AXUIElement) -> AXUIElement? {
-        axNodes(host).first { axRole($0) == (kAXButtonRole as String) && axLabel($0) == label }
+        axNodes(host).first {
+            axRole($0) == (kAXButtonRole as String) && axLabel($0) == label && axIdent($0) != "tour-finish"
+        }
     }
     static func press(_ label: String, host: AXUIElement) {
         guard let element = axButton(label, host: host) else {
@@ -132,6 +135,37 @@ struct CompletionScenario {
         let bitmap = container.bitmapImageRepForCachingDisplay(in: container.bounds)!
         container.cacheDisplay(in: container.bounds, to: bitmap)
         try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+        if path.hasSuffix("/intro-3.png") || path.hasSuffix("/intro-4.png"), let window = container.window {
+            var result: Result<CGImage, Error>?
+            Task { @MainActor in
+                do {
+                    let shareable = try await SCShareableContent.currentProcess
+                    guard let ownWindow = shareable.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }) else {
+                        throw NSError(domain: "TourCapture", code: 1)
+                    }
+                    let configuration = SCStreamConfiguration()
+                    configuration.width = Int(window.frame.width * 2)
+                    configuration.height = Int(window.frame.height * 2)
+                    configuration.showsCursor = false
+                    let image = try await SCScreenshotManager.captureImage(
+                        contentFilter: SCContentFilter(desktopIndependentWindow: ownWindow), configuration: configuration)
+                    result = .success(image)
+                } catch { result = .failure(error) }
+            }
+            let deadline = Date(timeIntervalSinceNow: 5)
+            while result == nil && Date() < deadline {
+                RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+            }
+            if case .success(let image) = result {
+                let native = NSBitmapImageRep(cgImage: image)
+                let url = URL(fileURLWithPath: path).deletingPathExtension().appendingPathExtension("native.png")
+                try native.representation(using: .png, properties: [:])!.write(to: url)
+            } else if case .failure(let error) = result {
+                print("Native glass capture unavailable: \(error)")
+            } else {
+                print("Native glass capture timed out; offscreen layout capture remains available")
+            }
+        }
     }
     static var pageBounds: [[String: Any]] = []
     static func checkPage(_ index: Int, host: AXUIElement, pageHeadings: [String]? = nil, finishTitle: String = "Start setup") {
@@ -141,8 +175,14 @@ struct CompletionScenario {
         precondition(labels.filter { $0 == "Page \(index + 1) of \(titles.count)" }.count == 1, "Exactly one page indicator")
         precondition(labels.contains(titles[index]), "Heading on page \(index): \(titles[index])")
         let primary = index == titles.count - 1 ? finishTitle : "Next"
-        let primaryButtons = nodes.filter { axRole($0) == (kAXButtonRole as String) && axLabel($0) == primary }
+        let primaryButtons = nodes.filter {
+            axRole($0) == (kAXButtonRole as String) && axLabel($0) == primary && axIdent($0) != "tour-finish"
+        }
         precondition(primaryButtons.count == 1, "Exactly one primary button \(primary) on page \(index)")
+        let finish = nodes.first { axIdent($0) == "tour-finish" }
+        let expectsFinish = titles.count > 1 && index == titles.count - 1
+        precondition((finish != nil) == expectsFinish, "Completion circle appears only at the end of a multi-page tour")
+        if let finish { precondition(axLabel(finish) == primary, "Completion circle names its actual action") }
         let other = index == titles.count - 1 ? "Next" : finishTitle
         precondition(axButton(other, host: host) == nil, "No \(other) on page \(index)")
         for absent in ["Skip", "Continue", "Previous page", "Close introduction", "Step 1 of 1"] {
@@ -167,7 +207,7 @@ struct CompletionScenario {
     static func main() throws {
         let app = NSApplication.shared
         app.appearance = NSAppearance(named: .darkAqua)
-        app.setActivationPolicy(.accessory)
+        app.setActivationPolicy(.regular)
         app.finishLaunching()
         NSApp.activate(ignoringOtherApps: true)
         var completed = 0
@@ -195,6 +235,7 @@ struct CompletionScenario {
         precondition(!window.styleMask.contains(.titled) && window.standardWindowButton(.closeButton) == nil)
         window.contentView = container
         window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         defer { window.orderOut(nil); window.contentView = nil }
         host.layoutSubtreeIfNeeded()
         settle()
@@ -252,6 +293,33 @@ struct CompletionScenario {
         precondition(AXUIElementPerformAction(close, kAXPressAction as CFString) == .success, "Upstream close press")
         settle()
         precondition(closedFresh == 1 && completedFresh == 0, "Close fires onClose only")
+
+        for useEscape in [true, false] {
+            var finished = 0
+            var cancelled = 0
+            let finalHost = mount(GazeWelcomeTour(onContinue: { finished += 1 },
+                onClose: { cancelled += 1 }, initialPageIndex: 3), in: container)
+            ax = axWindow(titled: window.title)
+            checkPage(3, host: ax)
+            if useEscape {
+                window.makeKeyAndOrderFront(nil)
+                window.makeFirstResponder(finalHost)
+                let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                    isARepeat: false, keyCode: 53)!
+                NSApp.sendEvent(escape)
+                settle()
+                precondition(window.isKeyWindow, "Escape test requires an active fixture window")
+                precondition(cancelled == 1 && finished == 0, "Escape closes the final page without starting setup")
+            } else {
+                let finish = axNodes(ax).first { axIdent($0) == "tour-finish" }!
+                precondition(AXUIElementPerformAction(finish, kAXPressAction as CFString) == .success)
+                settle()
+                precondition(finished == 1 && cancelled == 0, "Completion circle starts setup exactly once")
+            }
+        }
+        print("PASS: final-page Escape cancels, blue completion invokes finish, single-page outcomes retain Close")
 
         let movementHeadings = ["Practice the movements", "Turn left", "Turn right", "Nod", "Blink", "Open mouth"]
         var movementClosed = 0
@@ -341,7 +409,7 @@ struct CompletionScenario {
         window.close()
         settle()
         precondition(!window.isVisible, "The borderless host must close")
-        print("PASS: four-page introduction, separate six-page movement guide, eight truthful completion/action states, optional test/close, borderless 760x680 host, no clipping, one navigation system, Back/Next/finish/close and inert callbacks; not covered: dragging, live camera, Escape, state restoration or real security operations")
+        print("PASS: four-page introduction, separate six-page movement guide, eight truthful completion/action states, optional test/close, borderless 760x680 host, no clipping, Back/Next/finish/close, final-page Escape and inert callbacks; not covered: dragging, live camera, state restoration or real security operations")
     }
 }
 ''')
@@ -356,4 +424,17 @@ for relative, wildcard in re.findall(r'"\$ROOT/([^"]+)"(\*\.swift)?',
     elif relative.endswith(".swift") and not relative.endswith("OnboardingTests.swift"):
         sources.append(str(ROOT / relative))
 subprocess.run(["xcrun", "swiftc", "-parse-as-library", *sources, str(swift), "-o", str(BIN)], env=env, check=True)
-subprocess.run([str(BIN), str(OUT)], env=env, check=True)
+subprocess.run(["codesign", "--force", "--sign", "-", str(APP)], check=True)
+layout = OUT / "tour-layout.json"
+layout.unlink(missing_ok=True)
+stdout = OUT / "fixture.stdout.log"
+stderr = OUT / "fixture.stderr.log"
+stdout.unlink(missing_ok=True)
+stderr.unlink(missing_ok=True)
+subprocess.run(["open", "-n", "-W", str(APP), "--stdout", str(stdout), "--stderr", str(stderr),
+                "--args", str(OUT)], env=env, check=True)
+for log in (stdout, stderr):
+    if log.exists():
+        print(log.read_text())
+if not layout.exists():
+    raise SystemExit("Tour fixture did not complete; see fixture logs above.")
