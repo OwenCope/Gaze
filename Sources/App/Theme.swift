@@ -779,126 +779,6 @@ struct SettingToggle: View {
 	}
 }
 
-/// A labelled slider with its value in a pill and a tick scale under the track.
-///
-/// The pill matters: a bare slider tells you there is a value but not what it is, so any
-/// adjustment becomes trial and error.
-struct SliderRow: View {
-	@Environment(\.nativeSettingsForm) private var nativeForm
-
-	let title: String
-	var symbol: String?
-	var symbolTint: Color?
-	@Binding var value: Double
-	let range: ClosedRange<Double>
-	var format: (Double) -> String
-
-	/// Half the small slider's knob. The track is inset by this at both ends, so ticks laid
-	/// out across the full width drift away from the values they claim to mark.
-	private let knobRadius: CGFloat = 7
-
-	var body: some View {
-		if nativeForm {
-			Slider(value: $value, in: range) {
-				Text("\(title): \(format(value))").monospacedDigit()
-			}
-			.accessibilityLabel(title)
-			.accessibilityValue(format(value))
-		} else {
-			legacyBody
-		}
-	}
-
-	private var legacyBody: some View {
-		VStack(spacing: 8) {
-			HStack(spacing: 12) {
-				if let symbol {
-					IconTile(symbol: symbol, tint: symbolTint)
-				}
-				Text(title)
-					.font(Typography.row)
-					.foregroundStyle(Theme.label)
-				Spacer()
-				Text(format(value))
-					.font(Typography.pill)
-					.foregroundStyle(Theme.secondaryLabel)
-					.monospacedDigit()
-					.padding(.horizontal, 9)
-					.padding(.vertical, 3)
-					.background(Capsule().fill(Theme.surfaceRaised))
-					.contentTransition(.numericText())
-			}
-
-			VStack(spacing: 3) {
-				Slider(value: $value, in: range)
-					.accessibilityLabel(title)
-					.accessibilityValue(format(value))
-					.controlSize(.small)
-					.tint(Theme.label.opacity(0.85))
-				ticks.accessibilityHidden(true)
-			}
-			.padding(.leading, symbol == nil ? 0 : 38)
-		}
-		.padding(.horizontal, Theme.rowInset)
-		.padding(.vertical, 11)
-	}
-
-	/// The scale under the track.
-	///
-	/// These used to be nine evenly spaced dots drawn regardless of the range — the same
-	/// marks under `0…1`, `-20…20` and `-40…40`. They looked like a scale and measured
-	/// nothing, which is worse than having no marks at all: a decoration that reads as
-	/// information tells the user something false. Now each tick sits at a round value in
-	/// the row's own range, and the ends and zero are drawn taller so the span is readable
-	/// without a legend.
-	private var ticks: some View {
-		GeometryReader { geometry in
-			let track = geometry.size.width - knobRadius * 2
-			ZStack(alignment: .topLeading) {
-				ForEach(tickValues, id: \.self) { tick in
-					Capsule()
-						.fill(Theme.tertiaryLabel.opacity(isMajor(tick) ? 0.55 : 0.3))
-						.frame(width: 1, height: isMajor(tick) ? 5 : 3)
-						.offset(x: knobRadius + track * fraction(of: tick) - 0.5)
-				}
-			}
-		}
-		.frame(height: 5)
-	}
-
-	private func fraction(of tick: Double) -> CGFloat {
-		CGFloat((tick - range.lowerBound) / (range.upperBound - range.lowerBound))
-	}
-
-	/// Ends and zero.
-	private func isMajor(_ tick: Double) -> Bool {
-		let epsilon = (range.upperBound - range.lowerBound) / 1000
-		return abs(tick - range.lowerBound) < epsilon
-			|| abs(tick - range.upperBound) < epsilon
-			|| (range.contains(0) && abs(tick) < epsilon)
-	}
-
-	/// Round values across the range, aiming for eight or so intervals: 5px steps on
-	/// `-20…20`, 10px on `-40…40`, 0.1 on `0…1`.
-	private var tickValues: [Double] {
-		let span = range.upperBound - range.lowerBound
-		guard span > 0 else { return [] }
-
-		let rough = span / 8
-		let magnitude = pow(10, (log10(rough)).rounded(.down))
-		let normalised = rough / magnitude
-		let step = (normalised < 1.5 ? 1 : normalised < 3 ? 2 : normalised < 7 ? 5 : 10) * magnitude
-
-		var values: [Double] = []
-		var tick = (range.lowerBound / step).rounded(.up) * step
-		while tick <= range.upperBound + step / 1000 {
-			values.append(tick)
-			tick += step
-		}
-		return values
-	}
-}
-
 /// A short status line — readiness, lockout, warnings.
 ///
 /// Plain text with a small coloured symbol, not a tinted banner. Full-width colour bars
@@ -1102,7 +982,7 @@ struct SettingsChoiceMenu<Selection: Hashable, Options: View>: View {
 	}
 }
 
-/// The shared expandable-row treatment for the three native `DisclosureGroup`s.
+/// The shared expandable-row treatment for the native `DisclosureGroup`s.
 ///
 /// Label styling lives in `Theme.disclosureLabel(_:)`; this modifier carries the native
 /// disclosure tint and the row padding. Inside a native `Form` it applies neither padding:

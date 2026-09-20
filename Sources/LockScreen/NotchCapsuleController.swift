@@ -28,6 +28,7 @@ final class NotchCapsuleController {
 	private var expansionTask: Task<Void, Never>?
 	private var dismissalTask: Task<Void, Never>?
 	private var contentSize: CGSize = .zero
+	private var builtChallengeRoom: CGFloat = 0
 	/// Height of the region hidden behind the physical cutout, so the glyph can be
 	/// centred in the visible part rather than in the whole window.
 	private var notchInset: CGFloat = 0
@@ -64,6 +65,16 @@ final class NotchCapsuleController {
 		}
 
 		guard let window else { return }
+		if !needsMount, let screen = NSScreen.main {
+			let next = geometry(on: screen)
+			if next.challengeRoom != builtChallengeRoom {
+				window.setFrame(next.windowFrame, display: true)
+				host?.frame = NSRect(origin: .zero, size: next.windowFrame.size)
+				contentSize = next.contentSize
+				notchInset = next.notchInset
+				builtChallengeRoom = next.challengeRoom
+			}
+		}
 		window.alphaValue = 1
 		window.orderFrontRegardless()
 		Self.logger.notice(
@@ -133,9 +144,9 @@ final class NotchCapsuleController {
 
 	// MARK: - Construction
 
-	private func build() {
-		guard let screen = NSScreen.main else { return }
-
+	private func geometry(on screen: NSScreen) -> (
+		windowFrame: NSRect, contentSize: CGSize, notchInset: CGFloat, challengeRoom: CGFloat
+	) {
 		// Match the cutout exactly and hang directly off its bottom edge, so the panel
 		// reads as the notch extending rather than a pill floating beneath it.
 		// Falls back to a sensible pill on a screen with no notch.
@@ -171,9 +182,8 @@ final class NotchCapsuleController {
 		// island taller.
 		let isIsland = Preferences.shared.panelShape == .island
 		let cutout = NotchMetrics.width(on: screen) ?? 180
-		// Every lock-screen scan requires movement guidance. Reserve its caption space
-		// when the window is created so prompts and retries cannot clip later.
-		let challengeRoom: CGFloat = isIsland ? 0 : 30
+		// Reserve caption space only when captions are shown so prompts cannot clip.
+		let challengeRoom: CGFloat = isIsland ? 0 : (Preferences.shared.showNotchCaptions ? 30 : 0)
 		let dropHeight =
 			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout) : 66)
 			+ challengeRoom
@@ -184,9 +194,20 @@ final class NotchCapsuleController {
 			scale: screen.backingScaleFactor)
 		let size = panelFrame.size
 		let frame = panelFrame.insetBy(dx: -Self.horizontalInset, dy: 0)
+		return (frame, size, notchHeight, challengeRoom)
+	}
+
+	private func build() {
+		guard let screen = NSScreen.main else { return }
+
+		let next = geometry(on: screen)
+		let notchHeight = next.notchInset
+		let size = next.contentSize
+		let frame = next.windowFrame
 		let windowSize = frame.size
 		self.contentSize = size
 		self.notchInset = notchHeight
+		self.builtChallengeRoom = next.challengeRoom
 
 		let window = UnfocusableWindow(
 			contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)

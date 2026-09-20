@@ -139,7 +139,7 @@ struct SettingsView: View {
 		let _ = pauseExpiryRevision
 		Group {
 			// A search replaces the panes while it is nonempty, rather than filtering
-			// rows in savedApp: the panes are per-subject groups, and a filtered
+			// rows in the panes: the panes are per-subject groups, and a filtered
 			// subset of rows would orphan controls from the footers that explain them.
 			if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
 				detail

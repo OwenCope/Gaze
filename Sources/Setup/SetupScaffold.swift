@@ -79,7 +79,7 @@ struct SetupScaffold<Figure: View, Detail: View, Actions: View>: View {
 					.font(.system(size: 12, weight: .semibold))
 					.frame(width: 32, height: 32)
 			}
-			.buttonStyle(.glass)
+			.buttonStyle(.glass(.clear))
 			.buttonBorderShape(.circle)
 			.accessibilityLabel(label)
 			.help(label)

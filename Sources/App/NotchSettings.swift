@@ -22,7 +22,7 @@ struct NotchSettingsSection: View {
 				}
 				.pickerStyle(.segmented)
 				.labelsHidden()
-				.controlSize(.regular)
+				.controlSize(.large)
 				.frame(width: 330)
 				.accessibilityLabel("Panel")
 			}
@@ -50,7 +50,7 @@ struct NotchSettingsSection: View {
 					}
 					.pickerStyle(.segmented)
 					.labelsHidden()
-					.controlSize(.regular)
+					.controlSize(.large)
 					.frame(width: 330)
 					.accessibilityLabel("Material")
 				}
@@ -106,9 +106,7 @@ struct NotchSettingsSection: View {
 							if !isOnEar { settings.notchHeightAdjust = 0 }
 							settings.notchWidthAdjust = 0
 						}
-						.buttonStyle(.glass)
-						.buttonBorderShape(.capsule)
-						.controlSize(.large)
+						.gazeButton(.standard, size: .large)
 						.disabled(settings.notchWidthAdjust == 0 && (isOnEar || settings.notchHeightAdjust == 0))
 					}
 					.padding(.horizontal, Theme.rowInset)
@@ -181,7 +179,7 @@ private struct NotchAppearancePreview: View {
 				.accessibilityValue(previewDescription)
 			HStack {
 				Text("Appearance preview")
-					.font(Typography.groupTitle)
+					.font(Typography.detail)
 				Spacer()
 				Label("Camera off", systemImage: "video.slash")
 					.font(Typography.detail)

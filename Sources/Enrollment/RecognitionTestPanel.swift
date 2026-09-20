@@ -26,7 +26,6 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 	@ViewBuilder var companion: () -> CompanionContent
 	@Environment(\.accessibilityReduceMotion) private var reducedMotion
 	@Environment(\.notchReduceMotion) private var previewReduceMotion
-	@State private var showsInformation = false
 
 	var body: some View {
 		VStack(spacing: 0) {
@@ -37,20 +36,9 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 						.font(.callout).foregroundStyle(Theme.secondaryLabel)
 				}
 				Spacer()
-				Button { showsInformation.toggle() } label: {
-					Image(systemName: "info.circle").font(.system(size: 16))
-						.frame(width: 22, height: 22)
-				}
-				.gazeButton(.standard, size: .small)
-				.accessibilityLabel("About this recognition test")
-				.popover(isPresented: $showsInformation) {
-					VStack(alignment: .leading, spacing: 10) {
-						Text("Just a recognition test").font(.headline)
-						Text("This window checks your face and a movement. It never enters a password or unlocks your Mac. Movement complete is not an authentication result.")
-							.font(.callout)
-						Text("The camera stops when you close this window, lock your Mac, sleep, or switch users. Reopen this test after unlocking to start again.")
-							.font(.callout).foregroundStyle(.secondary)
-					}.padding(18).frame(width: 300)
+				InfoButton(title: "Just a recognition test") {
+					Text("This window checks your face and a movement. It never enters a password or unlocks your Mac. Movement complete is not an authentication result.")
+					Text("The camera stops when you close this window, lock your Mac, sleep, or switch users. Reopen this test after unlocking to start again.")
 				}
 			}
 			.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 16)

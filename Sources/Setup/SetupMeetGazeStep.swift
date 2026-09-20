@@ -59,7 +59,6 @@ struct GazeExpressionGuide: View {
 	var movementCount: Int
 	@State private var lesson = GazeExpressionLesson.waiting
 	@State private var paused = false
-	@State private var showsInfo = false
 	@Environment(\.colorScheme) private var colorScheme
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 	@Environment(\.notchReduceMotion) private var previewReduceMotion
@@ -126,21 +125,9 @@ struct GazeExpressionGuide: View {
 			HStack(spacing: 6) {
 				Text(reduceMotion || previewReduceMotion ? "Reduce Motion is on · Camera off" : "Just a demonstration · Camera off")
 					.font(.caption).foregroundStyle(.secondary)
-				Button { showsInfo.toggle() } label: {
-					Image(systemName: "info.circle").font(.system(size: 13))
-						.frame(width: 28, height: 28)
-				}
-				.buttonStyle(.plain)
-				.foregroundStyle(.secondary)
-				.accessibilityLabel("About these animations")
-				.help("About these animations")
-				.popover(isPresented: $showsInfo) {
-					VStack(alignment: .leading, spacing: 10) {
-						Text("A preview, not a face check").font(.headline)
-						Text("Your camera stays off here. During a real check, only copy the movement Gaze asks for—not its idle glances or the nod after a smile.")
-						Text("These use Gaze’s real animations. Results repeat at a gentler pace here so you can learn them. macOS still handles unlocking; a preview never unlocks anything.")
-					}
-					.font(.system(size: 13)).frame(width: 280).padding(20)
+				InfoButton(title: "A preview, not a face check") {
+					Text("Your camera stays off here. During a real check, only copy the movement Gaze asks for—not its idle glances or the nod after a smile.")
+					Text("These use Gaze’s real animations. Results repeat at a gentler pace here so you can learn them. macOS still handles unlocking; a preview never unlocks anything.")
 				}
 			}
 		}
