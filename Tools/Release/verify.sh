@@ -37,6 +37,10 @@ for entitlement in get-task-allow cs.allow-jit cs.disable-library-validation cs.
 done
 xcrun stapler validate "$APP" || fail "Stapled notarization ticket not validated"
 spctl --assess --type execute --verbose=2 "$APP" || fail "Gatekeeper did not accept the release bundle"
+# Distribution supports both Apple Silicon and Intel Macs.
+ARCHS="$(lipo -archs "$APP/Contents/MacOS/$EXECUTABLE")" || fail "Architecture check unavailable"
+printf '%s\n' "$ARCHS" | grep -qw "arm64" || fail "Missing arm64 slice"
+printf '%s\n' "$ARCHS" | grep -qw "x86_64" || fail "Missing x86_64 slice"
 echo "PASS: bundle, signed identifier, models, signature, timestamp, entitlements, notarization ticket and Gatekeeper checks"
 echo "Team: $TEAM"
 echo "Architecture: $(lipo -archs "$APP/Contents/MacOS/$EXECUTABLE")"

@@ -132,3 +132,12 @@ _version_lt() {
 host_target() {
 	printf '%s-apple-macos%s.0' "$(uname -m)" "$MIN_SDK_MAJOR"
 }
+
+# Every architecture a release build ships.
+#
+# Local builds compile only the host because the only Mac running the result is this
+# one; a release is downloaded onto whatever Mac, so it carries both slices even
+# though that costs a second compile.
+release_targets() {
+	printf '%s\n' "arm64-apple-macos${MIN_SDK_MAJOR}.0" "x86_64-apple-macos${MIN_SDK_MAJOR}.0"
+}

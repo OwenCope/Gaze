@@ -113,18 +113,23 @@
         ]
       },
       "provenance": {
-        "summary": "Trained locally with scripts/train_spoof.swift (CreateML transfer learning, Apple ObjectPrint extractor) from a Roboflow 'Face Spoof Detection v1' CreateML export. Model metadata author 'Gaze', version '1.0'. Training-data copy is git-ignored, not in the repo.",
+        "summary": "Trained locally with scripts/train_spoof.swift (CreateML transfer learning, Apple ObjectPrint extractor; input contract scripts/train_spoof.swift:1-12, metadata author 'Gaze' version '1.0' scripts/train_spoof.swift:53-57) from a Roboflow 'Face Spoof Detection v1' CreateML export (train/valid/test splits, _annotations.createml.json per split). Training-data copy is git-ignored (.gitignore:27-28,30-32), not in the repo. Consumed at Sources/Recognition/SpoofDetector.swift:6-10 and bundled via build.sh:114-124. Whether the script produced these exact bytes is unverified: no training log or output hash is recorded in the repo.",
         "evidenceRefs": [
           "scripts/train_spoof.swift:1-12,53-57",
           "Sources/Recognition/SpoofDetector.swift:6-10",
-          ".gitignore:21-23"
+          "build.sh:111-124",
+          ".gitignore:27-28,30-32"
         ],
         "status": "stated-in-repo"
       },
       "license": {
-        "summary": "The export identifies itself as Roboflow Face Spoof Detection v1 and states CC BY 4.0, but upstream consent, class semantics and sublicensing rights still need independent review before redistribution. No grant covering the trained weights' redistribution is recorded.",
+        "summary": "The licence string 'CC BY 4.0' appears in the training script's output metadata (scripts/train_spoof.swift:55) and in Tools/ModelLab/README.md:27, which names the source https://universe.roboflow.com/mohammeds-workspace-ft3sn/face-spoof-detection-liika and states upstream consent, class semantics and sublicensing rights still need independent review before redistribution. No record establishes that this dataset licence covers redistribution of the trained weights. No grant covering the trained weights' redistribution is recorded.",
         "grant": "",
-        "evidenceRefs": [],
+        "evidenceRefs": [
+          "scripts/train_spoof.swift:53-57",
+          "Tools/ModelLab/README.md:27",
+          "Tools/ModelLab/prepare.py:84-85"
+        ],
         "redistributionScope": [],
         "status": "unresolved"
       },
@@ -252,6 +257,21 @@
             "sha256": "731e56683721068ab5bca6bc1e80a3bda7716303db287b5493974828b895190b"
           },
           {
+            "path": "Resources/Art/tour-general.png",
+            "bytes": 661362,
+            "sha256": "bd5b1be41e78aff0a3ad4e7777a7ab06ee7af53c5906528d010359d9584668a7"
+          },
+          {
+            "path": "Resources/Art/tour-how-unlock.png",
+            "bytes": 1029935,
+            "sha256": "ef5aea09467487f1096d5633f01c6d9f9bdcca11c9d248235f6a80e30baface1"
+          },
+          {
+            "path": "Resources/Art/tour-notch.png",
+            "bytes": 352072,
+            "sha256": "29663983a4173f8aa50ad0cd4be1f6eaa6e339ac705c5f70793f5966ae3981ea"
+          },
+          {
             "path": "Resources/Art/tour-practice.png",
             "bytes": 194388,
             "sha256": "0e839b2bb9e706f9371d1ebe892fb6ebf0c75e305566b98879d9e3ee0ddf2e71"
@@ -290,16 +310,30 @@
             "path": "Resources/Art/tour-rounded-unlock.png",
             "bytes": 1164054,
             "sha256": "66ee5c9d4de1cacc611db3c24b11ea7c7ed0340bc83cd36a66a5ffad53a13ecf"
+          },
+          {
+            "path": "Resources/Art/tour-security.png",
+            "bytes": 679942,
+            "sha256": "9868d53298d64c2a07dc5a368c6937c826b61aee5a90f9f3a5dbd01f7065f7e2"
+          },
+          {
+            "path": "Resources/Art/tour-unlock.png",
+            "bytes": 662308,
+            "sha256": "fa81d7b8920f2688e194fe31b99d12f93b613e9b109ff0599ac0de73a62ea711"
           }
         ]
       },
       "provenance": {
-        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. New companion illustrations are deterministically rendered from the app code. These records identify sources and bytes; they do not establish redistribution grants.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants.",
         "evidenceRefs": [
           "build.sh:131-134",
           "Tools/OnboardingArt/manifest.json",
           "Tools/Release/ShipPass20260918/tour-art.json",
-          "Tools/Release/ShipPass20260918/tour-rounded-art.json"
+          "Tools/Release/ShipPass20260918/tour-rounded-art.json",
+          "Tools/ProductCapture/export-tour-shots.py",
+          "Tools/ProductCapture/tour-shots.json",
+          "Tools/OnboardingArt/render-unlock-tour.sh",
+          "Tools/OnboardingArt/RenderUnlockTour.swift:58-94,100-101"
         ],
         "status": "stated-in-repo"
       },
@@ -410,9 +444,10 @@
         ]
       },
       "provenance": {
-        "summary": "The current icon asset depicts the Gaze companion. scripts/make_icon_mark.swift draws an older keyhole and does not establish provenance for these current bytes. Authorship/scope remains to be recorded.",
+        "summary": "scripts/make_icon_mark.swift claims to generate Resources/AppIcon.icon/Assets/gaze-mark.png (header scripts/make_icon_mark.swift:1, output path scripts/make_icon_mark.swift:81-83) as a white-on-transparent keyhole, but byte-equality between script output and these current bytes is unverified: the script was not run here and no output hash is recorded. Resources/AppIcon.icon/icon.json names the layer 'Smoked glass face', which does not match the script's keyhole description. Authorship/scope remains to be recorded.",
         "evidenceRefs": [
-          "scripts/make_icon_mark.swift:1-24"
+          "scripts/make_icon_mark.swift:1-24,81-83",
+          "Resources/AppIcon.icon/icon.json"
         ],
         "status": "current-asset-provenance-unresolved"
       },
@@ -464,11 +499,13 @@
         ]
       },
       "provenance": {
-        "summary": "Precompiled model is present in the lead checkout; source and relationship to any training data are unverified.",
+        "summary": "Resources/Liveness.mlmodelc is absent from this checkout and build.sh:108-109 states the legacy Liveness texture model is excluded from app bundles; no build.sh branch copies any Liveness file (cf. FaceEmbedding build.sh:94-106, Spoof build.sh:114-124, Art build.sh:131-144). The byteIdentity below fingerprints files present in the lead checkout, not files in the distributed bundle. Owner may want the validator to stop gating on a non-distributed artifact; validator logic unchanged, out of remit.",
         "evidenceRefs": [
-          "build.sh"
+          "build.sh:108-109",
+          "build.sh:94-106",
+          "build.sh:114-124"
         ],
-        "status": "unresolved"
+        "status": "not-in-distributed-bundle-provenance-unresolved"
       },
       "license": {
         "summary": "No redistribution evidence recorded.",
