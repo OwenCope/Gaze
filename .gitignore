@@ -36,3 +36,15 @@ dataset-subset/
 
 # Generated browser fixture bundle
 Tools/Release/AdminReliability/fixture/app.js
+
+# Agent scaffolding and audit reports. Working notes, not the product.
+.agents/
+.codex/
+.commandcode/
+Tools/*Audit.md
+Tools/*Review.md
+Tools/*Readiness.md
+Tools/*Scope.md
+Tools/*Scan.md
+Tools/*Triage.md
+Tools/*Paperwork.md
