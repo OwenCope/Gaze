@@ -181,23 +181,54 @@ else
 	SDK="${SDKROOT:-$(xcrun --show-sdk-path --sdk macosx)}"
 fi
 
-echo "→ Compiling (SDK: $(basename "$SDK"), $(host_target))"
-xcrun swiftc \
-	-parse-as-library \
-	-O -wmo \
-	-target "$(host_target)" \
-	-sdk "$SDK" \
-	${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
-	-framework SwiftUI \
-	-framework AppKit \
-	-framework AVFoundation \
-	-framework Vision \
-	-framework CoreML \
-	-framework CryptoKit \
-	-framework LocalAuthentication \
-	-framework OpenDirectory \
-	"${GAZE_MAIN_SOURCES[@]}" \
-	-o "$BIN"
+# A release binary runs on whatever Mac downloads it, so it carries both
+# architectures fused with lipo; a local build only ever runs here, so it compiles
+# just the host and skips the second compile. Slices live under STAGE_ROOT, which the
+# EXIT trap removes, and a failed slice compile stops the script before anything is
+# swapped in — the previous output is only replaced at the end.
+if [ "${DIST:-}" = "1" ]; then
+	echo "→ Compiling universal (SDK: $(basename "$SDK"), arm64 + x86_64)"
+	slices=""
+	for target in $(release_targets); do
+		slice="$STAGE_ROOT/Gaze-${target%%-*}"	xcrun swiftc \
+		-parse-as-library \
+		-O -wmo \
+		-target "$target" \
+		-sdk "$SDK" \
+		${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
+		-framework SwiftUI \
+		-framework AppKit \
+		-framework AVFoundation \
+		-framework Vision \
+		-framework CoreML \
+		-framework CryptoKit \
+		-framework LocalAuthentication \
+		-framework OpenDirectory \
+		"${GAZE_MAIN_SOURCES[@]}" \
+		-o "$slice"
+		slices="$slices $slice"
+	done
+	# shellcheck disable=SC2086
+	lipo -create -output "$BIN" $slices
+else
+	echo "→ Compiling (SDK: $(basename "$SDK"), $(host_target))"
+	xcrun swiftc \
+		-parse-as-library \
+		-O -wmo \
+		-target "$(host_target)" \
+		-sdk "$SDK" \
+		${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
+		-framework SwiftUI \
+		-framework AppKit \
+		-framework AVFoundation \
+		-framework Vision \
+		-framework CoreML \
+		-framework CryptoKit \
+		-framework LocalAuthentication \
+		-framework OpenDirectory \
+		"${GAZE_MAIN_SOURCES[@]}" \
+		-o "$BIN"
+fi
 
 if [ "${DIST:-}" = "1" ]; then
 	echo "→ Signing release with Developer ID"

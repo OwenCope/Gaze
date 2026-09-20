@@ -84,6 +84,12 @@ def main():
     binary = app / "Contents/MacOS/Gaze"
     run("/usr/bin/codesign", "--verify", "--deep", "--strict", str(app))
     architecture = run("/usr/bin/lipo", "-archs", str(binary), capture=True).decode().strip()
+    # Distribution supports both Apple Silicon and Intel Macs.
+    if not args.local_preview:
+        if "arm64" not in architecture.split():
+            parser.error("Missing arm64 slice")
+        if "x86_64" not in architecture.split():
+            parser.error("Missing x86_64 slice")
     version = metadata["CFBundleShortVersionString"]
     if any(c not in "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-" for c in version):
         parser.error("Version contains characters unsuitable for a filename")
