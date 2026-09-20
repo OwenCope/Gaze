@@ -278,10 +278,23 @@ struct SetupFlow: View {
 		return SetupPosition(index: index, count: plan.steps.count)
 	}
 
+	/// Arms unlocking once a first-run setup lands on done with nothing outstanding.
+	///
+	/// Setup collects everything unlocking needs — the face, the password, the permission —
+	/// so leaving the backend off here would make the done screen's promise false.
+	private func enableUnlockIfSetupComplete() {
+		guard purpose == .onboarding, failure == nil, unfinished.isComplete else { return }
+		guard !AppServices.isUIReview else { return }
+		PasswordReplaySafety.setEnabled(true)
+		Preferences.shared.unlockBackend = .keystroke
+		AppServices.shared.startUnlockTrigger()
+	}
+
 	private func advance() {
 		guard let next = nextStep(after: step) else { return }
 		isReturning = false
 		withAnimation(stepAnimation) { step = next }
+		if next == .done { enableUnlockIfSetupComplete() }
 	}
 
 	/// One screen back.
@@ -370,6 +383,7 @@ struct SetupFlow: View {
 			let next = nextStep(after: .capture) ?? .done
 			isReturning = false
 			withAnimation(stepAnimation) { step = next }
+			if next == .done { enableUnlockIfSetupComplete() }
 		} catch {
 			guard work.isCurrent(revision), isPresented, step == .capture else { return }
 			fail("Couldn't save your face: \(error.localizedDescription)")
