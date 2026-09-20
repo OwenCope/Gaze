@@ -111,7 +111,14 @@ No build, run, test, or lint performed — read-only review.
    and identically `Sources/App/AutofillSettings.swift:366-367` and `:404-405`
    (`.buttonStyle(.glass)` / `.buttonBorderShape(.circle)`).
 
-2. **Tour completion: two blue treatments on one screen.** The circular completion control
+2. **Tour completion: two blue treatments on one screen — settled, not a defect.**
+   The gradient primary button is a deliberate owner decision, recorded before this
+   audit at `ThirdParty/TourKit/LOCAL-CHANGES.md:6-9` ("Do not replace them with a
+   custom glass skin") and `:57` (bottom CTA unchanged while the circular controls
+   became real glass). This audit missed that file. Leave TourKit's buttons alone.
+   Original finding, kept for the record:
+
+2b. **Tour completion: two blue treatments on one screen.** The circular completion control
    is system glass, `ThirdParty/TourKit/TourKit.swift:276`:
    ```
    .buttonStyle(.glassProminent)
