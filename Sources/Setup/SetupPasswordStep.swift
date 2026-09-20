@@ -59,6 +59,12 @@ struct SetupPasswordStep: View {
 					.frame(height: 30, alignment: .top)
 					.padding(.horizontal, 30)
 					.padding(.top, 9)
+				Text("If you skip this, Gaze will recognise you without unlocking until you add your password in Settings.")
+					.font(.caption)
+					.foregroundStyle(Theme.setupSecondary)
+					.multilineTextAlignment(.center)
+					.fixedSize(horizontal: false, vertical: true)
+					.padding(.horizontal, 30)
 			}
 			.padding(.top, 22)
 		} actions: {
@@ -97,6 +103,7 @@ struct SetupPasswordStep: View {
 					// Verified and then failed to save: the keychain refused, which is a
 					// different problem and must not read as a typo.
 					error = "Couldn't save it: \(failure.localizedDescription)"
+					password = ""
 				}
 			}
 		}

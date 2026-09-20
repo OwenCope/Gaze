@@ -1001,6 +1001,7 @@ struct SettingsView: View {
 					}
 					Toggle("Lock when I walk away", isOn: walkAwayBinding)
 						.labelsHidden()
+						.accessibilityLabel("Lock when I walk away")
 						.accessibilityHint("Checks for absence after 20 seconds without input")
 						.toggleStyle(.switch)
 						.controlSize(.small)
@@ -1880,7 +1881,7 @@ private struct FaceTile: View {
 				.foregroundStyle(Theme.label)
 				.multilineTextAlignment(.center)
 				.lineLimit(1)
-				.frame(width: 84)
+				.frame(minWidth: 84)
 				.focused($isEditing)
 				.onSubmit(commit)
 				.onExitCommand {

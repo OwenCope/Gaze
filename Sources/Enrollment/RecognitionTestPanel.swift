@@ -53,6 +53,10 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 					Text("Face match").font(.caption).foregroundStyle(Theme.secondaryLabel)
 				}
 				.accessibilityElement(children: .combine)
+				// Status transitions only; the score republishes ~10x a second.
+				.onChange(of: readout.status) { oldStatus, newStatus in
+					if oldStatus != newStatus { AccessibilityNotification.Announcement(newStatus).post() }
+				}
 
 				HStack(spacing: 12) {
 					ForEach(Array(summaryRows.enumerated()), id: \.offset) { _, row in

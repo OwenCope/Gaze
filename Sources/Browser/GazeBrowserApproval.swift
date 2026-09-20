@@ -37,7 +37,7 @@ final class GazeBrowserApproval {
 			lockout.mayAttempt() else { throw BrowserBridgeError.unavailable }
 		let session = AutofillSessionLease()
 		guard session.isValid else { throw BrowserBridgeError.cancelled }
-		let detector = AntiSpoofGate(spoof: SpoofDetector())
+		let detector = AntiSpoofGate(spoof: SpoofDetector.shared)
 		guard detector.isActive else { throw BrowserBridgeError.unavailable }
 		busy = true
 		defer { busy = false; session.invalidate() }

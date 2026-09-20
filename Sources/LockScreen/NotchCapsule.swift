@@ -273,6 +273,7 @@ struct NotchCapsule: View {
 	@Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 	@Environment(\.notchReduceMotion) private var previewReduceMotion
 	private var reduceMotion: Bool { systemReduceMotion || previewReduceMotion }
+	// Reduce Motion skips the grow-out by reading as expanded, so opacity must never gate on isExpanded — that would blank the resting padlock.
 	private var expanded: Bool { reduceMotion || model.isExpanded }
 
 	/// Proportional to what is actually showing, not to the window.
@@ -510,7 +511,6 @@ struct NotchCapsule: View {
 		.animation(reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract), value: expanded)
 		.animation(reduceMotion ? nil : NotchAnimation.phase, value: model.phase.isCompact)
 		.animation(reduceMotion ? nil : NotchAnimation.feedback, value: model.phase.captionText)
-		.opacity(reduceMotion && !model.isExpanded ? 0 : 1)
 		.symbolEffectsRemoved(reduceMotion)
 	}
 
@@ -690,6 +690,7 @@ struct NotchCapsule: View {
 	/// between a status indicator and a sticker.
 	private var lockChip: some View {
 		Image(systemName: model.phase == .unlocked ? "lock.open.fill" : "lock.fill")
+			.accessibilityHidden(true)
 			.font(.system(size: 11, weight: .semibold))
 			// White, not green. This is the menu bar's own vocabulary — the padlock beside
 			// the cutout is a status glyph like the ones to its right, and those are never

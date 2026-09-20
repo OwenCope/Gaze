@@ -20,6 +20,9 @@ struct SpoofDetector: @unchecked Sendable {
 	/// The dataset's spoof class. `"0"` is a live face.
 	static let spoofLabel = "1"
 
+	/// Shared instance: loading the model is expensive and was previously done per scan.
+	static let shared: SpoofDetector? = SpoofDetector()
+
 	/// Confidence above which a spoof detection counts as a spoof.
 	let threshold: Float = 0.5
 

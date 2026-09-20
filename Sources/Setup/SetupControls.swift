@@ -92,6 +92,7 @@ struct GlassField: View {
 		Group {
 			if isSecure {
 				SecureField(placeholder, text: $text)
+					.textContentType(.password)
 			} else {
 				TextField(placeholder, text: $text)
 			}

@@ -36,7 +36,7 @@ struct RecognitionTestView: View {
 	/// This is the signal that catches the held-photo attack — it looks for the device, not
 	/// the face's texture.
 	@State private var spoofConf: Float?
-	private let spoof = SpoofDetector()
+	private let spoof = SpoofDetector.shared
 
 	/// Active challenge–response liveness: a randomly chosen action the user has to perform.
 	/// The one anti-spoof signal a webcam can do well — a photo can't turn its head or blink
@@ -72,6 +72,9 @@ struct RecognitionTestView: View {
 			cameraPreview
 		} companion: {
 			GazeCompanionView(motion: companionMotion)
+		}
+		.onChange(of: challenge.isComplete) { _, complete in
+			if complete { AccessibilityNotification.Announcement("Movement complete").post() }
 		}
 		.padding(.top, 18)
 		.background(WindowGlass(keepsTitle: true))
