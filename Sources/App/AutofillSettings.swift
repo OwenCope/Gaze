@@ -363,7 +363,7 @@ private struct SavedAppEditor: View {
 						.font(.system(size: 13, weight: .semibold))
 						.frame(width: 20, height: 20)
 				}
-				.buttonStyle(.glass)
+				.buttonStyle(.glass(.clear))
 				.buttonBorderShape(.circle)
 				.controlSize(.large)
 				.keyboardShortcut(.cancelAction)
@@ -401,7 +401,7 @@ private struct SavedAppEditor: View {
 						.foregroundStyle(.blue)
 						.frame(width: 20, height: 20)
 				}
-				.buttonStyle(.glass)
+				.buttonStyle(.glass(.clear))
 				.buttonBorderShape(.circle)
 				.controlSize(.large)
 				.keyboardShortcut(.defaultAction)

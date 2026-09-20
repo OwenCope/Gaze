@@ -1,30 +1,5 @@
-import SwiftUI
 import TipKit
 import os
-
-/// Native TipKit guidance for the notch panel preview.
-///
-/// The opening introduction stays in TourKit (`GazeWelcomeTour`); this tip only
-/// points at the simulated panel preview in Settings, which runs without the
-/// camera. It never appears on password or camera-consent screens, and no
-/// window is shown automatically.
-struct GazePanelPreviewTip: Tip {
-	var title: Text {
-		Text("Try the panel")
-	}
-
-	var message: Text? {
-		Text("Preview each state without using the camera.")
-	}
-
-	var image: Image? {
-		Image(systemName: "play.rectangle")
-	}
-
-	var options: [any TipOption] {
-		Tips.MaxDisplayCount(2)
-	}
-}
 
 /// Owns TipKit configuration.
 ///

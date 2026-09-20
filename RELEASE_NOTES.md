@@ -20,11 +20,16 @@ working alongside it.
 Choose one or two movement challenges in Settings under “Movements to unlock this
 Mac.” Two is the default. Follow each prompt and return to your starting position;
 onboarding shows how. The normal return animation keeps its text caption hidden,
-while Reduce Motion retains the written cue.
+while Reduce Motion retains the written cue. A “Show captions” switch in Settings
+under “Expressions” hides the movement guidance and status words with their symbols
+and leaves the mark itself in place. The panel still opens and the mark still shows
+each movement, and what Gaze checks and when it unlocks stay the same. With captions
+off there are no written cues at all, so the written return cue goes away too.
 
 A panel in the notch: a padlock while it's resting, the Gaze mark while it's looking, a
 green tick when it's you, a shake when it isn't. Three styles and size sliders, because
-notches and taste both vary.
+notches and taste both vary. The “Show captions” switch in Settings under “Expressions”
+turns those words off and leaves the mark on its own.
 
 The match has to hold for two seconds before anything happens, so a deliberate look unlocks
 your Mac and someone walking past the camera doesn't.
@@ -65,8 +70,11 @@ Worth reading before you pick the second mode.
 
 ## Known limitations
 
-- Anti-spoof checking is a switch with nothing behind it yet. No model is bundled, so it stays
-  off and says so.
+- Photo rejection is off unless you turn on “Reject photos held up to the camera” in
+  Settings. It looks for a held phone, screen or print in the frame, and it blocks the
+  unlock when it finds one or when a frame cannot be judged. It only catches what it can
+  see, so a photo that fills the frame leaves it with nothing to find; the movement
+  challenges are what cover that.
 - The authorization-plugin route was removed. It can leave you unable to log in at all, which
   is not a risk worth a nicer lock screen.
 - If you run another notch app, its bar and this one cover the same strip of screen. The
