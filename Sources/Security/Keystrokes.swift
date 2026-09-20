@@ -1,51 +1,53 @@
 import AppKit
 import CoreGraphics
 
-/// Synthesised keyboard input.
-///
-/// Extracted from `KeystrokeUnlockBackend`, which had the only copy. Autofill needs the
-/// same thing — put a secret into whatever field has focus — and two separately maintained
-/// implementations of "type a password" is not a duplication worth having: a fix to one
-/// (a modifier left stuck down, a string that needs splitting) would silently not reach
-/// the other.
-///
-/// Every function here needs Accessibility. Callers check `AXIsProcessTrusted()` and say
-/// something useful; these just post.
 enum Keystrokes {
+	enum PreparationError: LocalizedError {
+		case emptyPassword, unsupportedControlCharacter, eventUnavailable, incompletePayload
 
-	/// Virtual key codes. Positional, so they mean the same thing on any keyboard layout —
-	/// which matters, because the character a key produces does not.
-	enum Key: CGKeyCode {
-		case tab = 48
-		case ret = 36
+		var errorDescription: String? {
+			switch self {
+			case .emptyPassword: "The saved account password is empty. Save it again in Settings."
+			case .unsupportedControlCharacter:
+				"This password contains a control character that Gaze cannot safely type. Use macOS authentication."
+			case .eventUnavailable: "Gaze could not prepare keyboard input. No password was submitted."
+			case .incompletePayload: "The keyboard event could not hold the full password. Use macOS authentication."
+			}
+		}
 	}
 
-	/// Types a string in one packet.
-	///
-	/// The whole string goes in a single Unicode event rather than key by key. It is
-	/// faster, and — the reason it is done this way — nothing can interleave with it. A
-	/// per-character loop leaves gaps that another event source can post into, which for a
-	/// password field means characters landing out of order or somewhere else entirely.
-	static func type(_ string: String) {
-		guard !string.isEmpty, let source = CGEventSource(stateID: .hidSystemState) else { return }
-		var characters = Array(string.utf16)
-		guard
-			let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-			let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-		else { return }
+	static func passwordEvents(
+		_ password: String,
+		makeSource: () -> CGEventSource? = { CGEventSource(stateID: .privateState) },
+		makeEvent: (CGEventSource, CGKeyCode, Bool) -> CGEvent? = {
+			CGEvent(keyboardEventSource: $0, virtualKey: $1, keyDown: $2)
+		}
+	) throws -> [CGEvent] {
+		guard !password.isEmpty else { throw PreparationError.emptyPassword }
+		guard !password.unicodeScalars.contains(where: {
+			$0.value < 0x20 || (0x7F...0x9F).contains($0.value)
+		}) else { throw PreparationError.unsupportedControlCharacter }
+		guard let source = makeSource(),
+			let textDown = makeEvent(source, 0, true),
+			let textUp = makeEvent(source, 0, false),
+			let returnDown = makeEvent(source, 36, true),
+			let returnUp = makeEvent(source, 36, false)
+		else { throw PreparationError.eventUnavailable }
 
-		down.keyboardSetUnicodeString(stringLength: characters.count, unicodeString: &characters)
-		up.keyboardSetUnicodeString(stringLength: characters.count, unicodeString: &characters)
-		down.post(tap: .cghidEventTap)
-		up.post(tap: .cghidEventTap)
-	}
-
-	/// Presses and releases one key.
-	static func press(_ key: Key) {
-		guard let source = CGEventSource(stateID: .hidSystemState) else { return }
-		CGEvent(keyboardEventSource: source, virtualKey: key.rawValue, keyDown: true)?
-			.post(tap: .cghidEventTap)
-		CGEvent(keyboardEventSource: source, virtualKey: key.rawValue, keyDown: false)?
-			.post(tap: .cghidEventTap)
+		let events = [textDown, textUp, returnDown, returnUp]
+		for event in events {
+			event.flags = []
+			event.setIntegerValueField(.keyboardEventAutorepeat, value: 0)
+		}
+		var characters = Array(password.utf16)
+		textDown.keyboardSetUnicodeString(stringLength: characters.count, unicodeString: &characters)
+		var copied = [UniChar](repeating: 0, count: characters.count)
+		var copiedCount = 0
+		textDown.keyboardGetUnicodeString(
+			maxStringLength: copied.count, actualStringLength: &copiedCount, unicodeString: &copied)
+		guard copiedCount == characters.count, copied == characters else {
+			throw PreparationError.incompletePayload
+		}
+		return events
 	}
 }

@@ -7,6 +7,17 @@ import AppKit
 /// floating pill rather than as the notch itself growing.
 enum NotchMetrics {
 
+	static func panelFrame(size: CGSize, screenFrame: CGRect, scale: CGFloat) -> CGRect {
+		let left = floor((screenFrame.width - size.width) * scale / 2) / scale
+		let right = ceil((screenFrame.width + size.width) * scale / 2) / scale
+		let height = ceil(size.height * scale) / scale
+		return CGRect(
+			x: screenFrame.minX + left,
+			y: screenFrame.maxY - height,
+			width: right - left,
+			height: height)
+	}
+
 	/// Width of the camera housing, in points, or nil on a screen without one.
 	///
 	/// Derived from the two menu bar fragments either side of the cutout: macOS reports

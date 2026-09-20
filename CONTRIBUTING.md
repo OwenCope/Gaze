@@ -9,10 +9,10 @@ cd Gaze
 ```
 
 **You need a code-signing identity.** `build.sh` looks for an *Apple Development* or
-*Developer ID Application* certificate in your login keychain and falls back to ad-hoc
-signing if it finds neither. Ad-hoc works, but the app's code identity changes on every
-build, so macOS challenges it for the keychain password each time you rebuild — tedious
-within about ten minutes.
+*Developer ID Application* certificate in your login keychain. It refuses to build
+with no valid stable identity rather than silently replacing the installed app
+with an ad-hoc identity. `GAZE_SIGNING_IDENTITY` can select an exact certificate
+name or fingerprint from the valid identity list.
 
 A free Apple ID is enough: open Xcode → Settings → Accounts → add your Apple ID → Manage
 Certificates → **+** → Apple Development. No paid membership required. Verify with:
@@ -74,8 +74,10 @@ DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer ./build.sh
 The build targets the architecture of the machine running it, so Apple silicon and Intel
 both work.
 
-Signing uses whatever Apple Development or Developer ID identity is in your keychain, and
-falls back to ad-hoc if there isn't one.
+Local signing requires a valid Apple Development or Developer ID Application identity.
+`DIST=1` requires Developer ID Application and a secure timestamp; release output
+defaults to `build/release/Gaze.app`, separate from the local app. Distribution also
+requires the evidence and checks in `Tools/Release/READINESS.md`.
 
 **Sign with a real identity, not ad-hoc.** The Keychain ACL protecting the vault key is
 bound to the app's code identity, and an ad-hoc signature is regenerated every build — so
@@ -84,16 +86,12 @@ keychain password on every rebuild.
 
 ## Licensing — read before pushing anywhere public
 
-`Resources/FaceEmbedding.mlpackage` is Sapphire's `ModernFace`, from a **GPL-3.0**
-repository. It is tracked here because this repo is private, and GPL obligations trigger
-on distribution.
-
-**Before this repo goes public, either:**
-
-- replace the model with an openly-licensed one (`CoreMLEmbedder` reads the input shape
-  from the model, so any ArcFace-family `[1, 3, S, S]` → `[1, N]` network drops straight
-  in), or
-- license the whole project GPL-3.0.
+The historical source/model license descriptions conflict. Before publishing source
+or distributing an app, record the applicable licenses or permissions for the exact
+models and third-party assets included. A source repository license is not itself
+evidence of the weights' provenance or a grant covering every asset. Track this
+review in `Tools/Release/READINESS.md`; do not assume owner-reported permission has
+already been verified for a specific distribution.
 
 Changing the model invalidates existing enrolments — the identifier is versioned on
 purpose, so prints from different feature spaces are never compared.

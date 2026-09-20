@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds pam_gaze.so — the PAM module that lets `sudo` accept your face.
+# Builds the disabled PAM compatibility module. See Plugin/README.md.
 #
 # Universal, because a PAM module is loaded into whatever process is authenticating and
 # that is not always the architecture you built on: Rosetta shells, x86_64 Homebrew, and
@@ -28,7 +28,7 @@ clang -shared \
 	-mmacosx-version-min=13.0 \
 	-Wall -Wextra -Werror \
 	-o "$OUT/pam_gaze.so" \
-	"$ROOT/pam_gaze.c" "$ROOT/PeerTrust.c" \
+	"$ROOT/pam_gaze.c" \
 	-I"$ROOT" \
 	-framework Security -framework CoreFoundation \
 	-lpam

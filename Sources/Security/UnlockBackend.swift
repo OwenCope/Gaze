@@ -40,15 +40,9 @@ enum UnlockBackendKind: String, CaseIterable, Sendable {
 		case .none:
 			return "See recognition working without wiring it to anything."
 		case .authPlugin:
-			// Corrected: the earlier wording said macOS "cannot run third-party plugins",
-			// which is wrong — the plugin loads fine on a stock, SIP-enabled Mac with an
-			// ordinary Development signature. What is mutually exclusive is Apple's
-			// *modern* lock-screen UI and third-party plugins, and that is what costs
-			// Touch ID.
 			return """
-				The system performs the unlock itself, so your password is never stored or \
-				typed. Costs Touch ID and Apple Watch unlock on the lock screen: macOS \
-				won't run its modern lock-screen UI and a third-party plugin at once.
+				Legacy face-only authorization is disabled. An old installed plugin must be \
+				reviewed separately; this app does not change your Mac's login policy.
 				"""
 		case .keystroke:
 			return """
@@ -123,31 +117,43 @@ struct KeystrokeUnlockBackend: UnlockBackend {
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Keystroke")
 
 	@MainActor func readiness() -> BackendReadiness {
+		guard PasswordReplaySafety.isEnabled else { return .unavailable(PasswordReplaySafety.explanation) }
 		if let blocker = UnlockGuard.embedderBlocker() { return blocker }
-		guard PasswordVault.hasPassword else {
-			return .needsSetup("Gaze needs your account password to unlock the Mac.")
+		if Preferences.shared.livenessEnabled && !SpoofDetector.isAvailable {
+			return .unavailable("Anti-spoof protection is enabled, but its model is unavailable. Use macOS authentication until the model is restored.")
 		}
-		guard AXIsProcessTrusted() else {
+		do {
+			guard try PasswordVault.containsPassword() else {
+				return .needsSetup("Gaze needs your account password to unlock the Mac.")
+			}
+		} catch {
+			return .unavailable("The saved account password could not be accessed. Check Keychain access and try again.")
+		}
+		guard AXIsProcessTrusted(), CGPreflightPostEventAccess() else {
 			return .needsSetup("Gaze needs Accessibility access to type your password.")
 		}
 		return .ready
 	}
 
 	@MainActor func unlock() async throws {
-		guard let password = try PasswordVault.password() else {
-			throw UnlockError.noPassword
-		}
-		guard CGEventSource(stateID: .hidSystemState) != nil else {
-			throw UnlockError.eventSourceUnavailable
-		}
+		throw UnlockError.verificationRequired
+	}
 
-		// See `Keystrokes` for why the password goes in one packet rather than key by key.
-		Keystrokes.type(password)
-		// Return, to submit the field. The lock screen is submitted for you; autofill
-		// deliberately is not — see `AutofillService`.
-		Keystrokes.press(.ret)
-
-		Self.logger.notice("Submitted password to the login window.")
+	@MainActor func submitPassword(if stillVerified: () -> Bool, evidenceIsCurrent: () -> Bool) throws {
+		try PasswordReplaySafety.requireEnabled()
+		guard stillVerified() else { throw UnlockError.verificationRequired }
+		try LockScreenPasswordSubmission.submit(
+			readPassword: PasswordVault.password,
+			currentSession: LockedConsoleSession.current,
+			isEnabled: { PasswordReplaySafety.isEnabled && !Preferences.shared.isPaused && Preferences.shared.unlockBackend == .keystroke },
+			canPost: { AXIsProcessTrusted() && CGPreflightPostEventAccess() },
+			isVerified: evidenceIsCurrent,
+			prepare: {
+				guard stillVerified() else { throw UnlockError.verificationRequired }
+				return try Keystrokes.passwordEvents($0)
+			},
+			post: { $0.post(tap: .cghidEventTap) })
+		Self.logger.notice("Password events posted; awaiting macOS screen-unlock confirmation.")
 	}
 }
 
@@ -170,34 +176,24 @@ struct AuthPluginUnlockBackend: UnlockBackend {
 	static let pluginPath = "/Library/Security/SecurityAgentPlugins/Gaze.bundle"
 
 	@MainActor func readiness() -> BackendReadiness {
-		if let blocker = UnlockGuard.embedderBlocker() { return blocker }
-		guard FileManager.default.fileExists(atPath: Self.pluginPath) else {
-			return .needsSetup(
-				"The Gaze authorization plugin isn't installed yet. Installing it needs "
-					+ "administrator authentication and disables Touch ID on the lock screen.")
-		}
-		guard AuthorizationRules.screensaverUsesPlugins() else {
-			return .needsSetup(
-				"The plugin is installed but macOS isn't routing the lock screen through it.")
-		}
-		return .ready
+		.unavailable("Legacy face-only authorization is disabled. Use macOS authentication and review any previously installed plugin separately.")
 	}
 
 	@MainActor func unlock() async throws {
-		// Nothing to do from this side. The plugin is already running inside
-		// SecurityAgent and completes the authorization itself; this process only tells
-		// it whether the face matched, over the XPC channel the plugin listens on.
 		throw UnlockError.pluginNotBuilt
 	}
 }
 
 enum UnlockError: LocalizedError {
+	case verificationRequired
 	case noPassword
 	case eventSourceUnavailable
 	case pluginNotBuilt
 
 	var errorDescription: String? {
 		switch self {
+		case .verificationRequired:
+			return "A fresh, uninterrupted face check and movement response are required. Use macOS authentication."
 		case .noPassword:
 			return "No account password is stored."
 		case .eventSourceUnavailable:

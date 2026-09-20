@@ -21,13 +21,15 @@ final class LockoutManager {
 	private static let account = "lockout-state"
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Lockout")
 
-	private struct State: Codable {
+	struct State: Codable, Equatable {
 		var consecutiveFailures: Int = 0
 		/// Set when the vault record could not be read; only a password clears it.
 		var forcedLockout: Bool = false
 	}
 
 	private var state = State()
+	private let loadState: () throws -> State?
+	private let saveState: (State) throws -> Void
 
 	/// True when face unlock is refused until the user types their password.
 	var isLockedOut: Bool {
@@ -35,16 +37,22 @@ final class LockoutManager {
 	}
 
 	var attemptsRemaining: Int {
-		max(0, Self.maxAttempts - state.consecutiveFailures)
+		isLockedOut ? 0 : max(0, Self.maxAttempts - state.consecutiveFailures)
 	}
 
-	init() {
-		load()
+	init(load: (() throws -> State?)? = nil, save: ((State) throws -> Void)? = nil) {
+		loadState = load ?? { try SecureVault.load(State.self, from: Self.account) }
+		saveState = save ?? { try SecureVault.store($0, as: Self.account) }
+		self.load()
 	}
 
 	private func load() {
 		do {
-			state = try SecureVault.load(State.self, from: Self.account) ?? State()
+			state = try loadState() ?? State()
+			guard (0...Self.maxAttempts).contains(state.consecutiveFailures) else {
+				state = State(consecutiveFailures: Self.maxAttempts, forcedLockout: true)
+				return
+			}
 		} catch {
 			// A record exists but will not authenticate. Something edited it, so assume
 			// the worst and require a password.
@@ -55,7 +63,11 @@ final class LockoutManager {
 
 	private func persist() {
 		do {
-			try SecureVault.store(state, as: Self.account)
+			try saveState(state)
+			guard try loadState() == state else {
+				state.forcedLockout = true
+				return
+			}
 		} catch {
 			// If we cannot record a failure we must not keep granting attempts.
 			Self.logger.error("Could not persist lockout state; failing closed. \(error)")
@@ -69,7 +81,7 @@ final class LockoutManager {
 	/// Records a rejected face. Persists before returning, so yanking power mid-attack
 	/// does not roll the counter back.
 	func recordFailure() {
-		state.consecutiveFailures += 1
+		state.consecutiveFailures = min(Self.maxAttempts, state.consecutiveFailures + 1)
 		persist()
 		Self.logger.notice(
 			"Face rejected. \(self.attemptsRemaining) attempt(s) before lockout.")

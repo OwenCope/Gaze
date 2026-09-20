@@ -15,12 +15,6 @@ import os
 /// a saved app just became frontmost, and something secure has focus. Both, or nothing
 /// happens.
 ///
-/// Deliberately narrower than the shortcut. The manual path accepts a plain text field too,
-/// because you pressed a key and said what you wanted; this one only ever acts on a secure
-/// field. Typing a password into an ordinary text box because an app happened to come
-/// forward is the failure that would make this feature indefensible, and requiring the
-/// secure subrole rules it out structurally rather than by care.
-///
 /// **Why activation and not an observer.** Watching focus across every app would mean an
 /// Accessibility observer on each one, permanently. `didActivateApplication` is a single
 /// notification the system already posts, it fires exactly when the interesting thing
@@ -84,28 +78,18 @@ final class AutofillWatcher {
 	// MARK: - Events
 
 	private func appActivated(_ app: NSRunningApplication?) {
+		guard !AutofillService.isBusy else { return }
 		// Whatever we were waiting for is no longer frontmost. Stop looking for it.
 		pending?.cancel()
 		pending = nil
 
 		guard Preferences.shared.autofillOnActivation else { return }
 		guard !Preferences.shared.isPaused else { return }
+		guard AutofillConsoleSession.current() != nil else { return }
 		guard store.isEnrolled else { return }
 		guard let bundleID = app?.bundleIdentifier else { return }
 		guard savedApps.savedApp(forBundleID: bundleID) != nil else { return }
 
-		// Never automatically, into a browser.
-		//
-		// A password saved against an application is bound to that application, and for a
-		// browser that is not a meaningful boundary: every website shares one process and
-		// one bundle identifier. The trigger here is *activation*, so switching to a
-		// browser that happens to be showing a page with a focused password field is
-		// enough — including a page chosen by whoever wrote it, and the field it receives
-		// belongs to that site rather than to the one the password was saved for.
-		//
-		// Doing this properly needs an origin the browser vouches for, which needs a real
-		// browser integration. Until then the shortcut still works, because pressing it is
-		// the user saying which field they meant.
 		guard !AppIdentity.isBrowser(bundleID: bundleID) else {
 			Self.logger.notice(
 				"\(bundleID, privacy: .public) is a browser; not filling on activation.")
@@ -123,30 +107,13 @@ final class AutofillWatcher {
 		}
 	}
 
-	/// Looks for a focused secure field for a short while, then gives up quietly.
-	///
-	/// The camera is opened *now*, alongside the polling, rather than after a field is
-	/// found. Starting an `AVCaptureSession` costs between half a second and a second and
-	/// a half — more than every other step here combined — so doing it serially meant the
-	/// user watched a password box do nothing for two or three seconds. Run in parallel,
-	/// the camera is usually already delivering frames by the time the field appears, and
-	/// the recognition is the only thing left to wait for.
-	///
-	/// The cost is honest and worth naming: switching to a saved app that is *not* locked
-	/// lights the camera indicator for up to two seconds while this looks for a field that
-	/// never comes. That only happens for apps you saved a password for, and never while
-	/// autofill is switched off.
 	private func waitForLockScreen(of bundleID: String) async {
-		let camera = CameraController()
-		var cameraStarted = false
-		defer { if cameraStarted { camera.stop() } }
-
-		async let warmUp: Void = camera.start(
-			pinnedDeviceID: Preferences.shared.requireBuiltInCamera ? store.pinnedCameraID : nil)
+		let session = AutofillSessionLease()
 
 		for _ in 0..<Self.pollAttempts {
 			try? await Task.sleep(for: Self.pollInterval)
-			if Task.isCancelled { return }
+			guard !Task.isCancelled, session.isValid, Preferences.shared.autofillOnActivation,
+				!Preferences.shared.isPaused else { return }
 
 			// Still the same app in front? Activation can change again mid-poll.
 			guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID else {
@@ -158,17 +125,9 @@ final class AutofillWatcher {
 			lastAttempt[bundleID] = Date()
 			Self.logger.notice("\(bundleID, privacy: .public) is asking for a password.")
 
-			// Collect the warm-up before handing the camera over, so `state` is settled
-			// rather than still mid-start when `FaceCheck` looks at it.
-			await warmUp
-			cameraStarted = true
 			await AutofillService.fillFrontmost(
-				savedApps: savedApps, store: store, capsule: capsule, warmCamera: camera)
+				savedApps: savedApps, store: store, capsule: capsule)
 			return
 		}
-
-		// No password box appeared. Tidy up the camera we opened on spec.
-		await warmUp
-		cameraStarted = true
 	}
 }

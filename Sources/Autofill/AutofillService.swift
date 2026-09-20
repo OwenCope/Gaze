@@ -2,28 +2,15 @@ import AppKit
 import ApplicationServices
 import os
 
-/// Fills a saved password into whatever field is in front of you, once your face agrees.
-///
-/// Two things call this. `AutofillWatcher` calls it when a saved app comes forward showing
-/// a focused secure field — the case that matters, because the moment worth automating is
-/// the app appearing, not a keystroke afterwards. The ⌥⌘G shortcut calls it directly, and
-/// is the manual path: it also accepts a plain text field, and it works in an app that was
-/// already frontmost.
-///
-/// The original design was shortcut-only, on the reasoning that watching for password
-/// fields would mean an Accessibility observer over every app on the Mac. That reasoning
-/// was sound and the conclusion was wrong — `didActivateApplication` is a single
-/// notification the system already posts, so the watching costs nothing and the shortcut
-/// stops being the only way in.
-///
-/// The field is never submitted. `KeystrokeUnlockBackend` presses Return because the login
-/// window has exactly one thing you can do with a password; an app might be a sign-up form,
-/// a re-auth sheet, or a field whose Return key means something else entirely. Filling and
-/// letting the user commit is what every password manager does, and for the same reason.
 @MainActor
 enum AutofillService {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Autofill")
+	private static var isFilling = false
+	static var isBusy: Bool { isFilling }
+	private static let attemptBudget = AutofillAttemptBudget(
+		load: { try SecureVault.load(AutofillAttemptBudget.State.self, from: "autofill-attempt-budget-v1") },
+		save: { try SecureVault.store($0, as: "autofill-attempt-budget-v1") })
 
 	enum Outcome {
 		case filled(SavedApp)
@@ -34,6 +21,13 @@ enum AutofillService {
 		case noPassword
 		case unverifiedApp(String)
 		case identityMismatch(String)
+		case browserBlocked
+		case fieldNotWritable
+		case disabled
+		case busy
+		case ownerRejected
+		case retryBudgetReset
+		case retryBudgetUnavailable
 
 		/// Written for somebody looking at Settings wondering why nothing happened, so
 		/// each case says what to do about it rather than naming the branch it took.
@@ -52,6 +46,13 @@ enum AutofillService {
 			case .noPassword: "No password stored for that app"
 			case .unverifiedApp(let app): "\(app) has no saved signature — save it again"
 			case .identityMismatch(let app): "\(app) isn't the app this password was saved for"
+			case .browserBlocked: "Browser autofill needs a trusted website integration"
+			case .fieldNotWritable: "This password box doesn't support secure targeted filling"
+			case .disabled: "Autofill is paused or canceled"
+			case .busy: "An autofill check is already in progress"
+			case .ownerRejected: "Autofill requires fresh Touch ID or macOS password approval"
+			case .retryBudgetReset: "Autofill attempts reset. Focus the password box and try again"
+			case .retryBudgetUnavailable: "Autofill retry protection is unavailable. No password was released"
 			}
 		}
 	}
@@ -71,6 +72,9 @@ enum AutofillService {
 		capsule: NotchCapsuleController?,
 		warmCamera: CameraController? = nil
 	) async -> Outcome {
+		guard !isFilling else { return .busy }
+		isFilling = true
+		defer { isFilling = false }
 		let outcome = await attemptFill(
 			savedApps: savedApps, store: store, capsule: capsule, warmCamera: warmCamera)
 		lastOutcome = (outcome, Date())
@@ -86,6 +90,9 @@ enum AutofillService {
 		capsule: NotchCapsuleController?,
 		warmCamera: CameraController?
 	) async -> Outcome {
+		guard !Task.isCancelled, !Preferences.shared.isPaused else { return .disabled }
+		let session = AutofillSessionLease()
+		guard session.isValid else { return .disabled }
 
 		guard AXIsProcessTrusted() else {
 			logger.error("Autofill needs Accessibility access.")
@@ -96,10 +103,11 @@ enum AutofillService {
 		// becomes frontmost here — the shortcut is global and this process stays in the
 		// background — so this is the app the user is actually looking at.
 		guard let app = NSWorkspace.shared.frontmostApplication,
-			let bundleID = app.bundleIdentifier
+			let bundleID = app.bundleIdentifier, app.launchDate != nil, !app.isTerminated
 		else {
 			return .noFocusedField
 		}
+		guard !AppIdentity.isBrowser(bundleID: bundleID) else { return .browserBlocked }
 
 		guard let savedApp = savedApps.savedApp(forBundleID: bundleID) else {
 			logger.notice("No saved savedApp for \(bundleID, privacy: .public).")
@@ -116,71 +124,98 @@ enum AutofillService {
 				"\(savedApp.name, privacy: .public) has no saved signing requirement.")
 			return .unverifiedApp(savedApp.name)
 		}
-		guard AppIdentity.process(app.processIdentifier, matches: requirement) else {
+		guard appIsPinned(app, savedApp: savedApp),
+			AppIdentity.process(app.processIdentifier, matches: requirement) else {
 			logger.error(
 				"\(bundleID, privacy: .public) does not satisfy its saved requirement.")
 			return .identityMismatch(app.localizedName ?? bundleID)
 		}
 
-		guard let field = focusedField() else {
-			logger.notice("Nothing focused that text can be typed into.")
+		guard let target = secureTarget(for: app.processIdentifier) else {
+			logger.notice("No secure field belongs to the verified app.")
 			return .noFocusedField
 		}
-
-		let password: String?
-		do {
-			password = try savedApps.password(for: savedApp)
-		} catch {
-			logger.error("Could not read the stored password for \(savedApp.name, privacy: .public).")
-			return .noPassword
+		var isSettable: DarwinBoolean = false
+		guard AXUIElementIsAttributeSettable(target, kAXValueAttribute as CFString, &isSettable)
+			== .success, isSettable.boolValue
+		else { return .fieldNotWritable }
+		guard attemptBudget.reserve() else {
+			guard await AutofillOwnerApproval.authorize(session: session,
+				reason: "Gaze needs owner approval to reset its autofill retry limit.") else { return .ownerRejected }
+			guard session.isValid, !Preferences.shared.isPaused else { return .disabled }
+			return attemptBudget.resetAfterOwnerApproval() ? .retryBudgetReset : .retryBudgetUnavailable
 		}
-		guard let password, !password.isEmpty else { return .noPassword }
-
-		// The face check goes last, after everything that could fail cheaply. Opening the
-		// camera and asking someone to look at it, only to then discover there was no
-		// password saved, would be the wrong order to find that out in.
 		capsule?.show(phase: .scanning)
-		let recognised = await FaceCheck.authenticate(using: store, warm: warmCamera)
+		defer { capsule?.hide(after: 1.0) }
+		let recognised = await FaceCheck.authenticate(using: store, warm: warmCamera) {
+			session.isValid && savedApps.savedApp(forBundleID: bundleID) == savedApp
+				&& targetIsCurrent(target, app: app, requirement: requirement)
+				&& appIsPinned(app, savedApp: savedApp)
+		}
 		guard recognised else {
 			capsule?.update(phase: .notRecognised)
-			capsule?.hide(after: 1.2)
 			return .faceRejected
 		}
+		guard session.isValid, !Preferences.shared.isPaused else { return .disabled }
+		let release = await AutofillReleaseGate.release(isCurrent: {
+			session.isValid && !Preferences.shared.isPaused
+				&& savedApps.savedApp(forBundleID: bundleID) == savedApp
+				&& appIsPinned(app, savedApp: savedApp)
+				&& targetIsCurrent(target, app: app, requirement: requirement)
+				&& !AppIdentity.isBrowser(bundleID: bundleID)
+		}, approve: {
+			await AutofillOwnerApproval.authorize(session: session,
+				reason: "Approve filling the focused password field in \(savedApp.name).")
+		}, resetBudget: { attemptBudget.resetAfterOwnerApproval() }, read: {
+			try savedApps.password(for: savedApp)
+		}, write: { password in
+			AXUIElementSetAttributeValue(target, kAXValueAttribute as CFString, password as CFString) == .success
+		})
+		switch release {
+		case .filled: break
+		case .ownerRejected: return .ownerRejected
+		case .stale: return .disabled
+		case .budgetUnavailable: return .retryBudgetUnavailable
+		case .noPassword: return .noPassword
+		case .fieldNotWritable: return .fieldNotWritable
+		}
+
 		capsule?.update(phase: .success)
-		capsule?.hide(after: 1.0)
-
-		// Re-read the frontmost app. The camera check takes a second or two, and typing a
-		// password into whatever happened to come forward in the meantime — a notification,
-		// a colleague's Slack — is the one mistake this must never make.
-		guard let current = NSWorkspace.shared.frontmostApplication,
-			current.bundleIdentifier == bundleID,
-			AppIdentity.process(current.processIdentifier, matches: requirement)
-		else {
-			logger.error("The frontmost app changed during the face check; not typing.")
-			return .noFocusedField
-		}
-
-		switch field {
-		case .secure:
-			// Focus is already in the password box. Typing the username here would put it
-			// in the password field in plain intent and then tab away from the thing the
-			// user actually wanted filled.
-			Keystrokes.type(password)
-		case .plain:
-			// A plain field with a username saved reads as "the login form, at the top".
-			// Fill both. With no username there is nothing to distinguish this from a
-			// password field that simply is not marked secure, so treat it as one.
-			if savedApp.username.isEmpty {
-				Keystrokes.type(password)
-			} else {
-				Keystrokes.type(savedApp.username)
-				Keystrokes.press(.tab)
-				Keystrokes.type(password)
-			}
-		}
-
 		logger.notice("Filled \(savedApp.name, privacy: .public).")
 		return .filled(savedApp)
+	}
+
+	private static func appIsPinned(_ app: NSRunningApplication, savedApp: SavedApp) -> Bool {
+		guard let selected = savedApp.applicationURL, let running = app.bundleURL,
+			selected.isFileURL, running.isFileURL else { return false }
+		return selected.standardizedFileURL.resolvingSymlinksInPath()
+			== running.standardizedFileURL.resolvingSymlinksInPath()
+	}
+
+	private static func targetIsCurrent(
+		_ target: AXUIElement, app: NSRunningApplication, requirement: String
+	) -> Bool {
+		guard !app.isTerminated, let launchDate = app.launchDate,
+			let current = NSWorkspace.shared.frontmostApplication,
+			current.processIdentifier == app.processIdentifier,
+			current.launchDate == launchDate,
+			current.bundleIdentifier == app.bundleIdentifier,
+			AppIdentity.process(current.processIdentifier, matches: requirement),
+			let focused = secureTarget(for: current.processIdentifier)
+		else { return false }
+		return CFEqual(target, focused)
+	}
+
+	private static func secureTarget(for processID: pid_t) -> AXUIElement? {
+		let element = focusedElement(of: AXUIElementCreateSystemWide())
+			?? focusedElement(of: AXUIElementCreateApplication(processID))
+		guard let element else { return nil }
+		var owner: pid_t = 0
+		guard AXUIElementGetPid(element, &owner) == .success, owner == processID,
+			classify(role: string(of: element, kAXRoleAttribute),
+				subrole: string(of: element, kAXSubroleAttribute)) == .secure
+		else { return nil }
+		return element
 	}
 
 	// MARK: - Accessibility
@@ -270,7 +305,8 @@ enum AutofillService {
 		guard
 			AXUIElementCopyAttributeValue(
 				element, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-			let focused
+			let focused,
+			CFGetTypeID(focused) == AXUIElementGetTypeID()
 		else { return nil }
 		return (focused as! AXUIElement)
 	}

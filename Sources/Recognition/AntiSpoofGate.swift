@@ -20,14 +20,11 @@ import Foundation
 /// webcam can't give (Apple uses a depth camera); until there's a model that separates a
 /// photo from a face without turning real users away, it stays out of the decision.
 ///
-/// This gate therefore only ever *rejects* on a positively-detected device, and never turns a
-/// real face away — so it fails safe for the owner while still catching the held-device
-/// attack. A full-frame photo with no visible device is the residual case; blink (a photo
-/// can't blink) is the signal that covers it, shown in the test window.
-struct AntiSpoofGate {
+struct AntiSpoofGate: Sendable {
 
-	enum Decision: Equatable {
+	enum Decision: Equatable, Sendable {
 		case live
+		case unavailable
 		/// Rejected. `reason` is log/telemetry text; `score` is the signal that tripped it.
 		case spoof(reason: String, score: Float)
 	}
@@ -73,8 +70,8 @@ struct AntiSpoofGate {
 	var isActive: Bool { spoof != nil }
 
 	func evaluate(_ sample: FaceSample) -> Decision {
-		guard let spoof else { return .live }
-		let confidence = spoof.spoofConfidence(sample)
+		guard let spoof, let confidence = spoof.spoofConfidence(sample),
+			confidence.isFinite, (0...1).contains(confidence) else { return .unavailable }
 		if confidence >= spoofRejectThreshold {
 			return .spoof(reason: "a device was seen in frame", score: confidence)
 		}

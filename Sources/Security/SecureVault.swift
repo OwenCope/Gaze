@@ -14,9 +14,22 @@ enum SecureVault {
 	private static let keyAccount = "vault-key"
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "SecureVault")
 
-	enum VaultError: Error {
+	enum VaultError: LocalizedError {
 		case enclaveUnavailable
 		case corrupted
+		case missingKey
+		case writeFailed
+		case deleteFailed
+
+		var errorDescription: String? {
+			switch self {
+			case .enclaveUnavailable: "The Secure Enclave is unavailable."
+			case .corrupted: "The stored data could not be read."
+			case .missingKey: "The vault key is missing."
+			case .writeFailed: "The Keychain could not save the change."
+			case .deleteFailed: "Deletion could not be confirmed. The stored data may still exist. Try again."
+			}
+		}
 	}
 
 	/// True on Apple Silicon and T2 Macs. Without it we refuse to store templates at all
@@ -25,17 +38,18 @@ enum SecureVault {
 
 	// MARK: - Key material
 
-	private static func enclaveKey() throws -> SecureEnclave.P256.KeyAgreement.PrivateKey {
+	private static func enclaveKey(createIfMissing: Bool) throws -> SecureEnclave.P256.KeyAgreement.PrivateKey {
 		guard SecureEnclave.isAvailable else { throw VaultError.enclaveUnavailable }
 
-		if let blob = Keychain.read(keyAccount),
-			let key = try? SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: blob)
-		{
-			return key
+		if let blob = try Keychain.load(keyAccount) {
+			return try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: blob)
 		}
+		guard createIfMissing else { throw VaultError.missingKey }
 
 		let key = try SecureEnclave.P256.KeyAgreement.PrivateKey()
-		Keychain.write(key.dataRepresentation, to: keyAccount)
+		guard Keychain.write(key.dataRepresentation, to: keyAccount) else {
+			throw VaultError.writeFailed
+		}
 		logger.info("Created a new Secure Enclave vault key.")
 		return key
 	}
@@ -44,8 +58,8 @@ enum SecureVault {
 	///
 	/// Deterministic, so it reconstitutes across launches, but only ever computable
 	/// inside the Enclave that holds the private half.
-	private static func symmetricKey() throws -> SymmetricKey {
-		let key = try enclaveKey()
+	private static func symmetricKey(createIfMissing: Bool) throws -> SymmetricKey {
+		let key = try enclaveKey(createIfMissing: createIfMissing)
 		let shared = try key.sharedSecretFromKeyAgreement(with: key.publicKey)
 		// The salt keeps the old name deliberately. It is a cryptographic constant,
 		// not a label: every key ever derived came from these exact bytes, and
@@ -65,9 +79,9 @@ enum SecureVault {
 	/// tampered blob fails to open rather than decoding to attacker-chosen data.
 	static func store<T: Encodable>(_ value: T, as account: String) throws {
 		let plaintext = try JSONEncoder().encode(value)
-		let sealed = try AES.GCM.seal(plaintext, using: symmetricKey())
+		let sealed = try AES.GCM.seal(plaintext, using: symmetricKey(createIfMissing: true))
 		guard let combined = sealed.combined else { throw VaultError.corrupted }
-		Keychain.write(combined, to: account)
+		guard Keychain.write(combined, to: account) else { throw VaultError.writeFailed }
 	}
 
 	/// Loads and decrypts a value, or nil if absent.
@@ -75,19 +89,19 @@ enum SecureVault {
 	/// Throws — rather than returning nil — when a blob exists but will not open, so
 	/// callers can fail closed on tampering instead of treating it as "not enrolled".
 	static func load<T: Decodable>(_ type: T.Type, from account: String) throws -> T? {
-		guard let combined = Keychain.read(account) else { return nil }
+		guard let combined = try Keychain.load(account) else { return nil }
 		let box = try AES.GCM.SealedBox(combined: combined)
-		let plaintext = try AES.GCM.open(box, using: symmetricKey())
+		let plaintext = try AES.GCM.open(box, using: symmetricKey(createIfMissing: false))
 		return try JSONDecoder().decode(type, from: plaintext)
 	}
 
-	static func remove(_ account: String) {
-		Keychain.delete(account)
+	static func remove(_ account: String) throws {
+		guard Keychain.delete(account) else { throw VaultError.deleteFailed }
 	}
 
 	/// Destroys the vault key, which renders every stored blob permanently unreadable.
-	static func destroy() {
-		Keychain.delete(keyAccount)
-		logger.notice("Vault key destroyed; all stored data is now unrecoverable.")
+	static func destroy() throws {
+		try remove(keyAccount)
+		logger.notice("Vault key deletion confirmed.")
 	}
 }

@@ -22,6 +22,14 @@ Requires the macOS 26 SDK and a valid stable signing identity. No Xcode project 
 `build.sh` drives `swiftc` and assembles the bundle by hand. `DIST=1` requires a
 Developer ID Application identity; it no longer produces ad-hoc distribution builds.
 
+**The recognition model is not in this repository.** Its redistribution rights are
+unresolved (see `NOTICE.md`), so it is not published here. A clone still builds and
+runs: `build.sh` reports `no FaceEmbedding model — using landmark-geometry fallback`
+and the app works end to end. Recognition is materially weaker on that path, and it is
+explicitly not an approved substitute for unlocking a Mac — treat a fallback build as
+a development build, not as Gaze. Supply your own `Resources/FaceEmbedding.mlpackage`
+(or a prebuilt `Resources/FaceEmbedding.mlmodelc`) to get the real one.
+
 ---
 
 ## What it does

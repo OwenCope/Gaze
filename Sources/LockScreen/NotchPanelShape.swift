@@ -102,13 +102,12 @@ struct NotchPanelShape: Shape {
 			control: CGPoint(x: body.minX, y: rect.minY))
 		path.closeSubpath()
 
-		// Right flare, mirrored.
 		path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-		path.addLine(to: CGPoint(x: body.maxX - bite, y: rect.minY))
-		path.addLine(to: CGPoint(x: body.maxX - bite, y: rect.minY + top))
 		path.addQuadCurve(
-			to: CGPoint(x: rect.maxX, y: rect.minY),
+			to: CGPoint(x: body.maxX - bite, y: rect.minY + top),
 			control: CGPoint(x: body.maxX, y: rect.minY))
+		path.addLine(to: CGPoint(x: body.maxX - bite, y: rect.minY))
+		path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
 		path.closeSubpath()
 
 		return path

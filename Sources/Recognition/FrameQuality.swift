@@ -35,11 +35,21 @@ enum FrameQuality {
 	/// Vision quality points at the exposure the lock screen leaves us with. Counting them
 	/// together said only that 73 of 74 frames were dropped, which named neither.
 	enum Rejection: String {
+		case invalidMeasurements = "invalid measurements"
 		case tooSmall = "too small"
 		case tooBlurred = "too blurred"
 	}
 
 	static func rejection(_ sample: FaceSample) -> Rejection? {
+		let bounds = sample.boundingBox
+		guard bounds.origin.x.isFinite, bounds.origin.y.isFinite,
+			bounds.width.isFinite, bounds.height.isFinite,
+			bounds.width > 0, bounds.height > 0,
+			bounds.minX >= 0, bounds.minY >= 0, bounds.maxX <= 1.000001, bounds.maxY <= 1.000001,
+			sample.quality.isFinite, (0...1).contains(sample.quality),
+			sample.pose.yaw.isFinite, sample.pose.pitch.isFinite, sample.pose.roll.isFinite else {
+			return .invalidMeasurements
+		}
 		if sample.boundingBox.height < minFaceHeight { return .tooSmall }
 		if sample.quality > 0, sample.quality < minVisionQuality { return .tooBlurred }
 		return nil

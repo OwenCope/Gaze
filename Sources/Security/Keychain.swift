@@ -11,6 +11,15 @@ enum Keychain {
 	private static let service = "com.gazeunlock.Gaze"
 
 	static func read(_ account: String) -> Data? {
+		try? load(account)
+	}
+
+	enum ReadError: Error {
+		case status(OSStatus)
+		case unexpectedData
+	}
+
+	static func load(_ account: String) throws -> Data? {
 		let query: [String: Any] = [
 			kSecClass as String: kSecClassGenericPassword,
 			kSecAttrService as String: service,
@@ -19,10 +28,11 @@ enum Keychain {
 			kSecMatchLimit as String: kSecMatchLimitOne,
 		]
 		var item: CFTypeRef?
-		guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {
-			return nil
-		}
-		return item as? Data
+		let status = SecItemCopyMatching(query as CFDictionary, &item)
+		if status == errSecItemNotFound { return nil }
+		guard status == errSecSuccess else { throw ReadError.status(status) }
+		guard let data = item as? Data else { throw ReadError.unexpectedData }
+		return data
 	}
 
 	@discardableResult
@@ -64,6 +74,8 @@ enum Keychain {
 			kSecAttrAccount as String: account,
 		]
 		let status = SecItemDelete(query as CFDictionary)
-		return status == errSecSuccess || status == errSecItemNotFound
+		guard status == errSecSuccess || status == errSecItemNotFound else { return false }
+		var remaining: CFTypeRef?
+		return SecItemCopyMatching(query as CFDictionary, &remaining) == errSecItemNotFound
 	}
 }

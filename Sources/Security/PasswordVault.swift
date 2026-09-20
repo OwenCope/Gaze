@@ -4,8 +4,6 @@ import os
 
 /// Stores the account password for the keystroke unlock backend.
 ///
-/// Only used by that backend. The authorization-plugin path never needs this, which is
-/// the main reason to prefer it: a password that is never stored cannot be stolen.
 enum PasswordVault {
 
 	private static let account = "account-password"
@@ -17,6 +15,10 @@ enum PasswordVault {
 
 	static var hasPassword: Bool {
 		Keychain.read(account) != nil
+	}
+
+	static func containsPassword() throws -> Bool {
+		try Keychain.load(account) != nil
 	}
 
 	/// Checks the password against the local directory before storing it, so a typo
@@ -33,12 +35,11 @@ enum PasswordVault {
 		try SecureVault.load(Record.self, from: account)?.password
 	}
 
-	static func remove() {
-		SecureVault.remove(account)
+	static func remove() throws {
+		try SecureVault.remove(account)
 	}
 
-	/// Checks a password against the local directory, without unlocking anything and
-	/// without consuming any system attempt counter.
+	/// Checks a password against the local directory, without unlocking anything.
 	///
 	/// This used to shell out to `dscl . -authonly <user> <password>`, which put the
 	/// password in the argument vector of a subprocess — and `argv` is readable from the
@@ -48,7 +49,7 @@ enum PasswordVault {
 	/// it, which is not a trade worth making for a check the system exposes directly.
 	///
 	/// `ODRecord.verifyPassword` is the API `dscl` itself is a wrapper around. It stays
-	/// in-process, so the password never crosses a boundary where something can observe it.
+	/// in-process, avoiding a subprocess argument containing the password.
 	static func verify(_ password: String, user: String = NSUserName()) -> Bool {
 		do {
 			let node = try ODNode(

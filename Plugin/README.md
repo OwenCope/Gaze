@@ -1,6 +1,59 @@
-# Authorization plugin
+# Optional authorization integrations: disabled
 
-Not built yet. This is what it takes, and what it costs.
+Face presence alone must not authorize `sudo`. An unrelated process can request sudo
+authentication while the owner happens to be looking at the camera. A signed responder and
+a fresh nonce do not establish the owner's intent.
+
+The shared legacy authorization service also lacked caller authorization and request
+lifecycle controls. It is disabled rather than retained as a second route to a face verdict.
+The normal app's keystroke-unlock and recognition paths are separate and remain available.
+
+## Behavior of this checkout
+
+- `pam_gaze.c` always returns `PAM_AUTH_ERR` from authentication. It does not read a trust
+  policy, contact XPC, or report an authentication success.
+- `UnlockService` retains the service name for compatibility and replies with verdict 3,
+  unavailable. It echoes only correctly sized 32-byte nonces and never opens the camera.
+- `install-pam.sh` and `install.sh` print an explanation and exit with status 1 before any
+  filesystem, launchd, PAM, or authorization-database changes. This also removes their
+  privileged installer attack surface from the supported path.
+- `build-pam.sh` builds the disabled compatibility module only. Building it does not replace
+  an installed copy. The remaining legacy plugin sources are not approved for deployment.
+
+## Existing installations
+
+Nothing in these source changes removes an installed module, unloads a LaunchAgent, stops an
+old process, or edits `/etc/pam.d/sudo_local` or the authorization database. An old installed
+module and old running app retain their previous behavior and risks.
+
+An administrator should first identify which integration is installed and confirm an
+independent password-based access path. Then review removal of only the Gaze-specific PAM
+entry or legacy authorization mechanisms, preserving unrelated local authentication rules.
+Use an isolated test account or machine before deploying authentication-policy changes.
+Do not run historical installation or cleanup scripts merely because they remain in git.
+
+Under the former `auth sufficient` configuration, an authentication failure is intended to
+fall through to subsequent PAM modules. Actual fallback depends on the complete local stack;
+it is not a universal guarantee against lockout.
+
+## Conditions for re-enabling
+
+1. Verify kernel-bound caller identity and bind requests to the correct account and session.
+2. Require fresh deliberate owner approval bound to trusted request context. Do not treat a
+   camera match or an informational overlay as consent.
+3. Bound concurrency, payload sizes, deadlines, disconnect handling, and cancellation. A late
+   match must never authorize an expired or different request.
+4. Review all privileged file operations, including trusted ancestry, ACLs, symlinks,
+   exclusive creation, atomic replacement, and safe per-user LaunchAgent handling.
+5. Exercise failure and recovery paths in an isolated environment before enabling a PAM
+   success path or modifying a live authorization policy.
+
+The historical fixed-path FIFO claim remains unverified as an exploit. Disabling the old
+installer is hardening, not retrospective proof of that claim.
+
+## Archived design notes
+
+The material below describes the old design. It is not a deployment guide for this checkout.
 
 ## Why this path
 

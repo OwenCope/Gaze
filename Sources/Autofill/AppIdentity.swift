@@ -20,26 +20,27 @@ enum AppIdentity {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "AppIdentity")
 
-	/// The designated requirement of the installed app with this bundle identifier.
-	///
-	/// Read from the copy on disk at the moment the user saves the place. Nil when the app
-	/// is unsigned or cannot be found, and callers must treat that as "cannot be trusted"
-	/// rather than "no constraint" — see `SavedApp.requirement`.
-	static func designatedRequirement(forBundleID bundleID: String) -> String? {
-		guard
-			let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
-		else {
-			logger.notice("No installed app for \(bundleID, privacy: .public).")
-			return nil
-		}
-		return designatedRequirement(forAppAt: url)
+	struct Selection: Equatable {
+		let url: URL
+		let bundleID: String
+		let requirement: String
+	}
+
+	static func selection(forAppAt url: URL) -> Selection? {
+		let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+		guard let bundleID = Bundle(url: resolved)?.bundleIdentifier,
+			let requirement = designatedRequirement(forAppAt: resolved)
+		else { return nil }
+		return Selection(url: resolved, bundleID: bundleID, requirement: requirement)
 	}
 
 	static func designatedRequirement(forAppAt url: URL) -> String? {
 		var staticCode: SecStaticCode?
 		guard
 			SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode) == errSecSuccess,
-			let staticCode
+			let staticCode,
+			SecStaticCodeCheckValidity(staticCode, SecCSFlags(rawValue: kSecCSStrictValidate), nil)
+				== errSecSuccess
 		else { return nil }
 
 		var requirement: SecRequirement?
@@ -86,27 +87,27 @@ enum AppIdentity {
 			return false
 		}
 
-		let status = SecCodeCheckValidity(code, [], parsed)
+		let status = SecCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSStrictValidate), parsed)
 		if status != errSecSuccess {
 			logger.error("Process \(pid) does not satisfy the saved requirement (\(status)).")
 		}
 		return status == errSecSuccess
 	}
 
-	/// Whether this app renders web content, and so cannot have a saved password bound to
-	/// any particular website.
-	///
-	/// Asked of the system rather than kept as a list of names: the handlers registered for
-	/// `https` are exactly the applications macOS is willing to open a web page in, which
-	/// is the property that matters and stays right as browsers come and go.
 	static func isBrowser(bundleID: String) -> Bool {
-		browserBundleIDs.contains(bundleID.lowercased())
+		let knownBrowsers: Set<String> = [
+			"com.apple.safari", "com.apple.safaritechnologypreview", "com.google.chrome",
+			"com.google.chrome.canary", "org.mozilla.firefox", "org.mozilla.nightly",
+			"com.microsoft.edgemac", "com.brave.browser", "com.operasoftware.opera",
+			"com.vivaldi.vivaldi", "company.thebrowser.browser", "company.thebrowser.dia",
+		]
+		if knownBrowsers.contains(bundleID.lowercased()) { return true }
+		for scheme in ["http", "https"] {
+			guard let web = URL(string: "\(scheme)://example.com") else { return true }
+			if NSWorkspace.shared.urlsForApplications(toOpen: web).contains(where: {
+				Bundle(url: $0)?.bundleIdentifier?.lowercased() == bundleID.lowercased()
+			}) { return true }
+		}
+		return false
 	}
-
-	private static let browserBundleIDs: Set<String> = {
-		guard let web = URL(string: "https://example.com") else { return [] }
-		let handlers = NSWorkspace.shared.urlsForApplications(toOpen: web)
-		return Set(
-			handlers.compactMap { Bundle(url: $0)?.bundleIdentifier?.lowercased() })
-	}()
 }

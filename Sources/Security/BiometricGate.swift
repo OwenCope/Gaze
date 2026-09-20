@@ -18,7 +18,8 @@ enum BiometricGate {
 		case changeSettings = "change Gaze settings"
 		case disableTamperProtection = "turn off tamper protection"
 		case storePassword = "store your account password"
-		case addEnrollment = "add another face"
+		case addEnrollment = "enroll a face"
+		case replaceAutofillIdentity = "trust the selected application with a saved autofill password"
 	}
 
 	static var isAvailable: Bool {
@@ -53,22 +54,30 @@ enum BiometricGate {
 
 	@MainActor
 	private static func evaluate(_ reason: Reason) async -> Bool {
+		let session = AutofillSessionLease()
+		guard session.isValid else { return false }
 		// The prompt is a system panel attached to this app. From an accessory app that
 		// never activates it can end up behind other windows, where it reads as the
 		// action having silently failed — so come forward first.
 		AppActivation.bringToFront()
 
 		let context = LAContext()
+		session.onInvalidation = { context.invalidate() }
+		defer { session.onInvalidation = nil; context.invalidate() }
+		context.touchIDAuthenticationAllowableReuseDuration = 0
 		context.localizedFallbackTitle = "Use Password…"
 
 		// `deviceOwnerAuthentication` — not `…WithBiometrics` — so a Mac without Touch ID,
 		// or a finger that will not read, falls through to the password sheet.
-		do {
-			return try await context.evaluatePolicy(
-				.deviceOwnerAuthentication,
-				localizedReason: "Gaze needs to confirm it's you to \(reason.rawValue).")
-		} catch {
-			return false
+		return await withTaskCancellationHandler {
+			do {
+				let approved = try await context.evaluatePolicy(
+					.deviceOwnerAuthentication,
+					localizedReason: "Gaze needs to confirm it's you to \(reason.rawValue).")
+				return approved && session.isValid && !Task.isCancelled
+			} catch { return false }
+		} onCancel: {
+			context.invalidate()
 		}
 	}
 }

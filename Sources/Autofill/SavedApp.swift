@@ -29,19 +29,42 @@ struct SavedApp: Identifiable, Codable, Hashable {
 	/// until it is saved again. Grandfathering them in would leave exactly the hole this
 	/// closes, silently, for everyone who had already set the app up.
 	var requirement: String?
+	var applicationURL: URL?
+	var revision: UUID?
 
 	/// Whether this place carries an identity Gaze can verify.
 	var isVerifiable: Bool { requirement?.isEmpty == false }
 
 	init(
 		id: UUID = UUID(), bundleID: String, name: String, username: String = "",
-		requirement: String? = nil
+		requirement: String? = nil, applicationURL: URL? = nil
 	) {
 		self.id = id
 		self.bundleID = bundleID
 		self.name = name
 		self.username = username
 		self.requirement = requirement
+		self.applicationURL = applicationURL
+	}
+}
+
+protocol SavedAppVault {
+	func load<Value: Decodable>(_ type: Value.Type, from account: String) throws -> Value?
+	func store<Value: Encodable>(_ value: Value, as account: String) throws
+	func remove(_ account: String) throws
+}
+
+struct EncryptedSavedAppVault: SavedAppVault {
+	func load<Value: Decodable>(_ type: Value.Type, from account: String) throws -> Value? {
+		try SecureVault.load(type, from: account)
+	}
+
+	func store<Value: Encodable>(_ value: Value, as account: String) throws {
+		try SecureVault.store(value, as: account)
+	}
+
+	func remove(_ account: String) throws {
+		try SecureVault.remove(account)
 	}
 }
 
@@ -56,6 +79,7 @@ struct SavedApp: Identifiable, Codable, Hashable {
 final class SavedAppStore {
 
 	private static let listAccount = "autofill-places"
+	private static let transactionAccount = "autofill-pending-change"
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Autofill")
 
 	private static func secretAccount(for id: UUID) -> String {
@@ -63,6 +87,11 @@ final class SavedAppStore {
 	}
 
 	private(set) var apps: [SavedApp] = []
+	private(set) var storageError: String?
+	private(set) var isChanging = false
+	@ObservationIgnored private let vault: any SavedAppVault
+	@ObservationIgnored private let inspect: (URL) -> AppIdentity.Selection?
+	@ObservationIgnored private let approveIdentity: () async -> Bool
 
 	/// App icons, cached.
 	///
@@ -73,15 +102,25 @@ final class SavedAppStore {
 	/// redraw into a redraw loop.
 	@ObservationIgnored private var iconCache: [String: NSImage?] = [:]
 
-	init() {
-		load()
+	init(
+		vault: any SavedAppVault = EncryptedSavedAppVault(),
+		inspect: @escaping (URL) -> AppIdentity.Selection? = AppIdentity.selection(forAppAt:),
+		approveIdentity: @escaping () async -> Bool = {
+			await BiometricGate.require(.replaceAutofillIdentity)
+		}
+	) {
+		self.vault = vault
+		self.inspect = inspect
+		self.approveIdentity = approveIdentity
+		reload()
 	}
 
 	// MARK: - Reading
 
 	/// The place for whichever app is in front, if there is one.
 	func savedApp(forBundleID bundleID: String) -> SavedApp? {
-		apps.first { $0.bundleID == bundleID }
+		guard storageError == nil else { return nil }
+		return apps.first { $0.bundleID == bundleID }
 	}
 
 	/// The real app icon, from the installed app.
@@ -90,7 +129,11 @@ final class SavedAppStore {
 	/// somebody's saved password because they moved an app would be worse than a blank
 	/// tile, and reinstalling puts the icon straight back.
 	func icon(for savedApp: SavedApp) -> NSImage? {
-		icon(forBundleID: savedApp.bundleID)
+		guard let url = savedApp.applicationURL else { return nil }
+		if let cached = iconCache[url.path] { return cached }
+		let icon = NSWorkspace.shared.icon(forFile: url.path)
+		iconCache[url.path] = icon
+		return icon
 	}
 
 	/// Keyed on the bundle identifier rather than on a saved `SavedApp`, so the suggestion
@@ -107,88 +150,133 @@ final class SavedAppStore {
 	/// The stored password. Throws rather than returning nil on a decryption failure, so a
 	/// broken vault is never mistaken for an empty one.
 	func password(for savedApp: SavedApp) throws -> String? {
-		try SecureVault.load(Secret.self, from: Self.secretAccount(for: savedApp.id))?.password
+		try requireReady()
+		guard apps.contains(savedApp) else { throw StoreError.changed }
+		return try vault.load(Secret.self, from: Self.secretAccount(for: savedApp.id))?.password
 	}
 
-	private struct Secret: Codable {
+	private struct Secret: Codable, Equatable {
 		var password: String
 	}
 
 	// MARK: - Writing
 
 	@discardableResult
-	func add(bundleID: String, name: String, username: String, password: String) -> SavedApp? {
-		// One entry per app. Adding an app that is already saved updates it instead of
-		// creating a second row that silently never wins the match.
-		// Re-read on every save, including an update. That is what lets someone repair a
-		// record written before requirements existed, or one whose app has since been
-		// re-signed, simply by saving the place again.
-		let requirement = AppIdentity.designatedRequirement(forBundleID: bundleID)
-		if requirement == nil {
-			Self.logger.notice(
-				"\(bundleID, privacy: .public) has no verifiable signature; it will not autofill.")
+	func add(
+		bundleID: String, name: String, username: String, password: String,
+		selection: AppIdentity.Selection? = nil, replacing expected: SavedApp? = nil
+	) async throws -> SavedApp {
+		try requireReady()
+		let current = apps.first { $0.bundleID == bundleID }
+		guard current == expected else { throw StoreError.changed }
+		isChanging = true
+		defer { isChanging = false }
+		var entry = current ?? SavedApp(bundleID: bundleID, name: name)
+		if let selection {
+			guard selection.bundleID == bundleID, inspect(selection.url) == selection else {
+				throw StoreError.changed
+			}
+			if apps.contains(where: { $0.id == entry.id }), entry.requirement != selection.requirement {
+				guard await approveIdentity() else { throw StoreError.notAuthorized }
+			}
+			try Task.checkCancellation()
+			guard inspect(selection.url) == selection else { throw StoreError.changed }
+			entry.requirement = selection.requirement
+			entry.applicationURL = selection.url
+		} else if !entry.isVerifiable {
+			throw StoreError.selectionRequired
 		}
-
-		if var existing = savedApp(forBundleID: bundleID) {
-			existing.username = username
-			existing.name = name
-			existing.requirement = requirement
-			update(existing, password: password)
-			return existing
-		}
-
-		let entry = SavedApp(
-			bundleID: bundleID, name: name, username: username, requirement: requirement)
-		do {
-			try SecureVault.store(Secret(password: password), as: Self.secretAccount(for: entry.id))
-		} catch {
-			Self.logger.error("Could not store the password for \(name, privacy: .public).")
-			return nil
-		}
-		apps.append(entry)
-		apps.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-		persist()
+		try Task.checkCancellation()
+		entry.name = name
+		entry.username = username
+		entry.revision = UUID()
+		var updated = apps.filter { $0.id != entry.id }
+		updated.append(entry)
+		updated.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+		try commit(Change(apps: updated, id: entry.id, secret: Secret(password: password)))
 		return entry
 	}
 
-	/// Updates the row, and the password when a new one is given. Passing nil leaves the
-	/// stored secret alone — editing a username should not require retyping a password.
-	func update(_ savedApp: SavedApp, password: String?) {
-		if let password {
-			try? SecureVault.store(
-				Secret(password: password), as: Self.secretAccount(for: savedApp.id))
-		}
-		if let index = apps.firstIndex(where: { $0.id == savedApp.id }) {
-			apps[index] = savedApp
-		}
-		persist()
+	func remove(_ id: UUID) throws {
+		try requireReady()
+		guard apps.contains(where: { $0.id == id }) else { throw StoreError.changed }
+		try commit(Change(apps: apps.filter { $0.id != id }, id: id, secret: nil))
 	}
 
-	func remove(_ id: UUID) {
-		// The secret goes first. If persisting the list failed afterwards the worst case is
-		// a row with no password behind it, which the UI can show; the other order risks a
-		// secret with no row, which nothing would ever clean up.
-		SecureVault.remove(Self.secretAccount(for: id))
-		apps.removeAll { $0.id == id }
-		persist()
+	private struct Change: Codable, Equatable {
+		let apps: [SavedApp]
+		let id: UUID
+		let secret: Secret?
 	}
 
-	// MARK: - Persistence
+	private enum StoreError: LocalizedError {
+		case unavailable, busy, changed, notAuthorized, selectionRequired, unconfirmed
 
-	private func load() {
+		var errorDescription: String? {
+			switch self {
+			case .unavailable: "Saved passwords are unavailable. Retry storage recovery before editing or filling."
+			case .busy: "A saved-password change is already in progress."
+			case .changed: "The selected app or saved record changed. Choose the app again."
+			case .notAuthorized: "The signing identity was not changed. Fresh owner approval is required."
+			case .selectionRequired: "Choose the application again to verify its signing identity."
+			case .unconfirmed: "The saved-password change could not be confirmed."
+			}
+		}
+	}
+
+	private func requireReady() throws {
+		guard storageError == nil else { throw StoreError.unavailable }
+		guard !isChanging else { throw StoreError.busy }
+	}
+
+	func reload() {
+		guard !isChanging else { return }
 		do {
-			apps = try SecureVault.load([SavedApp].self, from: Self.listAccount) ?? []
+			if let pending = try vault.load(Change.self, from: Self.transactionAccount) {
+				try finish(pending)
+			}
+			apps = try vault.load([SavedApp].self, from: Self.listAccount) ?? []
+			storageError = nil
 		} catch {
-			Self.logger.error("Could not read the saved places; starting empty.")
-			apps = []
+			recordFailure(error)
 		}
 	}
 
-	private func persist() {
+	private func commit(_ change: Change) throws {
 		do {
-			try SecureVault.store(apps, as: Self.listAccount)
+			try storeConfirmed(change, as: Self.transactionAccount)
+			try finish(change)
+			apps = change.apps
 		} catch {
-			Self.logger.error("Could not save the places list.")
+			recordFailure(error)
+			throw error
 		}
+	}
+
+	private func finish(_ change: Change) throws {
+		if let secret = change.secret {
+			try storeConfirmed(secret, as: Self.secretAccount(for: change.id))
+		} else {
+			try removeConfirmed(Secret.self, from: Self.secretAccount(for: change.id))
+		}
+		try storeConfirmed(change.apps, as: Self.listAccount)
+		try removeConfirmed(Change.self, from: Self.transactionAccount)
+	}
+
+	private func storeConfirmed<Value: Codable & Equatable>(_ value: Value, as account: String) throws {
+		try vault.store(value, as: account)
+		guard try vault.load(Value.self, from: account) == value else {
+			throw StoreError.unconfirmed
+		}
+	}
+
+	private func removeConfirmed<Value: Decodable>(_ type: Value.Type, from account: String) throws {
+		try vault.remove(account)
+		guard try vault.load(type, from: account) == nil else { throw StoreError.unconfirmed }
+	}
+
+	private func recordFailure(_ error: Error) {
+		storageError = "\(error.localizedDescription) The change may be incomplete. Filling is blocked until storage recovery succeeds. Recovery finishes any pending change."
+		Self.logger.error("Saved-password storage is unavailable; recovery is required.")
 	}
 }

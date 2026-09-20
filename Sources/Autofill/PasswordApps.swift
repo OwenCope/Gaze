@@ -48,6 +48,7 @@ enum PasswordApps {
 		var id: String { bundleID }
 		let bundleID: String
 		let name: String
+		let url: URL
 	}
 
 	/// Installed password managers, minus anything already saved.
@@ -55,7 +56,7 @@ enum PasswordApps {
 	/// Sorted by name so the list does not reorder itself between launches depending on
 	/// what order the filesystem handed the apps over in.
 	static func suggestions(excluding saved: [String]) -> [Suggestion] {
-		var found: [String: String] = [:]
+		var found: [String: Suggestion] = [:]
 
 		for directory in searchDirectories() {
 			guard
@@ -69,7 +70,7 @@ enum PasswordApps {
 					let bundleID = bundle.bundleIdentifier,
 					hasCredentialProvider(at: url)
 				else { continue }
-				found[bundleID] = displayName(of: bundle, url: url)
+				found[bundleID] = Suggestion(bundleID: bundleID, name: displayName(of: bundle, url: url), url: url)
 			}
 		}
 
@@ -78,14 +79,14 @@ enum PasswordApps {
 				let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
 				let bundle = Bundle(url: url)
 			else { continue }
-			found[bundleID] = displayName(of: bundle, url: url)
+			found[bundleID] = Suggestion(bundleID: bundleID, name: displayName(of: bundle, url: url), url: url)
 		}
 
 		let savedSet = Set(saved)
 		return
 			found
 			.filter { !savedSet.contains($0.key) }
-			.map { Suggestion(bundleID: $0.key, name: $0.value) }
+			.map(\.value)
 			.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 	}
 

@@ -39,15 +39,16 @@ struct SpoofDetector: @unchecked Sendable {
 	}
 
 	/// Strongest "spoof" detection in the frame, 0…1 (0 when nothing spoof-like is seen).
-	func spoofConfidence(_ sample: FaceSample) -> Float {
+	func spoofConfidence(_ sample: FaceSample) -> Float? {
 		let request = VNCoreMLRequest(model: model)
 		request.imageCropAndScaleOption = .scaleFill
 		let handler = VNImageRequestHandler(cvPixelBuffer: sample.pixelBuffer, options: [:])
-		try? handler.perform([request])
-		let objects = (request.results as? [VNRecognizedObjectObservation]) ?? []
+		do { try handler.perform([request]) } catch { return nil }
+		guard let objects = request.results as? [VNRecognizedObjectObservation] else { return nil }
 		var best: Float = 0
 		for object in objects {
 			guard let top = object.labels.first else { continue }
+			guard top.confidence.isFinite, (0...1).contains(top.confidence) else { return nil }
 			if top.identifier == Self.spoofLabel {
 				best = max(best, top.confidence)
 			}
