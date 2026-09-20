@@ -80,7 +80,8 @@
         "evidenceRefs": [
           "Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md",
           "Tools/Release/ModelClearance/sapphire-evidence/LICENSE",
-          "Tools/Release/ModelClearance/SHARIQ-PERMISSION-20260918.md"
+          "Tools/Release/ModelClearance/SHARIQ-PERMISSION-20260918.md",
+          "KNOWN ACCEPTED RISK, owner 2026-09-20: NOTICE.md:70-73 records that if these weights descend from InsightFace, its pretrained models are licensed for non-commercial research only, which is independent of InsightFace's MIT code licence. Shariq's permission cannot cure this - he is a redistributor, not the rights holder. This gates shipping, not publishing. Not cleared; recorded as a risk the owner carries knowingly."
         ],
         "redistributionScope": [
           "bundled-app-distribution",
@@ -335,7 +336,7 @@
         ]
       },
       "provenance": {
-        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files — tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png — as screenshots/renders of their own machine and app with no third-party content; authorship of the other 25 files remains unconfirmed.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files \u2014 tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png \u2014 as screenshots/renders of their own machine and app with no third-party content; authorship of the other 25 files remains unconfirmed.",
         "evidenceRefs": [
           "build.sh:131-134",
           "Tools/OnboardingArt/manifest.json",

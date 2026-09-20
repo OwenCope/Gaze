@@ -48,3 +48,7 @@ Tools/*Scope.md
 Tools/*Scan.md
 Tools/*Triage.md
 Tools/*Paperwork.md
+
+# Raw face-embedding package: provenance unresolved, not for publication.
+# build.sh prefers the local prebuilt .mlmodelc; see NOTICE.md.
+Resources/FaceEmbedding.mlpackage/
