@@ -83,6 +83,21 @@ weight/training rights; those questions remain separate from Shariq's permission
 The source-archive script excludes model inputs. The geometry fallback is not an
 approved substitute for the Mac-unlock recognition model.
 
+### The spoof-detection training data
+
+`Resources/Spoof.mlmodel` is a model the Gaze author trained, not a third-party
+model being redistributed: it was trained on the author's own machine with
+`scripts/train_spoof.swift`, a CreateML object detector, and compiled into the app
+by `build.sh`. What is third-party is the data it learned from — **Face Spoof
+Detection** (<https://universe.roboflow.com/mohammeds-workspace-ft3sn/face-spoof-detection-liika>),
+provided by a Roboflow user and exported via roboflow.com on 19 August 2026
+(30,351 images across train/valid/test splits). That dataset is licensed
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), which is why this
+notice names it. The bundled weights are a derivative work trained on the
+dataset, not a copy of it: the gigabytes of training images stay on the author's
+machine (`Data/spoof-detection/`, deliberately git-ignored) and never ship with
+the app.
+
 ### FaceIDKit
 
 The animations in setup are **Aviorrok's**, licensed to this app alone and explicitly

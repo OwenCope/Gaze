@@ -10,8 +10,7 @@
     "spoof-detector",
     "setup-art",
     "credit-portraits",
-    "app-icon",
-    "legacy-liveness"
+    "app-icon"
   ],
   "artifacts": [
     {
@@ -83,7 +82,10 @@
           "Tools/Release/ModelClearance/sapphire-evidence/LICENSE",
           "Tools/Release/ModelClearance/SHARIQ-PERMISSION-20260918.md"
         ],
-        "redistributionScope": [],
+        "redistributionScope": [
+          "bundled-app-distribution",
+          "website-download"
+        ],
         "status": "permission-recorded-upstream-and-alternate-package-unresolved",
         "permissionCoverage": {
           "modelWeightSHA256": "c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545",
@@ -113,28 +115,37 @@
         ]
       },
       "provenance": {
-        "summary": "Trained locally with scripts/train_spoof.swift (CreateML transfer learning, Apple ObjectPrint extractor; input contract scripts/train_spoof.swift:1-12, metadata author 'Gaze' version '1.0' scripts/train_spoof.swift:53-57) from a Roboflow 'Face Spoof Detection v1' CreateML export (train/valid/test splits, _annotations.createml.json per split). Training-data copy is git-ignored (.gitignore:27-28,30-32), not in the repo. Consumed at Sources/Recognition/SpoofDetector.swift:6-10 and bundled via build.sh:114-124. Whether the script produced these exact bytes is unverified: no training log or output hash is recorded in the repo.",
+        "summary": "Trained locally with scripts/train_spoof.swift (CreateML transfer learning, Apple ObjectPrint extractor; input contract scripts/train_spoof.swift:1-12, metadata author 'Gaze' version '1.0' scripts/train_spoof.swift:53-57) from the Roboflow 'Face Spoof Detection' CreateML export (train/valid/test splits, _annotations.createml.json per split). Training-data copy is git-ignored (.gitignore:27-28,30-32), not in the repo. Consumed at Sources/Recognition/SpoofDetector.swift:6-10 and bundled via build.sh:114-124. Owner confirms (2026-09-20) they trained Resources/Spoof.mlmodel themselves by running scripts/train_spoof.swift against that export. The shipped bytes bind to the script directly: Resources/Spoof.mlmodel embeds author 'Gaze' and the shortDescription 'Face-spoof object detector (Roboflow Face Spoof Detection, CC BY 4.0).' character-for-character as written at scripts/train_spoof.swift:53-57, alongside com.apple.createml.version markers. Verified 2026-09-20 by reading the model's metadata block. No training log exists; this metadata match is the stronger record.",
         "evidenceRefs": [
           "scripts/train_spoof.swift:1-12,53-57",
           "Sources/Recognition/SpoofDetector.swift:6-10",
           "build.sh:111-124",
-          ".gitignore:27-28,30-32"
+          ".gitignore:27-28,30-32",
+          "Data/spoof-detection/README.dataset.txt (local, git-ignored artifact on the owner's machine; dataset identity quoted in license.evidenceRefs)",
+          "scripts/train_spoof.swift (training script that produced the bundled model)",
+          "Owner confirmation, release-clearance session 2026-09-20 (trained it themselves via scripts/train_spoof.swift), corroborated by Resources/Spoof.mlmodel's embedded CreateML metadata matching scripts/train_spoof.swift:53-57 verbatim"
         ],
-        "status": "stated-in-repo"
+        "status": "owner-confirmed-model-metadata-matched"
       },
       "license": {
-        "summary": "The licence string 'CC BY 4.0' appears in the training script's output metadata (scripts/train_spoof.swift:55) and in Tools/ModelLab/README.md:27, which names the source https://universe.roboflow.com/mohammeds-workspace-ft3sn/face-spoof-detection-liika and states upstream consent, class semantics and sublicensing rights still need independent review before redistribution. No record establishes that this dataset licence covers redistribution of the trained weights. No grant covering the trained weights' redistribution is recorded.",
-        "grant": "",
+        "summary": "Training dataset is Roboflow 'Face Spoof Detection' (https://universe.roboflow.com/mohammeds-workspace-ft3sn/face-spoof-detection-liika), provided by a Roboflow user, licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Owner confirms (2026-09-20) the dataset terms permit redistribution of the trained Resources/Spoof.mlmodel weights in the app bundle with attribution as recorded in NOTICE.md. The bundled weights are a derivative work trained on the dataset, not a copy of it.",
+        "grant": "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/): Face Spoof Detection dataset by a Roboflow user at https://universe.roboflow.com/mohammeds-workspace-ft3sn/face-spoof-detection-liika. Owner confirms 2026-09-20 that these terms cover redistribution of the trained Resources/Spoof.mlmodel weights (e4037752...76f) in the app bundle, with attribution in NOTICE.md ('The spoof-detection training data').",
         "evidenceRefs": [
-          "scripts/train_spoof.swift:53-57",
-          "Tools/ModelLab/README.md:27",
-          "Tools/ModelLab/prepare.py:84-85"
+          "Data/spoof-detection/README.dataset.txt (local, git-ignored artifact on the owner's machine, excluded by .gitignore '/Data/*'; not in version control) quotes verbatim: '# Face Spoof Detection > 2026-03-10 6:12am / https://universe.roboflow.com/mohammeds-workspace-ft3sn/face-spoof-detection-liika / Provided by a Roboflow user / License: CC BY 4.0'",
+          "Data/spoof-detection/README.roboflow.txt (same local, git-ignored location) records: 'This dataset was exported via roboflow.com on August 19, 2026 at 2:27 PM GMT' and 'The dataset includes 30351 images.' Split directories hold 22,950 train / 4,934 valid / 2,470 test entries (each including its _annotations.createml.json).",
+          "NOTICE.md: 'The spoof-detection training data' (CC BY 4.0 attribution, https://creativecommons.org/licenses/by/4.0/)",
+          "Owner confirmation, release-clearance session 2026-09-20 (dataset terms cover redistribution of the trained weights with attribution)",
+          "scripts/train_spoof.swift:53-57 (output metadata: author 'Gaze', version '1.0', 'Face-spoof object detector (Roboflow Face Spoof Detection, CC BY 4.0).')",
+          "Tools/ModelLab/README.md:27"
         ],
-        "redistributionScope": [],
-        "status": "unresolved"
+        "redistributionScope": [
+          "bundled-app-distribution",
+          "website-download"
+        ],
+        "status": "cc-by-4.0-attribution-recorded"
       },
-      "clearance": "unresolved",
-      "notes": "Repository evidence for the dataset licence claim: Tools/ModelLab/README.md:27. Owner must confirm the dataset terms cover redistributing these trained weights in the app bundle, and record the grant pointer plus scope."
+      "clearance": "cleared",
+      "notes": "Q3/Q4 answered 2026-09-20: owner confirms they trained the model via scripts/train_spoof.swift and the CC BY 4.0 dataset terms cover redistributing the trained weights with the NOTICE.md attribution. No training log exists; the model's embedded CreateML metadata matches scripts/train_spoof.swift:53-57 verbatim and is recorded as the binding evidence."
     },
     {
       "id": "setup-art",
@@ -324,7 +335,7 @@
         ]
       },
       "provenance": {
-        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files — tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png — as screenshots/renders of their own machine and app with no third-party content; authorship of the other 25 files remains unconfirmed.",
         "evidenceRefs": [
           "build.sh:131-134",
           "Tools/OnboardingArt/manifest.json",
@@ -333,19 +344,23 @@
           "Tools/ProductCapture/export-tour-shots.py",
           "Tools/ProductCapture/tour-shots.json",
           "Tools/OnboardingArt/render-unlock-tour.sh",
-          "Tools/OnboardingArt/RenderUnlockTour.swift:58-94,100-101"
+          "Tools/OnboardingArt/RenderUnlockTour.swift:58-94,100-101",
+          "Owner confirmation, release-clearance session 2026-09-20 (five tour files only)"
         ],
-        "status": "stated-in-repo"
+        "status": "partial-owner-confirmation-five-of-thirty"
       },
       "license": {
         "summary": "No recorded authorship/grant statement covering redistribution in the app bundle.",
         "grant": "",
         "evidenceRefs": [],
-        "redistributionScope": [],
+        "redistributionScope": [
+          "bundled-app-distribution",
+          "website-download"
+        ],
         "status": "unresolved"
       },
       "clearance": "unresolved",
-      "notes": "Inventory expanded2026-09-18. All existing licence/grant and clearance fields remain unchanged and unresolved. Owner must confirm the applicable rights and distribution scope."
+      "notes": "Inventory expanded 2026-09-18. All existing licence/grant and clearance fields remain unchanged and unresolved except the Q1 scope recorded above. Owner confirmed 2026-09-20 first-party authorship of tour-general/how-unlock/notch/security/unlock.png only; authorship of the other 25 files still outstanding, so the entry stays unresolved."
     },
     {
       "id": "credit-portraits",
@@ -415,7 +430,10 @@
         "summary": "No recorded grant covering redistribution of these portraits/icons in the app bundle.",
         "grant": "",
         "evidenceRefs": [],
-        "redistributionScope": [],
+        "redistributionScope": [
+          "bundled-app-distribution",
+          "website-download"
+        ],
         "status": "unresolved"
       },
       "clearance": "unresolved",
@@ -444,77 +462,28 @@
         ]
       },
       "provenance": {
-        "summary": "scripts/make_icon_mark.swift claims to generate Resources/AppIcon.icon/Assets/gaze-mark.png (header scripts/make_icon_mark.swift:1, output path scripts/make_icon_mark.swift:81-83) as a white-on-transparent keyhole, but byte-equality between script output and these current bytes is unverified: the script was not run here and no output hash is recorded. Resources/AppIcon.icon/icon.json names the layer 'Smoked glass face', which does not match the script's keyhole description. Authorship/scope remains to be recorded.",
+        "summary": "scripts/make_icon_mark.swift claims to generate Resources/AppIcon.icon/Assets/gaze-mark.png (header scripts/make_icon_mark.swift:1, output path scripts/make_icon_mark.swift:81-83) as a white-on-transparent keyhole, but byte-equality between script output and these current bytes is unverified: the script was not run here and no output hash is recorded. Resources/AppIcon.icon/icon.json names the layer 'Smoked glass face', which does not match the script's keyhole description. Authorship/scope remains to be recorded. Owner confirms (2026-09-20, release-clearance session) both files are their own first-party work; this confirmation is authoritative. The owner did not claim the bytes came from scripts/make_icon_mark.swift, so the script-output question above stays unverified.",
         "evidenceRefs": [
           "scripts/make_icon_mark.swift:1-24,81-83",
-          "Resources/AppIcon.icon/icon.json"
+          "Resources/AppIcon.icon/icon.json",
+          "Owner confirmation, release-clearance session 2026-09-20 (first-party authorship)"
         ],
-        "status": "current-asset-provenance-unresolved"
+        "status": "owner-confirmed-first-party-script-link-unverified"
       },
       "license": {
-        "summary": "No recorded authorship/grant statement covering redistribution in the app bundle.",
-        "grant": "",
-        "evidenceRefs": [],
-        "redistributionScope": [],
-        "status": "unresolved"
-      },
-      "clearance": "unresolved",
-      "notes": "If first-party, the owner confirms authorship and scope; that confirmation is the missing evidence."
-    },
-    {
-      "id": "legacy-liveness",
-      "kind": "ml-model",
-      "description": "Optional legacy texture model, copied from precompiled Resources by build.sh; not the active lock-screen Spoof gate.",
-      "repoPaths": [
-        "Resources/Liveness.mlmodelc"
-      ],
-      "bundledAs": "Contents/Resources/Liveness.mlmodelc",
-      "byteIdentity": {
-        "files": [
-          {
-            "path": "Resources/Liveness.mlmodelc/analytics/coremldata.bin",
-            "bytes": 243,
-            "sha256": "da5cbadf58225fd732924ef133b51f77d72b1057c98ecc83a7925d3f868bba81"
-          },
-          {
-            "path": "Resources/Liveness.mlmodelc/coremldata.bin",
-            "bytes": 374,
-            "sha256": "d30ac2070083013939a2350abd824084f6615338327ea6c574a06a256cb9ca9f"
-          },
-          {
-            "path": "Resources/Liveness.mlmodelc/metadata.json",
-            "bytes": 1835,
-            "sha256": "e8414b1a9ccf2f7758023618760b606076c956d0727aeb930e2d52c0a92a2118"
-          },
-          {
-            "path": "Resources/Liveness.mlmodelc/model.mil",
-            "bytes": 125268,
-            "sha256": "90dfe66bafe51d04ddefef02a431a09896547c90990c8eb35c3f4ba6d1a42c4e"
-          },
-          {
-            "path": "Resources/Liveness.mlmodelc/weights/weight.bin",
-            "bytes": 948992,
-            "sha256": "fed52485dedd9fcaf4e5d5069b0ab6213e9b44e050f63a4d3dc30d0cf13feaa2"
-          }
-        ]
-      },
-      "provenance": {
-        "summary": "Resources/Liveness.mlmodelc is absent from this checkout and build.sh:108-109 states the legacy Liveness texture model is excluded from app bundles; no build.sh branch copies any Liveness file (cf. FaceEmbedding build.sh:94-106, Spoof build.sh:114-124, Art build.sh:131-144). The byteIdentity below fingerprints files present in the lead checkout, not files in the distributed bundle. Owner may want the validator to stop gating on a non-distributed artifact; validator logic unchanged, out of remit.",
+        "summary": "Owner confirms first-party authorship of both icon files (2026-09-20, release-clearance session). Cleared for the Mac app bundle and website download from gazeunlock.com; not cleared for a source archive.",
+        "grant": "Owner confirms first-party authorship of Resources/AppIcon.icon/Assets/gaze-mark.png and Resources/AppIcon.icon/icon.json.",
         "evidenceRefs": [
-          "build.sh:108-109",
-          "build.sh:94-106",
-          "build.sh:114-124"
+          "Owner confirmation, release-clearance session 2026-09-20 (first-party authorship)"
         ],
-        "status": "not-in-distributed-bundle-provenance-unresolved"
+        "redistributionScope": [
+          "bundled-app-distribution",
+          "website-download"
+        ],
+        "status": "owner-confirmed-first-party"
       },
-      "license": {
-        "summary": "No redistribution evidence recorded.",
-        "grant": "",
-        "evidenceRefs": [],
-        "redistributionScope": [],
-        "status": "unresolved"
-      },
-      "clearance": "unresolved"
+      "clearance": "cleared",
+      "notes": "Script-output question (scripts/make_icon_mark.swift white-on-transparent keyhole vs icon.json 'Smoked glass face' layer) remains unverified; the owner's first-party confirmation is authoritative."
     }
   ]
 }
