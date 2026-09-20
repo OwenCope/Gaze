@@ -55,7 +55,10 @@ test "$1" = --assess && test "${GAZE_TEST_FAILURE:-}" != gatekeeper
 MOCK
 cat > "$BIN/lipo" <<'MOCK'
 #!/bin/bash
-test "$1" = -archs && echo arm64
+# A release artifact is universal. GAZE_TEST_FAILURE=architecture drops the
+# Intel slice so the verifier's rejection of a host-only build is exercised.
+test "$1" = -archs || exit 1
+if [ "${GAZE_TEST_FAILURE:-}" = architecture ]; then echo arm64; else echo "x86_64 arm64"; fi
 MOCK
 chmod +x "$BIN/"*
 export PATH="$BIN:$PATH"
@@ -85,6 +88,8 @@ export GAZE_TEST_FAILURE=adhoc
 check fail 'No signing authority'
 export GAZE_TEST_FAILURE=authority
 check fail 'Developer ID Application signature required'
+export GAZE_TEST_FAILURE=architecture
+check fail 'Missing x86_64 slice'
 unset GAZE_TEST_FAILURE
 for entitlement in get-task-allow cs.allow-jit cs.disable-library-validation cs.allow-dyld-environment-variables cs.allow-unsigned-executable-memory cs.disable-executable-page-protection; do
 	/usr/libexec/PlistBuddy -c "Add :com.apple.security.$entitlement bool true" "$GAZE_TEST_ENTITLEMENTS"
@@ -120,5 +125,5 @@ chmod +x "$APP/Contents/MacOS/Gaze"
 mv "$APP/Contents/Info.plist" "$SCRATCH/Info.plist"
 check fail 'Bundle Info.plist missing'
 mv "$SCRATCH/Info.plist" "$APP/Contents/Info.plist"
-check pass 'Architecture: arm64'
+check pass 'Architecture: x86_64 arm64'
 echo "PASS: $COUNT artifact-verifier checks; synthetic bundle, mocked signing/notarization tools, no network or app launch."

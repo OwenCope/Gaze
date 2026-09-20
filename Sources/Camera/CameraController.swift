@@ -112,7 +112,12 @@ final class CameraController {
 			guard let self, self.lease.generation == generation else { return }
 			self.stop()
 			self.state = .failed("Camera paused when the Mac locked, slept or changed users. Reopen this window after unlocking to restart it.")
-		}) else { return }
+		}) else {
+			// The lease generation was already minted above; release it so nothing
+			// reads an open lease as an active capture.
+			lease.stop()
+			return
+		}
 
 		let authorized = await requestAccess()
 		guard lease.generation == generation, sessionGate.isValid else { return }

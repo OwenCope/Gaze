@@ -97,6 +97,7 @@ struct SetupFlow: View {
 					model: model,
 					onAuthorized: startCamera,
 					onBack: purpose == .addFace ? nil : back,
+					onClose: purpose == .addFace ? onFinish : nil,
 					onRetry: retry
 				)
 				.id(captureSession)
@@ -212,7 +213,7 @@ struct SetupFlow: View {
 		purpose = SetupRequest.presentation.purpose
 		plan = makePlan(including: requested)
 		step = requested ?? (purpose == .addFace ? .capture : .welcome)
-		if step == .welcome && purpose == .onboarding { OnboardingHistory.markPresented() }
+		if step == .capture && purpose == .onboarding { OnboardingHistory.markPresented() }
 	}
 
 	/// Whether the launch flag has already been honoured.
@@ -294,6 +295,7 @@ struct SetupFlow: View {
 		guard let next = nextStep(after: step) else { return }
 		isReturning = false
 		withAnimation(stepAnimation) { step = next }
+		if next == .capture && purpose == .onboarding { OnboardingHistory.markPresented() }
 		if next == .done { enableUnlockIfSetupComplete() }
 	}
 
@@ -407,6 +409,7 @@ struct SetupFlow: View {
 		failure = nil
 		model = nil
 		isReturning = false
+		if purpose == .onboarding { OnboardingHistory.markPresented() }
 		withAnimation(stepAnimation) { step = .capture }
 		startCamera()
 	}

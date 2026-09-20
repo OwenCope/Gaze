@@ -770,6 +770,7 @@ struct SettingToggle: View {
 		) {
 			Toggle(title, isOn: $isOn)
 				.labelsHidden()
+				.accessibilityLabel(title)
 				.accessibilityHint(detail ?? "")
 				.toggleStyle(.switch)
 				.controlSize(.small)
@@ -1028,6 +1029,10 @@ struct InfoButton<Content: View>: View {
 	@State private var buttonHovered = false
 	@State private var popoverHovered = false
 	@State private var pinned = false
+	@FocusState private var buttonFocused: Bool
+	@FocusState private var popoverFocused: Bool
+	// Keyboard focus and VoiceOver focus are separate systems; the popover needs both.
+	@AccessibilityFocusState private var popoverVoiceOverFocused: Bool
 
 	var body: some View {
 		Button {
@@ -1048,6 +1053,7 @@ struct InfoButton<Content: View>: View {
 		.buttonStyle(.plain)
 		.help(title)
 		.accessibilityLabel(title)
+		.focused($buttonFocused)
 		.onHover { buttonHovered = $0 }
 		.popover(isPresented: $isShowing, arrowEdge: .bottom) {
 			VStack(alignment: .leading, spacing: 10) {
@@ -1062,6 +1068,10 @@ struct InfoButton<Content: View>: View {
 			.multilineTextAlignment(.leading)
 			.padding(16)
 			.frame(width: 300)
+			.focusable()
+			.focused($popoverFocused)
+			.accessibilityElement(children: .combine)
+			.accessibilityFocused($popoverVoiceOverFocused)
 			.onHover { popoverHovered = $0 }
 		}
 		.task(id: buttonHovered || popoverHovered) {
@@ -1073,7 +1083,12 @@ struct InfoButton<Content: View>: View {
 			isShowing = hovering
 		}
 		.onChange(of: isShowing) { _, shown in
-			if !shown { pinned = false; popoverHovered = false }
+			// Escape and outside-clicks dismiss via the binding, so focus is restored here rather than in key handling.
+			if shown { popoverFocused = true; popoverVoiceOverFocused = true } else {
+				let hadFocus = popoverFocused
+				pinned = false; popoverHovered = false
+				if hadFocus { buttonFocused = true }
+			}
 		}
 		.onDisappear { isShowing = false; pinned = false }
 	}

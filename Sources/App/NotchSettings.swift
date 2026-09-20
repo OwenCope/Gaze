@@ -231,7 +231,7 @@ private struct NotchAdjustmentRow: View {
 			Text(format(value))
 				.font(Typography.detail.monospacedDigit())
 				.foregroundStyle(Theme.secondaryLabel)
-				.frame(width: 48, alignment: .trailing)
+				.frame(minWidth: 48, alignment: .trailing)
 				.accessibilityHidden(true)
 		}
 		.padding(.horizontal, Theme.rowInset)

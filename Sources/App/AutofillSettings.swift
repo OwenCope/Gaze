@@ -243,6 +243,7 @@ struct AutofillSection: View {
 						.foregroundStyle(Theme.danger)
 				}
 				.buttonStyle(.plain)
+				.accessibilityLabel("Remove \(savedApp.name)")
 				.help("Remove \(savedApp.name)")
 			}
 		}

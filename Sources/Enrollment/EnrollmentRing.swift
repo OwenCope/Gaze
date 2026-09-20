@@ -41,6 +41,9 @@ struct EnrollmentRing: View {
 			}
 			.frame(width: side, height: side)
 			.position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+			.accessibilityElement(children: .ignore)
+			.accessibilityLabel("Enrollment progress")
+			.accessibilityValue("\(covered.filter { $0 }.count) of \(covered.count) segments covered")
 			.animation(reduceMotion ? nil : Theme.Motion.quick, value: covered)
 			.animation(reduceMotion ? nil : Theme.Motion.quick, value: targetSegment)
 		}

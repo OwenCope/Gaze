@@ -336,7 +336,7 @@ final class LockWatcher {
 		guard requestIsCurrent() else { capsule.hide(); return }
 		let antiSpoof: AntiSpoofGate? = {
 			guard antiSpoofEnabled else { return nil }
-			return AntiSpoofGate(spoof: SpoofDetector())
+			return AntiSpoofGate(spoof: SpoofDetector.shared)
 		}()
 		if let antiSpoof, !antiSpoof.isActive {
 			report(.verificationUnavailable)

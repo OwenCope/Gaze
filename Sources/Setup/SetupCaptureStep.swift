@@ -22,6 +22,7 @@ struct SetupCaptureStep: View {
 	let model: EnrollmentModel?
 	var onAuthorized: () -> Void
 	var onBack: (() -> Void)?
+	var onClose: (() -> Void)? = nil
 	var onRetry: (() -> Void)? = nil
 
 	@State private var authorization = AVCaptureDevice.authorizationStatus(for: .video)
@@ -38,7 +39,7 @@ struct SetupCaptureStep: View {
 				capture
 			} else {
 				SetupCameraAccessContent(position: position, authorization: authorization,
-					isRequesting: isRequesting, onRequest: requestAccess, onBack: onBack)
+					isRequesting: isRequesting, onRequest: requestAccess, onBack: onBack, onClose: onClose)
 			}
 		}
 		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -134,7 +135,7 @@ struct SetupCaptureStep: View {
 			return "Make sure the built-in camera is available and the lens is unobstructed. Your face hasn’t been saved."
 		}
 		guard isAuthorized else {
-			return "Nothing is recorded, and no images ever leave this Mac."
+			return "Nothing is recorded until you enrol, and no images ever leave this Mac."
 		}
 		guard let model else { return "Starting the camera…" }
 		if camera.faceMissing {
@@ -144,7 +145,7 @@ struct SetupCaptureStep: View {
 			case .detectionFailed:
 				if onBack != nil { return "Face analysis is unavailable for this frame. If it persists, go back and reopen capture." }
 				return "Face analysis is unavailable for this frame. Check the camera and lighting, then continue."
-			default: return "Look at the camera and fill the circle. Your captured progress is kept."
+			default: return "Look at the camera and fill the circle."
 			}
 		}
 		return model.instruction
@@ -197,6 +198,7 @@ struct SetupCameraAccessContent: View {
 	var isRequesting = false
 	var onRequest: () -> Void
 	var onBack: (() -> Void)?
+	var onClose: (() -> Void)?
 
 	static func actionTitle(for status: AVAuthorizationStatus) -> String? {
 		switch status {
@@ -212,11 +214,12 @@ struct SetupCameraAccessContent: View {
 			title: authorization == .restricted ? "Camera access is restricted" : "Let Gaze see you",
 			message: message,
 			figureHeight: 132,
-			onBack: onBack
+			onBack: onBack,
+			onClose: onClose
 		) {
 			SetupGlyph(symbol: "camera")
 		} detail: {
-			Label("Recognition happens on this Mac. Nothing is recorded.", systemImage: "lock")
+			Label("Recognition happens on this Mac. Nothing is recorded until you enrol.", systemImage: "lock")
 				.font(.system(size: 12))
 				.foregroundStyle(Theme.setupSecondary)
 				.padding(.top, 24)
