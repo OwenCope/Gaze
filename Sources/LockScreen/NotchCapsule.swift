@@ -71,10 +71,16 @@ final class NotchCapsuleModel {
 		static let notRecognisedCaption = "Not recognised. Try again."
 		/// The mark's own symbol for a miss, matching the Settings face glyph.
 		static let notRecognisedSymbol = "faceid"
-		/// The words shown when the anti-spoof model rejects a photo or screen.
-		static let spoofRejectedCaption = "Photo rejected. Use your password."
-		/// Photo-specific symbol, as used for held-photo states elsewhere.
-		static let spoofRejectedSymbol = "photo.badge.exclamationmark"
+		/// The words shown when the anti-spoof check refuses the attempt.
+		///
+		/// It does not say "photo": the detector looks for a phone, screen or print
+		/// anywhere in frame, so a real face can be refused because of a monitor or a
+		/// picture on the wall behind it. Naming a cause the app cannot be sure of
+		/// accuses the owner of something they did not do. "Use your password" rather
+		/// than "try again" because looking again will not clear it.
+		static let spoofRejectedCaption = "Face rejected. Use your password."
+		/// A blocked-by-a-check symbol, rather than one naming a cause.
+		static let spoofRejectedSymbol = "exclamationmark.shield"
 
 		/// The words the panel shows, where the phase carries its own.
 		var challengePrompt: String? {
