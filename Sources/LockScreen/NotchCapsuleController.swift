@@ -182,8 +182,11 @@ final class NotchCapsuleController {
 		// island taller.
 		let isIsland = Preferences.shared.panelShape == .island
 		let cutout = NotchMetrics.width(on: screen) ?? 180
-		// Reserve caption space only when captions are shown so prompts cannot clip.
-		let challengeRoom: CGFloat = isIsland ? 0 : (Preferences.shared.showNotchCaptions ? 30 : 0)
+		// Always reserved, captions or not. Tying this to the captions toggle made the
+		// panel a third shorter for anyone who turned captions off, and the owner's
+		// call is that the panel keeps its size — the toggle hides words, it does not
+		// shrink the thing. Do not make this conditional again.
+		let challengeRoom: CGFloat = isIsland ? 0 : 30
 		let dropHeight =
 			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout) : 66)
 			+ challengeRoom
