@@ -8,10 +8,10 @@ this one, but no code was copied (it is GPL-3.0; see *Licensing* below).
 
 **Development build, not a release recommendation.** Real lock-screen unlocking,
 recognition/PAD evaluation, redistribution evidence and clean-install testing are
-still release gates. See `Tools/Release/READINESS.md` for the current checklist.
+still release gates.
 
 ```sh
-git clone https://github.com/OwenCope/FaceID.git Gaze
+git clone https://github.com/OwenCope/Gaze.git
 cd Gaze
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./build.sh
 open "build/Gaze.app"
@@ -41,8 +41,8 @@ confirm an actual unlock. A stalled camera or failed check must leave manual
 authentication available, not trigger password retries.
 
 Historical scores from individual users are not a validation study. Current
-lock-screen reliability and false-accept/PAD performance still need the release
-evaluation described in `Tools/Release/READINESS.md`.
+lock-screen reliability and false-accept/PAD performance still need independent
+release evaluation.
 
 ---
 
@@ -53,11 +53,9 @@ The working folder is organized as follows:
 | Location | Contents |
 | --- | --- |
 | `Sources/`, `Resources/`, `Plugin/` | App code, bundled resources and authentication plugin |
-| [Tools/](Tools/README.md) | Regression checks, previews, model experiments and release tooling |
-| [Data/](Data/README.md) | Local training and evaluation datasets, excluded from source control |
+| `Tools/` | Preview app, release signing and model-clearance tooling |
 | `build/Gaze.app` | Normal local app build |
-| `build/installers/` | Packaged DMGs and their checksums |
-| `build/archive/` | Older generated outputs, with a manifest of their original paths |
+| `build/release/Gaze.app` | Distribution build (`DIST=1`), separate from the local app |
 | `script/`, `scripts/` | App launcher and model/icon generation scripts |
 
 ```
@@ -78,12 +76,17 @@ screen locks
 | `Sources/LockScreen` | The notch panel and the SkyLight space that hosts it |
 | `Sources/App` | App entry, settings, design tokens |
 
+Two sources do not ship in this app. `Sources/Autofill/` and
+`Sources/App/AutofillSettings.swift` belong to the Gaze Passwords direction;
+`Tools/MainAppSources.sh` excludes them from the Gaze build, and they are kept
+here for shared code and a future migration.
+
 ### Unlocking
 
 The app watches for the screen lock, recognises you, and types your stored password into
 the login window. Touch ID keeps working, and the login window is Apple's own — so if
-recognition fails, manual authentication remains the intended fallback. The release
-checklist includes testing that fallback through cancellation, failures, and updates.
+recognition fails, manual authentication remains the intended fallback. Release
+still needs testing of that fallback through cancellation, failures, and updates.
 
 Your password is stored on this Mac in a form Gaze can recover. Face verification controls
 when Gaze chooses to use it; it is not a cryptographic factor required to decrypt it.
@@ -117,8 +120,8 @@ break, password submission is refused and the user must unlock manually.
 2. Enrol, then menu bar → **Test Recognition** to see live scores
 3. Read `Sources/Security/LockWatcher.swift` — the whole unlock flow is one file
 
-`--preview-capsule` shows the lock-screen panel without locking, which makes iterating on
-it much faster.
+The standalone preview in `Tools/GazePreview/` stages the lock-screen panel
+without locking, which makes iterating on it much faster.
 
 ---
 
@@ -141,7 +144,7 @@ The face model is described historically as Sapphire's `ModernFace`, but the
 repository's license records are inconsistent. Owner-reported permission must be
 documented for the exact bundled model and intended distribution. Do not infer a
 model's redistribution rights from the source repository's license alone.
-`Tools/Release/READINESS.md` tracks this open gate alongside other model and asset
+That permission is still an open gate, alongside other model and asset
 permissions. Changing the embedding model requires compatible enrollment handling
 and a new recognition evaluation; it is not a packaging-only replacement.
 

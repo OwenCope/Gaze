@@ -1,5 +1,11 @@
 # Working on this
 
+## Before you start
+
+Two things this repository does not contain. The recognition model is unpublished — its redistribution rights are unresolved (see `NOTICE.md`) — so a fresh clone builds and runs on a landmark-geometry fallback that is materially weaker and not approved for unlocking a Mac. Supply your own `Resources/FaceEmbedding.mlpackage` to get the real one.
+
+The regression suites are unpublished too. Where `SECURITY.md` quotes check results, those runs were private and cannot be repeated from this repository. The replacement is measurement on real hardware: enrol, use Test Recognition, and distrust any threshold you have not measured yourself.
+
 ## First run on your machine
 
 ```sh
@@ -76,8 +82,10 @@ both work.
 
 Local signing requires a valid Apple Development or Developer ID Application identity.
 `DIST=1` requires Developer ID Application and a secure timestamp; release output
-defaults to `build/release/Gaze.app`, separate from the local app. Distribution also
-requires the evidence and checks in `Tools/Release/READINESS.md`.
+defaults to `build/release/Gaze.app`, separate from the local app. Distribution additionally
+needs a Developer ID signature with a secure timestamp and recorded model and
+asset clearance; the signing helper is `Tools/Release/Signing.sh` and the
+clearance inventory is `Tools/Release/ModelClearance/`.
 
 **Sign with a real identity, not ad-hoc.** The Keychain ACL protecting the vault key is
 bound to the app's code identity, and an ad-hoc signature is regenerated every build — so
@@ -89,8 +97,8 @@ keychain password on every rebuild.
 The historical source/model license descriptions conflict. Before publishing source
 or distributing an app, record the applicable licenses or permissions for the exact
 models and third-party assets included. A source repository license is not itself
-evidence of the weights' provenance or a grant covering every asset. Track this
-review in `Tools/Release/READINESS.md`; do not assume owner-reported permission has
+evidence of the weights' provenance or a grant covering every asset. Record this
+review in `Tools/Release/ModelClearance/clearance.json`; do not assume owner-reported permission has
 already been verified for a specific distribution.
 
 Changing the model invalidates existing enrolments — the identifier is versioned on

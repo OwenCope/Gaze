@@ -85,7 +85,9 @@
         ],
         "redistributionScope": [
           "bundled-app-distribution",
-          "website-download"
+          "website-download",
+          "public-source-repository",
+          "source-archive"
         ],
         "status": "permission-recorded-upstream-and-alternate-package-unresolved",
         "permissionCoverage": {
@@ -141,7 +143,9 @@
         ],
         "redistributionScope": [
           "bundled-app-distribution",
-          "website-download"
+          "website-download",
+          "public-source-repository",
+          "source-archive"
         ],
         "status": "cc-by-4.0-attribution-recorded"
       },
@@ -336,7 +340,7 @@
         ]
       },
       "provenance": {
-        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files \u2014 tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png \u2014 as screenshots/renders of their own machine and app with no third-party content; authorship of the other 25 files remains unconfirmed.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files \u2014 tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png \u2014 as screenshots/renders of their own machine and app with no third-party content; owner confirms (2026-09-21, release-clearance session) they created 28 of the 30 files themselves, screenshots and renders of their own machine and app with no third-party content. The two exceptions are NOT first-party and NOT cleared: Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are a widely-used wallpaper the owner did not create, of unestablished provenance; the owner knowingly accepts the risk of redistributing them, including in a public repository, carried in the owner's name.",
         "evidenceRefs": [
           "build.sh:131-134",
           "Tools/OnboardingArt/manifest.json",
@@ -346,22 +350,25 @@
           "Tools/ProductCapture/tour-shots.json",
           "Tools/OnboardingArt/render-unlock-tour.sh",
           "Tools/OnboardingArt/RenderUnlockTour.swift:58-94,100-101",
-          "Owner confirmation, release-clearance session 2026-09-20 (five tour files only)"
+          "Owner confirmation, release-clearance session 2026-09-20 (five tour files only)",
+          "Owner confirmation, release-clearance session 2026-09-21 (28 of 30 files first-party; Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png excepted as third-party wallpaper of unestablished provenance, kept as a known accepted risk)"
         ],
-        "status": "partial-owner-confirmation-five-of-thirty"
+        "status": "owner-confirmed-28-of-30-two-wallpapers-accepted-risk"
       },
       "license": {
-        "summary": "No recorded authorship/grant statement covering redistribution in the app bundle.",
+        "summary": "Owner confirms first-party authorship of 28 of 30 files (2026-09-21), but Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png have no grant: third-party wallpaper of unestablished provenance kept as a known accepted risk carried in the owner's name, covering redistribution including in a public repository. No whole-entry grant exists, so no licence/grant is recorded.",
         "grant": "",
         "evidenceRefs": [],
         "redistributionScope": [
           "bundled-app-distribution",
-          "website-download"
+          "website-download",
+          "public-source-repository",
+          "source-archive"
         ],
-        "status": "unresolved"
+        "status": "unresolved-two-wallpapers-accepted-risk-no-grant"
       },
       "clearance": "unresolved",
-      "notes": "Inventory expanded 2026-09-18. All existing licence/grant and clearance fields remain unchanged and unresolved except the Q1 scope recorded above. Owner confirmed 2026-09-20 first-party authorship of tour-general/how-unlock/notch/security/unlock.png only; authorship of the other 25 files still outstanding, so the entry stays unresolved."
+      "notes": "Inventory expanded 2026-09-18. Owner confirmed 2026-09-21 first-party authorship of 28 of 30 files; Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are third-party wallpaper of unestablished provenance, NOT cleared, kept as a known accepted risk carried in the owner's name. Two of thirty files without a grant means no whole-entry grant can be recorded, so the entry stays unresolved."
     },
     {
       "id": "credit-portraits",
@@ -421,24 +428,29 @@
         ]
       },
       "provenance": {
-        "summary": "Third-party likenesses and app icons (build.sh: 'each person's own picture, or their app's icon'; snapshots resized to 128pt). No per-file permission record in the repo.",
+        "summary": "Third-party likenesses and app icons (build.sh: 'each person's own picture, or their app's icon'; snapshots resized to 128pt). Owner confirms (2026-09-21, release-clearance session) they obtained permission from the people in the nine images.",
         "evidenceRefs": [
-          "build.sh:152-158"
+          "build.sh:152-158",
+          "Owner confirmation, release-clearance session 2026-09-21 (permission obtained from the people pictured)"
         ],
-        "status": "third-party-unrecorded"
+        "status": "owner-confirmed-permission-obtained"
       },
       "license": {
-        "summary": "No recorded grant covering redistribution of these portraits/icons in the app bundle.",
-        "grant": "",
-        "evidenceRefs": [],
+        "summary": "Owner confirms (2026-09-21, release-clearance session) permission from the people in the nine Resources/Credits images covers redistribution including public source redistribution, with the images sitting in a public repository and its history indefinitely.",
+        "grant": "Owner confirms 2026-09-21 they obtained permission from the people in the nine Resources/Credits images, covering redistribution including public source redistribution (images in a public repository and its history indefinitely).",
+        "evidenceRefs": [
+          "Owner confirmation, release-clearance session 2026-09-21 (permission covers public source redistribution; no document supplied)"
+        ],
         "redistributionScope": [
           "bundled-app-distribution",
-          "website-download"
+          "website-download",
+          "public-source-repository",
+          "source-archive"
         ],
-        "status": "unresolved"
+        "status": "owner-confirmed-permission-covers-source"
       },
-      "clearance": "unresolved",
-      "notes": "Owner must confirm permission for each portrait/icon (or remove the file and its row) and record the grant pointers plus scope."
+      "clearance": "cleared",
+      "notes": "Owner confirmed 2026-09-21 permission from the people pictured covers public source redistribution; evidence is the owner's confirmation alone, no document supplied."
     },
     {
       "id": "app-icon",
@@ -472,14 +484,16 @@
         "status": "owner-confirmed-first-party-script-link-unverified"
       },
       "license": {
-        "summary": "Owner confirms first-party authorship of both icon files (2026-09-20, release-clearance session). Cleared for the Mac app bundle and website download from gazeunlock.com; not cleared for a source archive.",
+        "summary": "Owner confirms first-party authorship of both icon files (2026-09-20, release-clearance session). Cleared for the Mac app bundle, website download from gazeunlock.com and source archive.",
         "grant": "Owner confirms first-party authorship of Resources/AppIcon.icon/Assets/gaze-mark.png and Resources/AppIcon.icon/icon.json.",
         "evidenceRefs": [
           "Owner confirmation, release-clearance session 2026-09-20 (first-party authorship)"
         ],
         "redistributionScope": [
           "bundled-app-distribution",
-          "website-download"
+          "website-download",
+          "public-source-repository",
+          "source-archive"
         ],
         "status": "owner-confirmed-first-party"
       },
