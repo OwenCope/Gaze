@@ -9,8 +9,8 @@ against. Everything here is checkable against the files named at the bottom.
 preference, global shortcut, watcher and saved-app-store initialization are removed.
 `Tools/MainAppSources.sh` excludes the retired autofill sources and UI from the main
 executable. Gaze retains Mac unlocking, enrollment and the security controls described below.
-The older autofill implementation remains in the repository for regression tests and a
-future reviewed migration; it is not wired into either product as a production feature.
+The retired autofill sources remain in the tree but are excluded from the build by
+`Tools/MainAppSources.sh`; they are not wired into the product.
 
 Existing saved-app vault records are **not read, copied, migrated or deleted** by this
 separation. The Mac account password used by Gaze's lock-screen backend remains separate.
@@ -18,7 +18,8 @@ There is presently no replacement UI for editing retired saved-app records. Do n
 the shared vault key to clean up those records: it also protects Gaze's other stored data.
 An explicit migration/recovery tool must preserve that distinction and require owner consent.
 
-**Gaze Passwords is still a sample-data preview, not a working password manager.** It shares
+**Gaze Passwords is a separate app whose code is not in this repository, and it is
+still a sample-data preview, not a working password manager.** It shares
 Gaze's actual console-session lease and app-signature inspection code rather than approximating
 them in the UI. The demo starts concealed; app deactivation conceals it and invalidates its
 approval. Lock/unlock, sleep and session resignation also close floating guides. App activation
@@ -35,27 +36,14 @@ Both build scripts enable Hardened Runtime. Passwords retains App Sandbox and us
 read-only access, with no network/camera/keychain-sharing privilege added. No camera or
 owner-approval prompts are added to a demo that cannot release real credentials.
 
-Verification commands:
-
-```sh
-bash Tools/ProductBoundaryRegression/run.sh
-bash Tools/GazePasswords/test-security.sh
-bash Tools/GazePasswords/test.sh
-bash Tools/GazePasswords/test-layout.sh /tmp/gaze-passwords-layout
-```
-
-The first two suites check product-source separation, sandbox/build policy, privacy/session
-events and launch confirmation handling without launching other apps or touching secrets.
-The September 13 run passes 6 product-boundary checks, 29 Passwords security checks, 28
-demo-model checks, 105 shared-hardening checks, 71 storage/identity checks and 47 lock-screen
-submission checks (286 total), plus the offscreen layout assertions. The layout harness
-reports a sandbox-extension warning, so its pass is not a live sandbox-integration result.
-Both isolated app bundles pass strict signature verification with ad-hoc Hardened Runtime;
-the Gaze binary's symbols contain no retired autofill service, watcher, UI or saved-app store.
-The earlier security regression suites remain applicable to shared code and retained legacy
-code. Successful compilation, rendering and simulated event tests do not validate actual
-Touch ID, camera capture, system login or a real credential provider. The new bundles are
-staged separately; running builds and installed authentication components are not replaced.
+Verification at separation time: product-source separation, sandbox/build policy,
+privacy/session events and launch-confirmation handling were checked without launching
+other apps or touching secrets, and the runs passed. Those harnesses are not published
+in this repository, so the results cannot be re-run or re-verified from what is here.
+What the reader can check directly is the exclusion itself: `Tools/MainAppSources.sh`
+lists the retired sources it keeps out of the main executable. Successful compilation,
+rendering and simulated event tests do not validate actual Touch ID, camera capture,
+system login or a real credential provider.
 
 **Still required for end-to-end use:** a production Passwords vault with OS-enforced key
 access and recovery; an authenticated, consent-bound Gaze approval service; a real autofill
@@ -112,7 +100,8 @@ and 27 companion-demo model checks pass with synthetic inputs. An optimized full
 executable builds and its isolated ad-hoc Hardened Runtime signature verifies. The normal
 `build/Gaze.app` executable is unchanged; the review executable was not launched. Existing
 Swift concurrency warnings in `DesktopWallpaper` and `GlobalHotKey` remain.
-See `Tools/HardeningRegression/README.md` for coverage boundaries and release gates.
+Coverage boundaries are as stated at the top of this section: synthetic inputs only,
+with no real passwords, camera, Touch ID, lock/unlock or system authentication.
 
 No real passwords, Keychain records, face enrollment, camera, Touch ID prompts, lock/unlock,
 CGEvent posting, import/export, system authentication installation or website changes were
@@ -120,8 +109,9 @@ used for this verification. Deployment and controlled end-to-end tests remain ou
 
 ## Retained hardening policy
 
-Autofill-specific items below describe the retained, tested source implementation. Since
-September 13 it is excluded from Gaze and is not enabled in Gaze Passwords.
+Autofill-specific items below describe the retained source implementation, covered by
+checks that are not published in this repository. Since September 13 it is excluded
+from Gaze and is not enabled in Gaze Passwords.
 
 - Every new face, including the first, requires fresh macOS owner authentication inside
   `FaceEnrollmentStore.add`. The in-app Touch ID preference cannot bypass it. An unreadable
@@ -212,8 +202,8 @@ password retry or field clearing. A stopped partial submission may leave input i
 The backend's readiness check now distinguishes Keychain errors from a missing password;
 the older Settings/setup presence helper still needs migration.
 
-September 12, 2026: `Tools/LockScreenSecurityRegression/run.sh` tests this backend with dummy
-credentials and an in-memory event sink. No real input is posted. The later hardening pass
+September 12, 2026: this backend was exercised with dummy credentials and an in-memory
+event sink, using a harness that is not published here. No real input is posted. The later hardening pass
 corrects LockWatcher's submission/success accounting and binds it to a session UUID rather
 than the console-set key absent on the inspected host. This does not claim that the live
 intermittent password failure is resolved; actual lock-screen delivery remains untested.
@@ -292,13 +282,12 @@ Original priorities from September 11, 2026, updated on September 12. None are d
    verified website identity. Investigate a credential-provider extension rather than
    scraping browser UI. A browser denylist and a signed browser process do not verify origin.
    Do not enable web filling merely because a provider API returns domain suggestions.
-6. **Maintained regression tests.** Run `bash Tools/SecurityRegression/run.sh`. It covers
-   failed add/update/delete operations, recovery/restart, exact selection, signer approval,
-   stale edits and cancellation with dummy credentials. Focus switching, process restarts
-   during release, denied Accessibility writes, lock/session cancellation and camera stalls
-   have additional isolated gate tests but still need controlled integration tests; they are
-   not covered by the storage suite. See `Tools/SecurityRegression/README.md` and the new
-   `Tools/HardeningRegression/README.md`.
+6. **Regression tests (not published).** The storage suite covers
+failed add/update/delete operations, recovery/restart, exact selection, signer approval,
+stale edits and cancellation with dummy credentials. It cannot be run from this repository.
+Focus switching, process restarts during release, denied Accessibility writes, lock/session
+cancellation and camera stalls are not covered by the storage suite and still need
+controlled integration tests.
 
 ### Design investigation, not implementation
 
@@ -358,5 +347,5 @@ which is the API `dscl` wraps.
 
 ## Reporting
 
-Open an issue, or say so in the Discord. Findings about this document are as welcome as findings
+Open an issue. Findings about this document are as welcome as findings
 about the code.
