@@ -535,6 +535,10 @@ struct NotchCapsule: View {
 					if let symbol = model.phase.captionSymbol {
 						Image(systemName: symbol)
 							.font(.system(size: 10, weight: .semibold))
+							// The words beside it already animate on change; without this the
+							// glyph was the one thing that cut. Directional rather than magic:
+							// a movement prompt and a rejection share no shape to morph.
+							.contentTransition(.symbolEffect(.replace.downUp))
 							.accessibilityHidden(true)
 					}
 					Text(prompt)
