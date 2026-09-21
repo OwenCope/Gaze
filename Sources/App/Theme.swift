@@ -822,12 +822,16 @@ struct StatusLine: View {
 
 	let kind: Kind
 	let message: String
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	var body: some View {
 		HStack(alignment: .firstTextBaseline, spacing: 7) {
 			Image(systemName: kind.symbol)
 				.font(Typography.caption)
 				.foregroundStyle(kind.tint)
+				// The readiness line flips between warning and error as unlock setup
+				// changes underneath it, so the glyph rolls over rather than cutting.
+				.contentTransition(.symbolEffect(.replace.downUp))
 			Text(message)
 				.font(Typography.detail)
 				.foregroundStyle(Theme.secondaryLabel)
@@ -840,6 +844,7 @@ struct StatusLine: View {
 		// VoiceOver reads "checkmark circle fill" before every status line.
 		.accessibilityElement(children: .combine)
 		.accessibilityLabel(Text(kind.accessibilityPrefix + message))
+		.symbolEffectsRemoved(reduceMotion)
 	}
 }
 
