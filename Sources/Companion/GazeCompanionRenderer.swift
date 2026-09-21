@@ -82,7 +82,18 @@ class TransparentFaceView: MTKView {
 
 	override func viewDidMoveToWindow() {
 		super.viewDidMoveToWindow()
+		matchBackingScale()
 		updateRenderingState()
+	}
+
+	/// MTKView sizes its drawable as bounds × `layer.contentsScale`. The layer is
+	/// created in `makeNSView`, before the view has a window, so its scale starts at
+	/// 1 — and on the borderless lock-screen window it was never raised, which drew
+	/// the companion at half resolution and let the compositor upscale it.
+	private func matchBackingScale() {
+		guard let scale = window?.backingScaleFactor, layer?.contentsScale != scale else { return }
+		layer?.contentsScale = scale
+		needsDisplay = true
 	}
 
 	override func layout() {
@@ -92,6 +103,7 @@ class TransparentFaceView: MTKView {
 
 	override func viewDidChangeBackingProperties() {
 		super.viewDidChangeBackingProperties()
+		matchBackingScale()
 		if isPaused { needsDisplay = true }
 	}
 }

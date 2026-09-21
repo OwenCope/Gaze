@@ -1073,7 +1073,11 @@ struct InfoButton<Content: View>: View {
 			.multilineTextAlignment(.leading)
 			.padding(16)
 			.frame(width: 300)
+			// Focusable so keyboard and VoiceOver users can reach the explanation, but
+			// without the ring macOS draws around a focusable container — a blue box
+			// around a paragraph of help text reads as an error, not as focus.
 			.focusable()
+			.focusEffectDisabled()
 			.focused($popoverFocused)
 			.accessibilityElement(children: .combine)
 			.accessibilityFocused($popoverVoiceOverFocused)
