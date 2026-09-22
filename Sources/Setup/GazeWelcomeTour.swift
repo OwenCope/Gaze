@@ -51,15 +51,13 @@ struct GazeWelcomeTour: View {
 	var body: some View {
 		TourSlideshowView(
 			pages: Self.pages,
-			width: GazeTourSizing.baseWidth,
+			width: GazeTourSizing.panelWidth,
 			initialPageIndex: initialPageIndex,
 			continueButtonTitle: "Next",
 			finishButtonTitle: "Start setup",
 			onFinish: onContinue,
 			onClose: onClose
 		)
-		.frame(width: GazeTourSizing.baseWidth, height: GazeTourSizing.panelHeight / GazeTourSizing.scale)
-		.scaleEffect(GazeTourSizing.scale)
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 }

@@ -112,7 +112,7 @@ final class ReleaseUpdateChecker {
 			await self.runScheduledCheck(generation: generation)
 		}
 
-		let timer = Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { [weak self] _ in
+		let timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
 			Task { @MainActor [weak self] in
 				guard let self else { return }
 				self.enqueueTimerCheck()
@@ -139,7 +139,7 @@ final class ReleaseUpdateChecker {
 		scheduledWork?.cancel()
 	}
 
-	/// Queues one hourly-timer check as cancellable scheduled work on this instance.
+	/// Queues one daily-timer check as cancellable scheduled work on this instance.
 	private func enqueueTimerCheck() {
 		guard timer != nil else { return }
 		scheduleGeneration += 1

@@ -26,6 +26,14 @@ Nothing in these source changes removes an installed module, unloads a LaunchAge
 old process, or edits `/etc/pam.d/sudo_local` or the authorization database. An old installed
 module and old running app retain their previous behavior and risks.
 
+The plugin pins the agent by code requirement. Refresh the pin after every rebuild of
+`/Applications/Gaze.app`: a fresh signature changes the cdhash, so a stale pin discards
+every agent reply as untrusted. Once a Developer ID identity exists, pin the team
+identifier instead of the cdhash so rebuilds no longer invalidate the pin.
+
+Copying or installing the agent redistributes the bundled `FaceEmbedding` and `Spoof`
+models with it; see NOTICE.md for their redistribution status before distributing the app.
+
 An administrator should first identify which integration is installed and confirm an
 independent password-based access path. Then review removal of only the Gaze-specific PAM
 entry or legacy authorization mechanisms, preserving unrelated local authentication rules.

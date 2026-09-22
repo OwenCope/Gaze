@@ -158,7 +158,6 @@ final class Preferences {
 		static let touchIDFallback = "touchIDFallback"
 		static let tamperProtection = "tamperProtection"
 		static let requireBuiltInCamera = "requireBuiltInCamera"
-		static let requireChallenge = "requireChallenge"
 		static let unlockMovementCount = "unlockMovementCount"
 		static let unlockBackend = "unlockBackend"
 		static let pausedUntil = "pausedUntil"
@@ -272,12 +271,6 @@ final class Preferences {
 		didSet { defaults.set(requireBuiltInCamera, forKey: Key.requireBuiltInCamera) }
 	}
 
-	/// Retained for preference compatibility. Mac unlock always requires movement;
-	/// `unlockMovementCount` controls the number of completed responses.
-	var requireChallenge: Bool {
-		didSet { defaults.set(requireChallenge, forKey: Key.requireChallenge) }
-	}
-
 	/// Completed responses required for Mac unlock; existing installations default to two.
 	var unlockMovementCount: UnlockMovementCount {
 		didSet { defaults.set(unlockMovementCount.rawValue, forKey: Key.unlockMovementCount) }
@@ -341,7 +334,6 @@ final class Preferences {
 		touchIDFallback = defaults.object(forKey: Key.touchIDFallback) as? Bool ?? true
 		tamperProtection = defaults.bool(forKey: Key.tamperProtection)
 		requireBuiltInCamera = defaults.object(forKey: Key.requireBuiltInCamera) as? Bool ?? true
-		requireChallenge = defaults.bool(forKey: Key.requireChallenge)
 		unlockMovementCount = UnlockMovementCount.resolve(
 			stored: defaults.object(forKey: Key.unlockMovementCount))
 		unlockBackend =
