@@ -131,7 +131,7 @@ struct GazeCompanionRenderer: NSViewRepresentable {
 		view.clearColor = MTLClearColorMake(0, 0, 0, 0)
 		view.enableSetNeedsDisplay = true
 		view.isPaused = true
-		view.preferredFramesPerSecond = 120
+		view.preferredFramesPerSecond = 30
 		view.setAccessibilityElement(false)
 		do {
 			context.coordinator.gpu = try SoftFaceGPU.shared()

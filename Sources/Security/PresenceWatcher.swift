@@ -15,10 +15,10 @@ final class PresenceWatcher {
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Presence")
 
 	private static let armIdle = PresenceCheckSchedule.idleRequired
-	private static let tick: Duration = .seconds(5)
+	private static let tick: Duration = .seconds(15)
 	private static let absenceRequired: Duration = .seconds(4)
 	private static let startupAllowance: Duration = .seconds(6)
-	private static let sampleInterval: Duration = .milliseconds(400)
+	private static let sampleInterval: Duration = .milliseconds(800)
 
 	private let store: FaceEnrollmentStore
 	private var loop: Task<Void, Never>?

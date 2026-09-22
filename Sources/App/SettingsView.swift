@@ -322,11 +322,11 @@ struct SettingsView: View {
 				case .notch:
 					NotchSettingsSection(settings: settings).id("NotchSettingsSection").modifier(searchDestination("NotchSettingsSection"))
 				case .credits:
-					creditsSection.id("creditsSection").modifier(searchDestination("creditsSection"))
+					SettingsCreditsPane(store: store, updates: updates).id("creditsSection").modifier(searchDestination("creditsSection"))
 				case .about:
 					SettingsAboutPane(store: store, updates: updates).id("aboutSection").modifier(searchDestination("aboutSection"))
 					DisclosureGroup {
-						creditsSection
+						SettingsCreditsPane(store: store, updates: updates)
 					} label: {
 						Theme.disclosureLabel("Credits & Acknowledgements")
 					}
@@ -1283,113 +1283,75 @@ struct SettingsView: View {
 		}
 	}
 
-	// MARK: - About
+	// MARK: - Actions
 
-	/// Somebody's own picture, or their app's icon, from the bundle.
-	///
-	/// Nil is a normal answer, not a failure: the row falls back to its glyph, so a checkout
-	/// without `Resources/Credits` still builds and still reads correctly. That matches how
-	/// the setup card art behaves, and it is why nothing here throws.
-	private func creditPortrait(_ name: String) -> NSImage? {
-		guard
-			let url = Bundle.main.url(
-				forResource: name.lowercased(), withExtension: "png", subdirectory: "Credits")
-		else { return nil }
-		return NSImage(contentsOf: url)
+	private func bind(_ path: ReferenceWritableKeyPath<Preferences, Bool>) -> Binding<Bool> {
+		Binding(
+			get: { settings[keyPath: path] },
+			set: { settings[keyPath: path] = $0 })
 	}
 
-	/// An app one of the credited people made.
-	struct CreditApp {
-		let name: String
-		/// The app's own one-line description, in its author's words — and nil when nobody
-		/// has written one.
-		///
-		/// Optional because `credits.ts` only carries a description for the two apps Gaze is
-		/// actually built on. WallX is listed there as something Unxnown made, with a name,
-		/// an icon and a link and no words. Inventing a line for it would be writing someone
-		/// else's product description for them, which is how this pane got into trouble the
-		/// first time.
-		let what: String?
-		/// Bundled icon, named `app-<something>` so a person's portrait and an app's icon
-		/// cannot collide in the same folder.
-		let icon: String
-		let href: String
-	}
-
-	/// One credited person, and their app underneath them if they have one.
-	///
-	/// The person is the credit; the app is a fact about the person. Flattening the two into
-	/// one row — "cshariq — Sapphire — the recognition model…" — made the app read as the
-	/// thing being thanked, which is how DanFQ ended up credited as *Atoll* for work he did
-	/// himself. Two rows keep the distinction the site's data already draws: a `name` is
-	/// always someone, an `app` is always a product.
-	///
-	/// Indented and quieter than the person above it, because it is a note attached to that
-	/// row rather than a sibling of it.
-	private func creditRow(
-		name: String, detail: String, symbol: String,
-		link: String?, linkName: String?, app: CreditApp?
-	) -> some View {
-		VStack(spacing: 0) {
-			SettingRow(title: name, detail: detail, symbol: symbol, portrait: creditPortrait(name)) {
-				if let link, let linkName {
-					linkGlyph(linkName) { Self.open(link) }
+	private func storePassword() {
+		Task {
+			guard await BiometricGate.authorize(.storePassword) else { return }
+			do {
+				if try PasswordVault.store(passwordEntry) {
+					passwordEntry = ""
+					passwordError = nil
+					hasStoredPassword = true
+				} else {
+					passwordError = "That password didn't match your account."
 				}
-			}
-
-			if let app {
-				HStack(spacing: 10) {
-					if let icon = creditPortrait(app.icon) {
-						Image(nsImage: icon)
-							.resizable()
-							.interpolation(.high)
-							.aspectRatio(contentMode: .fill)
-							.frame(width: 20, height: 20)
-							.clipShape(.rect(cornerRadius: 5, style: .continuous))
-							.accessibilityHidden(true)
-					}
-
-					VStack(alignment: .leading, spacing: 0) {
-						// Labelled, so the row cannot be misread as a second person.
-						Text("\(app.name) — app")
-							.font(Typography.detail)
-							.foregroundStyle(Theme.label)
-						if let what = app.what {
-							Text(what)
-								.font(Typography.detail)
-								.foregroundStyle(Theme.tertiaryLabel)
-						}
-					}
-
-					Spacer(minLength: 8)
-					linkGlyph(app.name) { Self.open(app.href) }
-				}
-				// Indented past the portrait column above, so it hangs off the person.
-				.padding(.leading, Theme.rowInset + 26 + 12)
-				.padding(.trailing, Theme.rowInset)
-				.padding(.bottom, 11)
+			} catch {
+				passwordError = error.localizedDescription
 			}
 		}
 	}
 
-	/// The one link control this pane uses, so every row's is the same width.
-	private func linkGlyph(_ name: String, action: @escaping () -> Void) -> some View {
-		Button(action: action) {
-			Image(systemName: "arrow.up.forward")
+	/// Clear the stored password. Brings the entry field (and Store) back, so it reads as
+	/// a toggle between "stored" and "not stored" rather than a one-way door.
+	private func revokePassword() {
+		Task {
+			guard await BiometricGate.authorize(.storePassword) else { return }
+			do {
+				try PasswordVault.remove()
+				passwordEntry = ""
+				passwordError = nil
+				hasStoredPassword = false
+			} catch {
+				passwordError = error.localizedDescription
+			}
 		}
-		.gazeButton(.standard, size: .small)
-		.help("Open \(name)")
-		.accessibilityLabel("Open \(name)")
 	}
 
-	// MARK: - Credits
+	private func clearLockout() {
+		if PasswordVault.verify(lockoutPassword) {
+			lockout.clearAfterPasswordAuth()
+			lockoutError = nil
+			lockoutPassword = ""
+		} else {
+			lockoutPassword = ""
+			lockoutError = "That password didn’t match. Try again."
+		}
+	}
+}
 
-	/// Its own pane rather than a group tucked under About.
-	///
-	/// Not ceremony: nearly everything specific about this app came from someone else — the
-	/// recognition model, and most of what the settings window looks like. A line at the
-	/// bottom of an About page is not where you put that.
-	private var creditsSection: some View {
+/// The Credits pane: the people whose work this is built on.
+///
+/// Its own pane rather than a group tucked under About.
+///
+/// Not ceremony: nearly everything specific about this app came from someone else — the
+/// recognition model, and most of what the settings window looks like. A line at the
+/// bottom of an About page is not where you put that.
+///
+/// Split out of `SettingsView` so the settings hotspot stays navigable; renders exactly
+/// what `creditsSection` rendered. `store` and `updates` are shared reference types, so
+/// plain `let`s observe the same instances the settings window holds.
+private struct SettingsCreditsPane: View {
+	let store: FaceEnrollmentStore
+	let updates: UpdateChecker
+
+	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			// One glyph per row, not the app's name on a capsule.
 			//
@@ -1520,61 +1482,106 @@ struct SettingsView: View {
 		}
 	}
 
+	/// Somebody's own picture, or their app's icon, from the bundle.
+	///
+	/// Nil is a normal answer, not a failure: the row falls back to its glyph, so a checkout
+	/// without `Resources/Credits` still builds and still reads correctly. That matches how
+	/// the setup card art behaves, and it is why nothing here throws.
+	private func creditPortrait(_ name: String) -> NSImage? {
+		guard
+			let url = Bundle.main.url(
+				forResource: name.lowercased(), withExtension: "png", subdirectory: "Credits")
+		else { return nil }
+		return NSImage(contentsOf: url)
+	}
+
+	/// An app one of the credited people made.
+	struct CreditApp {
+		let name: String
+		/// The app's own one-line description, in its author's words — and nil when nobody
+		/// has written one.
+		///
+		/// Optional because `credits.ts` only carries a description for the two apps Gaze is
+		/// actually built on. WallX is listed there as something Unxnown made, with a name,
+		/// an icon and a link and no words. Inventing a line for it would be writing someone
+		/// else's product description for them, which is how this pane got into trouble the
+		/// first time.
+		let what: String?
+		/// Bundled icon, named `app-<something>` so a person's portrait and an app's icon
+		/// cannot collide in the same folder.
+		let icon: String
+		let href: String
+	}
+
+	/// One credited person, and their app underneath them if they have one.
+	///
+	/// The person is the credit; the app is a fact about the person. Flattening the two into
+	/// one row — "cshariq — Sapphire — the recognition model…" — made the app read as the
+	/// thing being thanked, which is how DanFQ ended up credited as *Atoll* for work he did
+	/// himself. Two rows keep the distinction the site's data already draws: a `name` is
+	/// always someone, an `app` is always a product.
+	///
+	/// Indented and quieter than the person above it, because it is a note attached to that
+	/// row rather than a sibling of it.
+	private func creditRow(
+		name: String, detail: String, symbol: String,
+		link: String?, linkName: String?, app: CreditApp?
+	) -> some View {
+		VStack(spacing: 0) {
+			SettingRow(title: name, detail: detail, symbol: symbol, portrait: creditPortrait(name)) {
+				if let link, let linkName {
+					linkGlyph(linkName) { Self.open(link) }
+				}
+			}
+
+			if let app {
+				HStack(spacing: 10) {
+					if let icon = creditPortrait(app.icon) {
+						Image(nsImage: icon)
+							.resizable()
+							.interpolation(.high)
+							.aspectRatio(contentMode: .fill)
+							.frame(width: 20, height: 20)
+							.clipShape(.rect(cornerRadius: 5, style: .continuous))
+							.accessibilityHidden(true)
+					}
+
+					VStack(alignment: .leading, spacing: 0) {
+						// Labelled, so the row cannot be misread as a second person.
+						Text("\(app.name) — app")
+							.font(Typography.detail)
+							.foregroundStyle(Theme.label)
+						if let what = app.what {
+							Text(what)
+								.font(Typography.detail)
+								.foregroundStyle(Theme.tertiaryLabel)
+						}
+					}
+
+					Spacer(minLength: 8)
+					linkGlyph(app.name) { Self.open(app.href) }
+				}
+				// Indented past the portrait column above, so it hangs off the person.
+				.padding(.leading, Theme.rowInset + 26 + 12)
+				.padding(.trailing, Theme.rowInset)
+				.padding(.bottom, 11)
+			}
+		}
+	}
+
+	/// The one link control this pane uses, so every row's is the same width.
+	private func linkGlyph(_ name: String, action: @escaping () -> Void) -> some View {
+		Button(action: action) {
+			Image(systemName: "arrow.up.forward")
+		}
+		.gazeButton(.standard, size: .small)
+		.help("Open \(name)")
+		.accessibilityLabel("Open \(name)")
+	}
+
 	private static func open(_ address: String) {
 		guard let url = URL(string: address) else { return }
 		NSWorkspace.shared.open(url)
-	}
-
-	// MARK: - Actions
-
-	private func bind(_ path: ReferenceWritableKeyPath<Preferences, Bool>) -> Binding<Bool> {
-		Binding(
-			get: { settings[keyPath: path] },
-			set: { settings[keyPath: path] = $0 })
-	}
-
-	private func storePassword() {
-		Task {
-			guard await BiometricGate.authorize(.storePassword) else { return }
-			do {
-				if try PasswordVault.store(passwordEntry) {
-					passwordEntry = ""
-					passwordError = nil
-					hasStoredPassword = true
-				} else {
-					passwordError = "That password didn't match your account."
-				}
-			} catch {
-				passwordError = error.localizedDescription
-			}
-		}
-	}
-
-	/// Clear the stored password. Brings the entry field (and Store) back, so it reads as
-	/// a toggle between "stored" and "not stored" rather than a one-way door.
-	private func revokePassword() {
-		Task {
-			guard await BiometricGate.authorize(.storePassword) else { return }
-			do {
-				try PasswordVault.remove()
-				passwordEntry = ""
-				passwordError = nil
-				hasStoredPassword = false
-			} catch {
-				passwordError = error.localizedDescription
-			}
-		}
-	}
-
-	private func clearLockout() {
-		if PasswordVault.verify(lockoutPassword) {
-			lockout.clearAfterPasswordAuth()
-			lockoutError = nil
-			lockoutPassword = ""
-		} else {
-			lockoutPassword = ""
-			lockoutError = "That password didn’t match. Try again."
-		}
 	}
 }
 
