@@ -94,6 +94,37 @@ enum AppIdentity {
 		return status == errSecSuccess
 	}
 
+	private static let browserHandlerLock = NSLock()
+	private static var cachedBrowserHandlers: (identifiers: Set<String>, fetchedAt: Date)?
+	private static let browserHandlerCacheTTL: TimeInterval = 60
+
+	/// Bundle identifiers that can open http(s), cached briefly: `urlsForApplications`
+	/// hits Launch Services and this runs on every frontmost-app check.
+	private static func browserHandlerIdentifiers() -> Set<String>? {
+		browserHandlerLock.lock()
+		let cached = cachedBrowserHandlers
+		browserHandlerLock.unlock()
+		if let cached, Date().timeIntervalSince(cached.fetchedAt) < browserHandlerCacheTTL {
+			return cached.identifiers
+		}
+		guard
+			let http = URL(string: "http://example.com"),
+			let https = URL(string: "https://example.com")
+		else { return nil }
+		var identifiers = Set<String>()
+		for web in [http, https] {
+			for url in NSWorkspace.shared.urlsForApplications(toOpen: web) {
+				if let id = Bundle(url: url)?.bundleIdentifier?.lowercased() {
+				identifiers.insert(id)
+				}
+			}
+		}
+		browserHandlerLock.lock()
+		cachedBrowserHandlers = (identifiers, Date())
+		browserHandlerLock.unlock()
+		return identifiers
+	}
+
 	static func isBrowser(bundleID: String) -> Bool {
 		let knownBrowsers: Set<String> = [
 			"com.apple.safari", "com.apple.safaritechnologypreview", "com.google.chrome",
@@ -102,12 +133,7 @@ enum AppIdentity {
 			"com.vivaldi.vivaldi", "company.thebrowser.browser", "company.thebrowser.dia",
 		]
 		if knownBrowsers.contains(bundleID.lowercased()) { return true }
-		for scheme in ["http", "https"] {
-			guard let web = URL(string: "\(scheme)://example.com") else { return true }
-			if NSWorkspace.shared.urlsForApplications(toOpen: web).contains(where: {
-				Bundle(url: $0)?.bundleIdentifier?.lowercased() == bundleID.lowercased()
-			}) { return true }
-		}
-		return false
+		guard let handlers = browserHandlerIdentifiers() else { return true }
+		return handlers.contains(bundleID.lowercased())
 	}
 }

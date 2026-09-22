@@ -470,21 +470,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 	///
 	/// The window is found through the window server rather than `NSApp.windows`, because it
 	/// is not reliably in that list, then matched back to an `NSWindow` by number.
+	/// Fast sweep while the stray window might be around, backing off when it isn't.
+	private static let invisibleSweepFastInterval: TimeInterval = 1.0
+	private static let invisibleSweepSlowInterval: TimeInterval = 15.0
+	private static let invisibleSweepCleanThreshold = 10
+
+	private var invisibleCleanSweeps = 0
+	private var invisibleSweepIsSlow = false
+
 	@MainActor
 	private func startInvisibleWindowSweep() {
 		Self.clearInvisibleWindows()
-		let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+		invisibleCleanSweeps = 0
+		scheduleInvisibleSweep(interval: Self.invisibleSweepFastInterval, slow: false)
+		// The window arrives when the menu is used, so menu tracking re-arms the fast
+		// sweep. Only a hint, not the cleanup itself: if the notification does not
+		// arrive, the slow sweep still catches it.
+		NotificationCenter.default.addObserver(
+			forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main
+		) { [weak self] _ in
+			MainActor.assumeIsolated { self?.rearmInvisibleSweep() }
+		}
+	}
+
+	@MainActor
+	private func scheduleInvisibleSweep(interval: TimeInterval, slow: Bool) {
+		invisibleWindowSweep?.invalidate()
+		invisibleSweepIsSlow = slow
+		let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
 			MainActor.assumeIsolated {
-				Self.clearInvisibleWindows()
-				if CommandLine.arguments.contains("--debug-windows") {
-					Self.logAppWindows("tick")
-				}
+				self?.invisibleSweepTick()
 			}
 		}
 		// Common modes, or it stops firing while a menu is open — which is exactly when the
 		// window in question appears.
 		RunLoop.main.add(timer, forMode: .common)
 		invisibleWindowSweep = timer
+	}
+
+	@MainActor
+	private func invisibleSweepTick() {
+		let fixed = Self.clearInvisibleWindows()
+		if CommandLine.arguments.contains("--debug-windows") {
+			Self.logAppWindows("tick")
+		}
+		guard fixed == 0 else {
+			invisibleCleanSweeps = 0
+			return
+		}
+		invisibleCleanSweeps += 1
+		if invisibleCleanSweeps >= Self.invisibleSweepCleanThreshold && !invisibleSweepIsSlow {
+			scheduleInvisibleSweep(interval: Self.invisibleSweepSlowInterval, slow: true)
+		}
+	}
+
+	/// Back to the fast sweep: the stray window arrives when the menu is used.
+	@MainActor
+	private func rearmInvisibleSweep() {
+		invisibleCleanSweeps = 0
+		if invisibleSweepIsSlow {
+			scheduleInvisibleSweep(interval: Self.invisibleSweepFastInterval, slow: false)
+		}
 	}
 
 	/// Dumps what `NSApp.windows` actually contains, for diagnosing windows we cannot reach.
@@ -499,14 +545,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 		}
 	}
 
+	/// Makes our invisible windows click-through. Returns how many were fixed.
 	@MainActor
-	static func clearInvisibleWindows() {
+	@discardableResult
+	static func clearInvisibleWindows() -> Int {
 		let pid = ProcessInfo.processInfo.processIdentifier
 		guard
 			let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
 				as? [[String: Any]]
-		else { return }
+		else { return 0 }
 
+		var fixed = 0
 		for entry in list {
 			guard
 				(entry[kCGWindowOwnerPID as String] as? Int32) == pid,
@@ -517,9 +566,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 			else { continue }
 
 			window.ignoresMouseEvents = true
+			fixed += 1
 			Logger(subsystem: "com.gazeunlock.Gaze", category: "Windows")
 				.notice("Made an invisible window click-through: \(number)")
 		}
+		return fixed
 	}
 
 	func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

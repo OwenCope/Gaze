@@ -108,12 +108,16 @@ final class PresenceWatcher {
 		var receivedFrame = false
 		// Observe each analyzed frame: a face or analysis failure between timer ticks
 		// must still cancel or invalidate the absence proof.
+		// Documented main-actor, but the closure type is non-isolated; assume isolation
+		// before touching the gate state the polling loop below reads.
 		camera.onFrameAnalyzed = { absence, frameID, capturedAt in
-			guard verdict != .present else { return }
-			receivedFrame = true
-			verdict = gate.update(.init(sample: Self.sampleKind(absence), frameID: frameID,
-				capturedAt: Self.seconds(startedAt.duration(to: capturedAt)),
-				observedAt: Self.seconds(startedAt.duration(to: .now))))
+			MainActor.assumeIsolated {
+				guard verdict != .present else { return }
+				receivedFrame = true
+				verdict = gate.update(.init(sample: Self.sampleKind(absence), frameID: frameID,
+					capturedAt: Self.seconds(startedAt.duration(to: capturedAt)),
+					observedAt: Self.seconds(startedAt.duration(to: .now))))
+			}
 		}
 		session.onInvalidation = { [weak camera] in camera?.stop() }
 		var startupFinished = false

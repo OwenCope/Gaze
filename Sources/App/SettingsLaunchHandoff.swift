@@ -18,15 +18,46 @@ enum SettingsLaunchHandoff {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Startup")
 
-	/// Pure eligibility: only a bare launch or an exact `--settings` launch hands off.
+	/// Pure eligibility: a bare launch hands off, as before, and any launch
+	/// carrying `--settings` hands off unless a service-mode flag is present.
 	///
 	/// - Parameter arguments: argv after the executable
 	///   (`Array(CommandLine.arguments.dropFirst())` in production).
-	/// - Returns: true only for `[]` or `["--settings"]`. Every flagged invocation —
-	///   `--agent`, `--setup`, `--setup-step`, `--ui-review`, `--scan-only`,
-	///   `--browser-only`, or anything else — bypasses the handoff unchanged.
+	/// - Returns: true for `[]`, or when `--settings` is present without any of
+	///   `--agent`, `--scan-only`, `--ui-review`, or `--browser-only`. Those modes
+	///   change what the new process would do, so they bypass the handoff
+	///   unchanged — as does anything without `--settings` at all. `--settings`
+	///   combined with `--settings-pane=<name>` hands off; the pane is staged
+	///   under `pendingPaneKey` for the running app instead of starting a
+	///   duplicate process to display it.
 	static func isEligibleLaunch(arguments: [String]) -> Bool {
-		arguments.isEmpty || arguments == ["--settings"]
+		if arguments.isEmpty { return true }
+		guard arguments.contains("--settings") else { return false }
+		return !arguments.contains(where: { serviceModeFlags.contains($0) })
+	}
+
+	/// Flags that put the new process into a service or review mode. Handing off
+	/// would silently drop that mode, so these bypass the handoff unchanged.
+	private static let serviceModeFlags: Set<String> = [
+		"--agent", "--scan-only", "--ui-review", "--browser-only",
+	]
+
+	/// Shared-defaults key staging a `--settings-pane=` request for the running app.
+	///
+	/// The running app reads its pane from its own argv, which a handoff never
+	/// changes, so the handing-off process leaves the validated pane name here
+	/// for it to consume when it presents Settings.
+	static let pendingPaneKey = "com.gazeunlock.Gaze.pendingSettingsPane"
+	private static let paneFlagPrefix = "--settings-pane="
+
+	/// First `--settings-pane=<name>` value, validated against the known panes so
+	/// a typo never stages a request the running app cannot honour. Mirrors the
+	/// `first(where:)` parse in SettingsView, so handoff and fresh launch agree.
+	static func requestedPane(arguments: [String]) -> String? {
+		guard let argument = arguments.first(where: { $0.hasPrefix(paneFlagPrefix) }) else { return nil }
+		let name = String(argument.dropFirst(paneFlagPrefix.count))
+		guard SettingsPane(rawValue: name) != nil else { return nil }
+		return name
 	}
 
 	/// If an eligible launch finds the same bundle already running, hand presentation to
@@ -64,6 +95,9 @@ enum SettingsLaunchHandoff {
 				}
 			}
 		guard let target = ordered.first, let bundleURL = target.bundleURL else { return false }
+		if let pane = requestedPane(arguments: arguments) {
+			UserDefaults.standard.set(pane, forKey: pendingPaneKey)
+		}
 		target.activate()
 		if !NSWorkspace.shared.open(bundleURL) {
 			logger.notice("Settings launch handoff could not reopen the running app; exiting without starting services.")

@@ -177,12 +177,28 @@ final class DesktopWallpaper {
 	/// frame are the same picture. The alternative was capturing the wallpaper window, which
 	/// means asking for Screen Recording, and that is an outrageous thing to prompt for in
 	/// order to draw a background.
+	// Only ever touched from `load()`, which runs on the main actor; the `nonisolated`
+	// below is for the caller's sake, not for background use.
+	nonisolated(unsafe) private static var lastIndexMtime: Date?
+	nonisolated(unsafe) private static var lastAerialResult: URL?
+
 	nonisolated private static func aerialThumbnailURL() -> URL? {
 		let support = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)
 			.first?.appendingPathComponent("Application Support/com.apple.wallpaper")
 		guard let support else { return nil }
 
 		let store = support.appendingPathComponent("Store/Index.plist")
+		// The 2s poll re-reads this plist from disk; skip the parse when it is unchanged.
+		let mtime = (try? FileManager.default.attributesOfItem(atPath: store.path))?[
+			.modificationDate] as? Date
+		if let mtime, mtime == lastIndexMtime {
+			if let cached = lastAerialResult,
+				FileManager.default.fileExists(atPath: cached.path)
+			{
+				return cached
+			}
+			if lastAerialResult == nil { return nil }
+		}
 		guard let data = try? Data(contentsOf: store),
 			let root = try? PropertyListSerialization.propertyList(from: data, format: nil)
 				as? [String: Any]
@@ -220,8 +236,14 @@ final class DesktopWallpaper {
 			let thumbnail = support
 				.appendingPathComponent("aerials/thumbnails")
 				.appendingPathComponent("\(assetID).png")
-			if FileManager.default.fileExists(atPath: thumbnail.path) { return thumbnail }
+			if FileManager.default.fileExists(atPath: thumbnail.path) {
+				lastIndexMtime = mtime
+				lastAerialResult = thumbnail
+				return thumbnail
+			}
 		}
+		lastIndexMtime = mtime
+		lastAerialResult = nil
 		return nil
 	}
 

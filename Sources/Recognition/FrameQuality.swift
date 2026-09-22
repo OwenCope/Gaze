@@ -42,12 +42,14 @@ enum FrameQuality {
 
 	static func rejection(_ sample: FaceSample) -> Rejection? {
 		let bounds = sample.boundingBox
+		// Pose axes stay out of this guard: FacePose reports unavailable axes as NaN,
+		// and a missing yaw/pitch/roll must not make a frame unidentifiable. Liveness
+		// still gates on finiteness itself via each axis's AxisSource.
 		guard bounds.origin.x.isFinite, bounds.origin.y.isFinite,
 			bounds.width.isFinite, bounds.height.isFinite,
 			bounds.width > 0, bounds.height > 0,
 			bounds.minX >= 0, bounds.minY >= 0, bounds.maxX <= 1.000001, bounds.maxY <= 1.000001,
-			sample.quality.isFinite, (0...1).contains(sample.quality),
-			sample.pose.yaw.isFinite, sample.pose.pitch.isFinite, sample.pose.roll.isFinite else {
+			sample.quality.isFinite, (0...1).contains(sample.quality) else {
 			return .invalidMeasurements
 		}
 		if sample.boundingBox.height < minFaceHeight { return .tooSmall }

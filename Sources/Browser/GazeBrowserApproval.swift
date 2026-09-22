@@ -31,6 +31,7 @@ final class GazeBrowserApproval {
 			return request.response(operation: "status", error: readinessIssue)
 		}
 		try request.validateRequest(operation: "verify")
+		guard !busy else { throw BrowserBridgeError.unavailable }
 		guard readinessIssue == nil, policyPermitsApproval,
 			UnlockGuard.embedderBlocker() == nil, store.isEnrolled, !store.isCorrupted,
 			let pinnedCamera = store.pinnedCameraID, !pinnedCamera.isEmpty,
