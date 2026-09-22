@@ -185,7 +185,7 @@ private struct BrowserGuidanceView: View {
 			Text(model.origin.value).font(.caption).lineLimit(2).textSelection(.enabled)
 			GazeLessonAnimation(motion: model.motion, paused: false, material: .charcoal).frame(width: 108, height: 108)
 			Text(model.motion == .scanning ? "Look at Gaze" : "Follow this movement").font(.callout).foregroundStyle(.secondary)
-			Button("Cancel") { model.cancelled = true }.gazeButton()
+			Button("Cancel") { model.cancelled = true }.gazeButton().keyboardShortcut(.cancelAction)
 		}.padding(20).frame(width: 330, height: 250).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))
 	}
 }

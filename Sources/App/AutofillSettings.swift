@@ -156,6 +156,25 @@ struct AutofillSection: View {
 					EmptyView()
 				}
 			}
+
+			RowDivider()
+			if let capsule = NotchCapsuleController.lastBuildOutcome {
+				SettingRow(
+					title: capsule.message,
+					detail: Self.relative.localizedString(for: capsule.at, relativeTo: Date()),
+					symbol: "rectangle.on.rectangle"
+				) {
+					EmptyView()
+				}
+			} else {
+				SettingRow(
+					title: "Unknown",
+					detail: "Capsule has not been built yet",
+					symbol: "rectangle.on.rectangle"
+				) {
+					EmptyView()
+				}
+			}
 		}
 	}
 

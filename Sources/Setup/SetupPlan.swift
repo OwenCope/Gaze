@@ -37,8 +37,8 @@ struct SetupPlan {
 		case .how: .welcome
 		case .meetGaze: steps.contains(.how) ? .how : .welcome
 		case .capture: steps.contains(.meetGaze) ? .meetGaze : (steps.contains(.how) ? .how : .welcome)
-		case .password: steps.contains(.capture) ? nil : .welcome
-		case .permission: steps.contains(.password) ? .password : (steps.contains(.capture) ? nil : .welcome)
+		case .password: steps.contains(.capture) ? .capture : .welcome
+		case .permission: steps.contains(.password) ? .password : (steps.contains(.capture) ? .capture : .welcome)
 		default: nil
 		}
 	}
