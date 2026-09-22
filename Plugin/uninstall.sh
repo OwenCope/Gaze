@@ -16,7 +16,6 @@ fi
 echo "→ Restoring system.login.screensaver"
 # Apple's default. This alone is enough to get your lock screen working again, even if
 # everything below fails.
-security authorizationdb write system.login.screensaver < /dev/null 2>/dev/null || true
 /usr/bin/security authorizationdb write system.login.screensaver use-login-window-ui \
 	2>/dev/null && echo "  ✓ back to use-login-window-ui" \
 	|| echo "  ! could not rewrite the rule — see the manual command below"

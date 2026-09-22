@@ -27,16 +27,17 @@ USER_HOME="$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory 2>/dev/null | awk
 # through that state when removing the line first avoids it.
 if [ -f "$SUDO_LOCAL" ] && grep -qF "pam_gaze.so" "$SUDO_LOCAL"; then
 	echo "→ Removing the auth line from $SUDO_LOCAL"
-	chmod 644 "$SUDO_LOCAL"
-	grep -vF "pam_gaze.so" "$SUDO_LOCAL" | grep -vF "# Added by Gaze." > "$SUDO_LOCAL.new"
+	TMP="$(mktemp "${SUDO_LOCAL}.XXXXXX")"
+	grep -vF "pam_gaze.so" "$SUDO_LOCAL" > "$TMP"
+	/usr/bin/python3 -c 'import os,sys; f=os.open(sys.argv[1], os.O_RDWR); os.fsync(f); os.close(f)' "$TMP"
+	chown root:wheel "$TMP"
+	chmod 444 "$TMP"
 	# An empty sudo_local is fine — `auth include sudo_local` on an empty file is a no-op —
 	# but a file with nothing but a blank line in it is untidy, so remove it entirely.
-	if [ -s "$SUDO_LOCAL.new" ] && grep -q '[^[:space:]]' "$SUDO_LOCAL.new"; then
-		mv "$SUDO_LOCAL.new" "$SUDO_LOCAL"
-		chown root:wheel "$SUDO_LOCAL"
-		chmod 444 "$SUDO_LOCAL"
+	if [ -s "$TMP" ] && grep -q '[^[:space:]]' "$TMP"; then
+		mv -f "$TMP" "$SUDO_LOCAL"
 	else
-		rm -f "$SUDO_LOCAL.new" "$SUDO_LOCAL"
+		rm -f "$TMP" "$SUDO_LOCAL"
 	fi
 fi
 

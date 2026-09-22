@@ -59,10 +59,15 @@ struct GazeApp: App {
 		// cannot loop on it.
 		if SettingsLaunchHandoff.redirectIfNeeded() { Darwin.exit(0) }
 		let totalStart = StartupTiming.start()
-		let enrolled = StartupTiming.measure(label: "services") { AppServices.shared.store.isEnrolled }
-		if enrolled { OnboardingHistory.markPresented() }
+		// Fail-closed default: until the store has been read, launch as not enrolled,
+		// which presents setup rather than settings. The real read happens below, off
+		// the launch path, on the main actor so the store's published state updates there.
 		presentsSettingsAtLaunch = !AppActivation.isBackgroundLaunch
-			&& !OnboardingHistory.presentsSetup(isEnrolled: enrolled, arguments: CommandLine.arguments)
+			&& !OnboardingHistory.presentsSetup(isEnrolled: false, arguments: CommandLine.arguments)
+		Task { @MainActor in
+			let enrolled = StartupTiming.measure(label: "services") { AppServices.shared.store.isEnrolled }
+			if enrolled { OnboardingHistory.markPresented() }
+		}
 		StartupTiming.finish(label: "gazeapp-init-total", start: totalStart)
 	}
 
