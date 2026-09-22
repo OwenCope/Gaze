@@ -142,14 +142,12 @@ struct SetupDoneStep: View {
 	var body: some View {
 		TourSlideshowView(
 			pages: [page],
-			width: GazeTourSizing.baseWidth,
+			width: GazeTourSizing.panelWidth,
 			continueButtonTitle: "\(primaryTitle)",
 			finishButtonTitle: "\(primaryTitle)",
 			onFinish: primaryAction,
 			onClose: onDone
 		)
-		.frame(width: GazeTourSizing.baseWidth, height: GazeTourSizing.panelHeight / GazeTourSizing.scale)
-		.scaleEffect(GazeTourSizing.scale)
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 }

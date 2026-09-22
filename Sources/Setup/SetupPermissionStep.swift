@@ -32,10 +32,13 @@ struct SetupPermissionStep: View {
 			refresh()
 		}
 		.task {
+			var delaySeconds = 1.0
 			while !Task.isCancelled {
-				do { try await Task.sleep(for: .seconds(1)) }
+				do { try await Task.sleep(for: .seconds(delaySeconds)) }
 				catch { return }
 				refresh()
+				if status.isReady { return }
+				delaySeconds = min(delaySeconds * 2, 8)
 			}
 		}
 	}
@@ -48,7 +51,10 @@ struct SetupPermissionStep: View {
 	private func openSettings() {
 		let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
 		_ = AXIsProcessTrustedWithOptions(options)
-		let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+		guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
+			settingsError = "Open System Settings → Privacy & Security → Accessibility."
+			return
+		}
 		settingsError = NSWorkspace.shared.open(url) ? nil : "Open System Settings → Privacy & Security → Accessibility."
 		refresh()
 	}

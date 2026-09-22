@@ -75,6 +75,12 @@ struct SettingsView: View {
 	/// Wider than this and a row's label and its control stop reading as one row.
 	private static let contentWidth: CGFloat = 620
 
+	private static let relative: RelativeDateTimeFormatter = {
+		let formatter = RelativeDateTimeFormatter()
+		formatter.unitsStyle = .full
+		return formatter
+	}()
+
 	let store: FaceEnrollmentStore
 	let lockout: LockoutManager
 
@@ -755,6 +761,12 @@ struct SettingsView: View {
 			+ "The password is stored on this Mac in recoverable form so Gaze can type it. Turning this off does not delete the stored password; use Revoke to remove it. "
 			+ "Use Test Recognition to practice without unlocking anything."
 			+ "\n\nLast lock-screen attempt: " + LockScanDiagnostics.shared.summary
+			+ "\n\nCapsule: " + capsuleOutcomeLine
+	}
+
+	private var capsuleOutcomeLine: String {
+		guard let capsule = NotchCapsuleController.lastBuildOutcome else { return "Unknown" }
+		return capsule.message + " (" + Self.relative.localizedString(for: capsule.at, relativeTo: Date()) + ")"
 	}
 
 	/// Explains the selected option, and the plugin's removal when that is what is selected.

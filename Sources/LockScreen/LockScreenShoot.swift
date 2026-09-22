@@ -31,6 +31,7 @@ final class LockScreenShoot {
 
 	private var window: NSWindow?
 	private var capsule: NotchCapsuleController?
+	private var keyMonitor: Any?
 
 	func run() {
 		guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
@@ -81,7 +82,7 @@ final class LockScreenShoot {
 			} while loops && !Task.isCancelled
 		}
 
-		NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+		keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
 			// 53 is Escape. Matched by key code rather than characters so it works on any
 			// keyboard layout.
 			if event.keyCode == 53 {
@@ -93,6 +94,10 @@ final class LockScreenShoot {
 	}
 
 	private func stop() {
+		if let monitor = keyMonitor {
+			NSEvent.removeMonitor(monitor)
+			keyMonitor = nil
+		}
 		capsule?.hide()
 		capsule = nil
 		window?.orderOut(nil)

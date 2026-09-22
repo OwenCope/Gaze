@@ -62,13 +62,9 @@ plutil -replace GazeAgentRequirement -string "$REQUIREMENT" \
 SIGNER="${SUDO_USER:-$(stat -f %Su /dev/console)}"
 IDENTITY="$(sudo -u "$SIGNER" security find-identity -v -p codesigning 2>/dev/null \
 	| awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')"
-[ -n "$IDENTITY" ] || IDENTITY="-"
-if ! sudo -u "$SIGNER" codesign --force --sign "$IDENTITY" \
-	--identifier com.gazeunlock.Gaze.plugin "$ROOT/build/Gaze.bundle" 2>/dev/null; then
-	echo "  ! signing as $SIGNER failed; falling back to ad-hoc"
-	sudo -u "$SIGNER" codesign --force --sign - \
-		--identifier com.gazeunlock.Gaze.plugin "$ROOT/build/Gaze.bundle"
-fi
+[ -n "$IDENTITY" ] || { echo "No codesigning identity found; refusing ad-hoc sign." >&2; exit 1; }
+sudo -u "$SIGNER" codesign --force --sign "$IDENTITY" \
+	--identifier com.gazeunlock.Gaze.plugin "$ROOT/build/Gaze.bundle"
 
 echo "→ Installing the bundle"
 mkdir -p "$PLUGIN_DIR"

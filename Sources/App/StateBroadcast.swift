@@ -57,6 +57,10 @@ enum StateBroadcast {
 	/// subscribed would have gone quiet with no error and no way to tell a rename from the
 	/// app simply not running. Both names go out until v0.2, by which point every
 	/// integration has had a release to move.
+	///
+	/// 2026-09-22: keep posting both names for now so existing subscribers don't break
+	/// silently. Decide keep vs. removal in the v0.2 release notes, not here; the
+	/// `com.gazeunlock.Gaze.state` post below stays post-only with no observer.
 	private static let legacyName = "app.faceid.FaceID.state"
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "StateBroadcast")

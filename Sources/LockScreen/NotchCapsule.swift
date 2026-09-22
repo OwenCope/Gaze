@@ -514,9 +514,11 @@ struct NotchCapsule: View {
 			}
 		}
 		.frame(width: width, height: height, alignment: .top)
-		.animation(reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract), value: expanded)
-		.animation(reduceMotion ? nil : NotchAnimation.phase, value: model.phase.isCompact)
-		.animation(reduceMotion ? nil : NotchAnimation.feedback, value: model.phase.captionText)
+		// One transaction for the outer container: stacked value-driven animations
+		// conflict and read as choppy, so all three drivers share a single modifier.
+		.animation(
+			reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract),
+			value: [String(describing: expanded), String(describing: model.phase.isCompact), model.phase.captionText ?? ""].joined(separator: "|"))
 		.symbolEffectsRemoved(reduceMotion)
 	}
 

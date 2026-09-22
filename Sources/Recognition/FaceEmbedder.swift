@@ -18,9 +18,17 @@ struct Faceprint: Codable, Sendable, Equatable {
 		return Faceprint(values: values.map { $0 / norm }, source: source)
 	}
 
-	/// Cosine similarity, 0...1 for the embedders here (all produce non-negative prints
+	/// Cosine similarity, 0...1 for learned embeddings (all produce non-negative prints
 	/// or are L2-normalised, so negative similarity means the inputs are unrelated).
+	///
+	/// Do not call this directly on landmark prints: cosine is wrong for them (nearly
+	/// identical canonical positions score ~1.0 for anyone). Use
+	/// `FaceEmbedder.similarity(_:_:)` via dynamic dispatch instead.
 	func similarity(to other: Faceprint) -> Float {
+		if source.hasPrefix("landmark") || other.source.hasPrefix("landmark") {
+			assertionFailure("Use FaceEmbedder.similarity(_:_:) via dynamic dispatch — Faceprint.similarity(to:) is cosine-only and wrong for landmark prints.")
+			return 0
+		}
 		guard !source.isEmpty, source == other.source, !values.isEmpty,
 			values.count == other.values.count else { return 0 }
 		var dot: Float = 0, a: Float = 0, b: Float = 0

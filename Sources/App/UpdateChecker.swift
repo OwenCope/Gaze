@@ -1,6 +1,11 @@
 import AppKit
 import Foundation
 
+/// Repo-reveal helper for the Settings About row, not an updater.
+///
+/// Despite the name, this type never checks for updates: it only reports the running
+/// version and reveals the checkout's source folder. Release checks live in
+/// `ReleaseUpdateChecker`. Kept under this name so SettingsView call sites stay untouched.
 @MainActor
 final class UpdateChecker {
 	static let shared = UpdateChecker()
