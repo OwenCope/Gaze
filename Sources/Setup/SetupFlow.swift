@@ -106,14 +106,14 @@ struct SetupFlow: View {
 					position: position(of: .password),
 					onSaved: advance,
 					onSkip: advance,
-					onBack: plan.previous(before: .password) != nil ? back : nil
+					onBack: backDestination(from: .password) != nil ? back : nil
 				)
 			case .permission:
 				SetupPermissionStep(
 					position: position(of: .permission),
 					onContinue: advance,
 					onSkip: advance,
-					onBack: plan.previous(before: .permission) != nil ? back : nil
+					onBack: backDestination(from: .permission) != nil ? back : nil
 				)
 			case .done:
 				SetupDoneStep(
@@ -309,7 +309,7 @@ struct SetupFlow: View {
 	/// re-ran enrolment would be destroying work to look consistent. Leaving the capture
 	/// forwards is the only way out of it.
 	private func back() {
-		guard let previous = plan.previous(before: step) else { return }
+		guard let previous = backDestination(from: step) else { return }
 		if step == .capture {
 			guard model?.phase != .complete else { return }
 			cancelCaptureWork()
@@ -317,6 +317,16 @@ struct SetupFlow: View {
 		}
 		isReturning = true
 		withAnimation(stepAnimation) { step = previous }
+	}
+
+	/// Where Back goes from a step, or nil when there is nowhere to go.
+	///
+	/// A destination of capture is blocked once the capture has succeeded: the face is
+	/// saved by then, so stepping back into it would re-run enrolment over finished work.
+	private func backDestination(from step: SetupStep) -> SetupStep? {
+		guard let previous = plan.previous(before: step) else { return nil }
+		if previous == .capture, model?.phase == .complete { return nil }
+		return previous
 	}
 
 	/// The next screen worth showing.

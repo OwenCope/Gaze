@@ -133,5 +133,7 @@ struct SetupProgress: View {
 			}
 			.accessibilityHidden(true)
 		}
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel("Step \(position.index + 1) of \(position.count)")
 	}
 }

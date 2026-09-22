@@ -63,7 +63,8 @@ enum Embedders {
 	/// license does not establish the license of a weight file. The geometry fallback
 	/// remains available for practice, but UnlockGuard refuses it for Mac unlocking.
 	// Shared by readiness checks so they reuse the selected model instead of loading another instance.
-	private static let selected: any FaceEmbedder = CoreMLEmbedder() ?? LandmarkEmbedder()
+	// Computed so each call re-checks the bundled model presence rather than caching it once.
+	private static var selected: any FaceEmbedder { CoreMLEmbedder() ?? LandmarkEmbedder() }
 
 	static func best() -> FaceEmbedder {
 		selected

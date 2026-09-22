@@ -13,6 +13,18 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 OUT="$ROOT/build"
 mkdir -p "$OUT"
 
+# shellcheck source=../Tools/Release/Signing.sh
+. "$ROOT/../Tools/Release/Signing.sh"
+IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null)" || {
+	echo "Unable to inspect valid signing identities. The existing module was not replaced." >&2
+	exit 1
+}
+IDENTITY="$(gaze_signing_identity "${DIST:-0}" "${GAZE_SIGNING_IDENTITY:-}" "$IDENTITIES")" || exit 1
+SIGNING_FLAGS=(--options runtime)
+if [ "${DIST:-}" = "1" ]; then
+	SIGNING_FLAGS+=(--timestamp)
+fi
+
 # The SDK, not the live system. Command Line Tools may be selected while Xcode-beta is the
 # thing with a current SDK, and `security/pam_modules.h` is only in the SDK.
 SDK="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
@@ -34,10 +46,18 @@ clang -shared \
 	-lpam
 
 echo "→ Signing"
-# Ad-hoc is fine and is what the rest of this project uses. PAM does not verify the
-# module's signature — the file is root-owned in a root-owned directory, and that is what
-# protects it. Signing anyway so the binary is not unsigned on disk.
-codesign --force --sign - "$OUT/pam_gaze.so"
+codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" "$OUT/pam_gaze.so"
+
+codesign --verify --strict "$OUT/pam_gaze.so"
+if [ "${DIST:-}" = "1" ]; then
+	SIGNATURE="$(codesign -dv --verbose=4 "$OUT/pam_gaze.so" 2>&1)"
+	printf '%s\n' "$SIGNATURE" | grep -q '^Authority=Developer ID Application: ' || {
+		echo "Release signature is not Developer ID Application. Output was not replaced." >&2; exit 1;
+	}
+	printf '%s\n' "$SIGNATURE" | grep -q '^Timestamp=' || {
+		echo "Release signature has no secure timestamp. Output was not replaced." >&2; exit 1;
+	}
+fi
 
 echo "✓ Built $OUT/pam_gaze.so"
 lipo -archs "$OUT/pam_gaze.so"

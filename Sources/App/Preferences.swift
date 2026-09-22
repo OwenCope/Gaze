@@ -163,6 +163,7 @@ final class Preferences {
 		static let unlockBackend = "unlockBackend"
 		static let pausedUntil = "pausedUntil"
 		static let walkAwayLock = "walkAwayLock"
+		static let autofillOnActivation = "autofillOnActivation"
 	}
 
 	private let defaults: UserDefaults
@@ -205,6 +206,13 @@ final class Preferences {
 	/// takes an action unprompted. Something like that should be opted into.
 	var walkAwayLock: Bool {
 		didSet { defaults.set(walkAwayLock, forKey: Key.walkAwayLock) }
+	}
+
+	/// Fill automatically when a saved app comes forward showing a password box.
+	///
+	/// Off by default. Filling types into another app unprompted, so it stays opt-in.
+	var autofillOnActivation: Bool {
+		didSet { defaults.set(autofillOnActivation, forKey: Key.autofillOnActivation) }
 	}
 
 	/// When a temporary pause runs out, or nil when Gaze is armed.
@@ -328,6 +336,7 @@ final class Preferences {
 		self.defaults = defaults
 		pausedUntil = defaults.object(forKey: Key.pausedUntil) as? Date
 		walkAwayLock = defaults.bool(forKey: Key.walkAwayLock)
+		autofillOnActivation = defaults.bool(forKey: Key.autofillOnActivation)
 		livenessEnabled = defaults.bool(forKey: Key.liveness)
 		touchIDFallback = defaults.object(forKey: Key.touchIDFallback) as? Bool ?? true
 		tamperProtection = defaults.bool(forKey: Key.tamperProtection)

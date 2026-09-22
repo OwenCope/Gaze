@@ -49,7 +49,7 @@ struct GazeApp: App {
 
 	private var store: FaceEnrollmentStore { AppServices.shared.store }
 	private var lockout: LockoutManager { AppServices.shared.lockout }
-	private let presentsSettingsAtLaunch: Bool
+	@State private var presentsSettingsAtLaunch: Bool
 
 	init() {
 		// Same-bundle foreground handoff: a `--settings` (or bare) launch while this
@@ -66,7 +66,13 @@ struct GazeApp: App {
 			&& !OnboardingHistory.presentsSetup(isEnrolled: false, arguments: CommandLine.arguments)
 		Task { @MainActor in
 			let enrolled = StartupTiming.measure(label: "services") { AppServices.shared.store.isEnrolled }
-			if enrolled { OnboardingHistory.markPresented() }
+			if enrolled {
+				OnboardingHistory.markPresented()
+				// The fail-closed default above assumed not enrolled, which presents
+				// setup. An enrolled store that never presented means settings instead.
+				presentsSettingsAtLaunch = !AppActivation.isBackgroundLaunch
+					&& !OnboardingHistory.presentsSetup(isEnrolled: true, arguments: CommandLine.arguments)
+			}
 		}
 		StartupTiming.finish(label: "gazeapp-init-total", start: totalStart)
 	}
@@ -300,6 +306,9 @@ final class AppServices {
 
 	let store = FaceEnrollmentStore()
 	let lockout = LockoutManager()
+
+	/// Stub until the global fill shortcut is wired up; always false for now.
+	var isAutofillShortcutRegistered = false
 
 	private var unlockService: UnlockService?
 	private var lockWatcher: LockWatcher?
