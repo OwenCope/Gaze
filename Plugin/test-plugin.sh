@@ -7,10 +7,16 @@
 # it crashes, hangs or denies, the only thing that fails is this test. Your lock screen is
 # never involved and never modified.
 #
-# Run this, and only if it passes, run install.sh.
+# Disabled: do not run this and do not run install.sh.
 #
 #   sudo ./test-plugin.sh
 set -euo pipefail
+
+printf '%s\n' \
+	'The legacy face-only authorization plugin is disabled pending a security redesign.' \
+	'This script makes no changes. The GazePlugin.m path cannot be built or installed.' \
+	'See SECURITY.md and Plugin/README.md before changing an existing authorization policy.' >&2
+exit 1
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP="/Applications/Gaze.app"

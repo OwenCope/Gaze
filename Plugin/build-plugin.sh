@@ -3,6 +3,12 @@
 # Building is safe. Installing is not — see install.sh.
 set -euo pipefail
 
+printf '%s\n' \
+	'The legacy face-only authorization plugin is disabled pending a security redesign.' \
+	'This script makes no changes. The GazePlugin.m path cannot be built or installed.' \
+	'See SECURITY.md and Plugin/README.md before changing an existing authorization policy.' >&2
+exit 1
+
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=../toolchain.sh

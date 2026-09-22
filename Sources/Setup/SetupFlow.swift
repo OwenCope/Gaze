@@ -146,7 +146,10 @@ struct SetupFlow: View {
 					removal: .opacity
 				)
 		)
-		.id(step)
+		// No `.id(step)` here: it recreated every step's view on each move, throwing away
+		// per-step state. Identity resets are scoped to the steps that need them — the tour
+		// restarts via `tourRevision` on the welcome step, the capture via `captureSession` —
+		// while the transition and the `step`-keyed animation below still slide with the flow.
 		.frame(minWidth: preferredWidth, idealWidth: preferredWidth, maxWidth: preferredWidth,
 			minHeight: preferredHeight, idealHeight: preferredHeight, maxHeight: preferredHeight)
 		.animation(.easeInOut(duration: 0.25), value: step)

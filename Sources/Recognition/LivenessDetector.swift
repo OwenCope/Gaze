@@ -134,8 +134,8 @@ struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 		return out.featureValue(for: name)?.multiArrayValue
 	}
 
-	/// BGRA crop → planar RGB `[1,3,side,side]`, scaled to [0,1] — MiniFAS's convention
-	/// (Sapphire: `isBGR:false, isNormalizedTo01:true`).
+	/// BGRA crop → planar RGB `[1,3,side,side]`, `(x - 127.5) / 128` — the serving
+	/// convention this model separates on (see the threshold note in `init`).
 	private static func tensor(from buffer: CVPixelBuffer, side: Int) -> MLMultiArray? {
 		guard
 			let array = try? MLMultiArray(

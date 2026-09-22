@@ -145,9 +145,10 @@ struct RecognitionTestView: View {
 			rows.append(("Requested excursion", String(format: "%+.2f rad", movement.target)))
 			rows.append(("Return to start", String(format: "within ±%.2f rad", movement.returnTolerance)))
 		}
-		if let spoof {
-			rows.append(("Photo / screen detector", spoofConf.map { $0 < spoof.threshold ? "Clear" : "Device seen" } ?? "Not evaluated"))
-			rows.append(("Detector score / threshold", spoofConf.map { String(format: "%.3f / %.2f", $0, spoof.threshold) } ?? "—"))
+		if spoof != nil {
+			// Mirrors AntiSpoofGate's gate decision (spoofRejectThreshold 0.65).
+			rows.append(("Photo / screen detector", spoofConf.map { $0 < 0.65 ? "Clear" : "Device seen" } ?? "Not evaluated"))
+			rows.append(("Detector score / threshold", spoofConf.map { String(format: "%.3f / %.2f", $0, 0.65) } ?? "—"))
 		} else {
 			rows.append(("Photo / screen detector", "Model unavailable"))
 		}

@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 struct GazeCompanionView: View {
@@ -15,6 +16,7 @@ struct GazeCompanionView: View {
 	@State private var renderError: String?
 	@State private var visible = false
 	@State private var settled = false
+	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "CompanionRender")
 	private var reducedMotion: Bool { systemReduceMotion || previewReduceMotion }
 	private var resolvedOpacity: Float { reduceTransparency ? 1 : 0.68 }
 	private var canAnimate: Bool { active && visible && !reducedMotion && (runsWhileInactive || scenePhase == .active) }
@@ -32,6 +34,7 @@ struct GazeCompanionView: View {
 
 	var body: some View {
 		let sample = poseSampler
+		let renderContext = "\(presentation == .notch ? "notch" : "standard").\(motion)"
 		Group {
 			if renderError != nil {
 				TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !canAnimate || settled)) { context in
@@ -47,9 +50,11 @@ struct GazeCompanionView: View {
 			} else {
 				GazeCompanionRenderer(pose: sample, running: canAnimate && !settled,
 					material: material, opacity: resolvedOpacity,
-					diagnosticContext: "\(presentation == .notch ? "notch" : "standard").\(motion)",
-					failure: { renderError = $0 })
-			}
+					diagnosticContext: renderContext,
+					failure: {
+						renderError = $0
+						Self.logger.error("Metal companion failed in \(renderContext, privacy: .public); fell back to 2D drawing: \($0, privacy: .public)")
+					})
 		}
 		.accessibilityHidden(true)
 		.onAppear { visible = true }

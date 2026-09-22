@@ -37,6 +37,10 @@ final class NotchCapsuleController {
 	/// hosting view's root would reset the view's state and animate nothing.
 	private let model = NotchCapsuleModel()
 
+	/// Last build outcome, in the style of `AutofillService.lastOutcome`, so the
+	/// missing-space state is readable from Settings diagnostics rather than the log alone.
+	private(set) static var lastBuildOutcome: (message: String, at: Date)?
+
 	/// Refuses focus, which keeps it out of the lock screen's input path entirely.
 	private final class UnfocusableWindow: NSWindow {
 		override var canBecomeKey: Bool { false }
@@ -247,7 +251,10 @@ final class NotchCapsuleController {
 		self.host = host
 
 		if !LockScreenSpace.shared.isAvailable {
+			Self.lastBuildOutcome = ("No lock screen space; capsule will only show when unlocked.", Date())
 			Self.logger.notice("No lock screen space; capsule will only show when unlocked.")
+		} else {
+			Self.lastBuildOutcome = nil
 		}
 	}
 
