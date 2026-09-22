@@ -102,7 +102,7 @@ float4 facePixel(float2 uv, constant FaceUniforms &uniforms) {
     float travel = 3.6;
     float3 position;
     bool hit = false;
-    for (int step = 0; step < 72; step++) {
+    for (int step = 0; step < 48; step++) {
         position = origin + direction * travel;
         float distance = worldDistance(position, uniforms);
         if (distance < 0.0007) { hit = true; break; }
@@ -152,10 +152,7 @@ float4 facePixel(float2 uv, constant FaceUniforms &uniforms) {
 }
 
 fragment float4 faceFragment(VertexOut input [[stage_in]], constant FaceUniforms &uniforms [[buffer(0)]]) {
-    float2 halfPixel = float2(0.5 / uniforms.viewport.x, 0.5 / uniforms.viewport.y);
-    float4 color = facePixel(input.uv + halfPixel, uniforms);
-    color += facePixel(input.uv - halfPixel, uniforms);
-    return color * 0.5;
+    return facePixel(input.uv, uniforms);
 }
 """#
 }

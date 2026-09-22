@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import CoreServices
 import ImageIO
 import Observation
 import SwiftUI
@@ -52,6 +53,53 @@ struct WallpaperLoadGate {
 	}
 }
 
+/// Watches one directory with FSEvents and runs the handler on a serial queue. Owned by
+/// `DesktopWallpaper`, so the stream stops and releases when the monitor deallocates.
+private final class WallpaperStoreMonitor {
+	private let stream: FSEventStreamRef
+	private let contextInfo: UnsafeMutableRawPointer
+
+	init?(directory: URL, onChange: @escaping () -> Void) {
+		let info = Unmanaged.passRetained(WallpaperStoreChangeBox(onChange)).toOpaque()
+		var context = FSEventStreamContext(
+			version: 0, info: info, retain: nil, release: nil, copyDescription: nil)
+		let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+			guard let info else { return }
+			Unmanaged<WallpaperStoreChangeBox>.fromOpaque(info).takeUnretainedValue().run()
+		}
+		guard
+			let stream = FSEventStreamCreate(
+				nil, callback, &context, [directory.path] as CFArray,
+				FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.5,
+				UInt32(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagWatchRoot))
+		else {
+			Unmanaged<WallpaperStoreChangeBox>.fromOpaque(info).release()
+			return nil
+		}
+		FSEventStreamSetDispatchQueue(
+			stream, DispatchQueue(label: "com.gazeunlock.Gaze.wallpaperStoreWatcher"))
+		guard FSEventStreamStart(stream) else {
+			FSEventStreamStop(stream)
+			FSEventStreamRelease(stream)
+			Unmanaged<WallpaperStoreChangeBox>.fromOpaque(info).release()
+			return nil
+		}
+		self.stream = stream
+		self.contextInfo = info
+	}
+
+	deinit {
+		FSEventStreamStop(stream)
+		FSEventStreamRelease(stream)
+		Unmanaged<WallpaperStoreChangeBox>.fromOpaque(contextInfo).release()
+	}
+}
+
+private final class WallpaperStoreChangeBox {
+	let run: () -> Void
+	init(_ run: @escaping () -> Void) { self.run = run }
+}
+
 /// The desktop picture, blurred, as a background for Gaze's own windows.
 ///
 /// Settings sitting on the user's own wallpaper is what makes a window feel like part of
@@ -79,6 +127,7 @@ final class DesktopWallpaper {
 	@ObservationIgnored private var loadGate = WallpaperLoadGate()
 	@ObservationIgnored private var loadTask: Task<Void, Never>?
 	@ObservationIgnored private var reportedUnresolvedURL = false
+	@ObservationIgnored private var storeMonitor: WallpaperStoreMonitor?
 
 	private init() {
 		load()
@@ -97,6 +146,10 @@ final class DesktopWallpaper {
 		) { [weak self] _ in
 			MainActor.assumeIsolated { self?.load() }
 		}
+
+		// Event-driven invalidation for the wallpaper store. The 2s poll below stays as
+		// the fallback for anything the stream misses.
+		startStoreMonitor()
 
 		// And a slow poll, because neither of those fires for the common case: changing
 		// the desktop picture in System Settings while a Gaze window is already open and
@@ -147,6 +200,36 @@ final class DesktopWallpaper {
 				self.logger.notice("Could not decode the desktop picture; keeping the plain ground.")
 			}
 		}
+	}
+
+	/// Watches the wallpaper store directory and reloads on any change. The event only
+	/// drops the mtime cache and reloads — a failed parse leaves the statics alone so the
+	/// next read retries, with the 2s poll as the backstop for events arriving mid-write.
+	private func startStoreMonitor() {
+		guard storeMonitor == nil, let directory = Self.wallpaperStoreDirectory() else { return }
+		// `shared` never deallocates and owns the monitor, so the unretained owner
+		// outlives the stream; the box holds no retain, so there is no cycle either way.
+		let owner = Unmanaged.passUnretained(self).toOpaque()
+		storeMonitor = WallpaperStoreMonitor(directory: directory) {
+			Task { @MainActor in
+				Unmanaged<DesktopWallpaper>.fromOpaque(owner).takeUnretainedValue()
+					.storeDidChange()
+			}
+		}
+		if storeMonitor == nil {
+			logger.notice("Wallpaper store watcher failed to start; relying on the poll.")
+		}
+	}
+
+	private func storeDidChange() {
+		Self.lastIndexMtime = nil
+		Self.lastAerialResult = nil
+		load()
+	}
+
+	nonisolated private static func wallpaperStoreDirectory() -> URL? {
+		FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)
+			.first?.appendingPathComponent("Application Support/com.apple.wallpaper/Store")
 	}
 
 	// MARK: - Finding the wallpaper

@@ -139,6 +139,11 @@ final class CameraController {
 
 		do {
 			let running = try await capture.start(with: device) { [weak self] sample, absence, capturedAt in
+				// Drop already-stale frames before the MainActor hop: each hopped Task
+				// retains its pixel buffer until it runs, so under main-thread pressure
+				// the queue would otherwise hold up to ~500ms of full-size buffers.
+				// Mirrors the lease age check below; generation is still checked on-actor.
+				guard capturedAt <= .now, capturedAt.duration(to: .now) <= CameraFrameLease.maximumAge else { return }
 				Task { @MainActor in
 					guard let self, self.state == .running, self.lease.generation == generation,
 						self.sessionGate.isValid else { return }

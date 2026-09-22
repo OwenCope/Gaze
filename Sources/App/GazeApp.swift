@@ -485,8 +485,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 	/// The window is found through the window server rather than `NSApp.windows`, because it
 	/// is not reliably in that list, then matched back to an `NSWindow` by number.
 	/// Fast sweep while the stray window might be around, backing off when it isn't.
-	private static let invisibleSweepFastInterval: TimeInterval = 1.0
-	private static let invisibleSweepSlowInterval: TimeInterval = 15.0
+	private static let invisibleSweepFastInterval: TimeInterval = 2.0
+	private static let invisibleSweepSlowInterval: TimeInterval = 60.0
 	private static let invisibleSweepCleanThreshold = 10
 
 	private var invisibleCleanSweeps = 0
