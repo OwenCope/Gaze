@@ -239,6 +239,7 @@ struct SettingsView: View {
 		.onAppear {
 			AppActivation.bringToFront()
 			refreshExternalState()
+			consumePendingPane()
 		}
 		// Both of these can be changed outside this window — the password by the setup flow
 		// that "Change" opens, Accessibility in System Settings — and neither sends a
@@ -684,6 +685,21 @@ struct SettingsView: View {
 		cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
 		accessibilityGranted = SetupPermissionStatus.current.isReady
 		refreshLoginItemState()
+	}
+
+	/// Navigates to a pane staged by a handing-off `--settings-pane=` launch.
+	///
+	/// A handoff reuses this process, so argv never carries the new request — the
+	/// handing-off process leaves the validated pane name under
+	/// `SettingsLaunchHandoff.pendingPaneKey` instead. Only a known pane wins;
+	/// anything else leaves the argv-derived initial pane alone. Consumed once.
+	private func consumePendingPane() {
+		guard
+			let name = UserDefaults.standard.string(forKey: SettingsLaunchHandoff.pendingPaneKey),
+			let staged = SettingsPane(rawValue: name)
+		else { return }
+		pane = staged
+		UserDefaults.standard.removeObject(forKey: SettingsLaunchHandoff.pendingPaneKey)
 	}
 
 	// MARK: - Unlocking

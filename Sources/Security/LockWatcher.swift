@@ -307,6 +307,7 @@ final class LockWatcher {
 		guard let pinnedCamera = store.pinnedCameraID, !pinnedCamera.isEmpty else { report(.cameraUnavailable); return }
 		let antiSpoofEnabled = Preferences.shared.livenessEnabled
 		let movementCount = Preferences.shared.unlockMovementCount
+		let entryEmbedder = Embedders.best().identifier
 		var inputGuard = LockScreenInputGuard(initial: inputSnapshot)
 		func contextIsCurrent() -> Bool {
 			guard !Task.isCancelled, isLocked, !Self.manualInputObserved,
@@ -316,6 +317,7 @@ final class LockWatcher {
 					keystrokeSelected: Preferences.shared.unlockBackend == .keystroke),
 				Preferences.shared.livenessEnabled == antiSpoofEnabled,
 				Preferences.shared.unlockMovementCount == movementCount,
+				Embedders.best().identifier == entryEmbedder,
 				!store.isCorrupted, store.faces.map(\.id) == enrolledFaces,
 				store.pinnedCameraID == pinnedCamera else { return false }
 			return true
