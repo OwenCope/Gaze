@@ -1,9 +1,10 @@
-"""Gaze installer artwork, rendered at 1x and 2x in Pro Black.
+"""Gaze installer artwork, rendered at 1x and 2x in Pro Black supreme.
 
-A near-black field with soft graphite curves, the two icon positions left
-empty for Finder, a thin arrow between them and one line of instruction.
-Nothing competes with the drag. `WINDOW_SIZE`, `ICON_LOCATIONS` and
-`ICON_SIZE` are shared with `package.py`; keep them in sync there rather
+A near-black field with a decorative top motif (dotted pill row over a soft
+blue glow), soft graphite curves, the two icon positions left empty for
+Finder, a bold double-chevron arrow between them and one white line of
+instruction. Nothing competes with the drag. `WINDOW_SIZE`, `ICON_LOCATIONS`
+and `ICON_SIZE` are shared with `package.py`; keep them in sync there rather
 than forking new values here.
 
 Outputs in the target directory:
@@ -50,6 +51,10 @@ DARK_CAPTION_INK = CAPTION_INK
 GRAPHITE_CURVE = (40, 40, 47)
 GRAPHITE_CURVE_INNER = (30, 30, 36)
 TOP_HIGHLIGHT = (72, 72, 82)
+# Supreme top motif: dotted pill row over a soft blue glow, cf. Glance/Aside/Atoll.
+BLUE_GLOW = (42, 78, 150)
+PILL_OUTLINE = (68, 70, 84)
+MOTIF_DOT = (118, 124, 142)
 # SoftAnchor glow behind Finder icon labels: Finder draws icon names in black,
 # unreadable on Pro Black, so each label zone gets a faint graphite lift.
 LABEL_GLOW = (78, 78, 90)
@@ -91,13 +96,16 @@ def _stroke(draw, a, b, width, fill):
 
 
 def _arrow(draw, cx, cy, length, stroke, fill):
-    """A thin shaft and open chevron, drawn here so the installer carries no
+    """A bold shaft and double chevron, drawn here so the installer carries no
     redistributed glyph."""
     x0, x1 = cx - length / 2, cx + length / 2
-    barb = length * 0.18
+    barb = length * 0.16
+    gap = length * 0.11
     _stroke(draw, (x0, cy), (x1, cy), stroke, fill)
     _stroke(draw, (x1 - barb, cy - barb), (x1, cy), stroke, fill)
     _stroke(draw, (x1 - barb, cy + barb), (x1, cy), stroke, fill)
+    _stroke(draw, (x1 - gap - barb, cy - barb), (x1 - gap, cy), stroke, fill)
+    _stroke(draw, (x1 - gap - barb, cy + barb), (x1 - gap, cy), stroke, fill)
 
 
 def _field(Image, ImageDraw, ImageFont, paper, foot, arrow, ink):
@@ -125,8 +133,31 @@ def _field(Image, ImageDraw, ImageFont, paper, foot, arrow, ink):
         draw.line(((0, i), (w, i)), fill=tuple(
             round(a + (b - a) * t) for a, b in zip(paper, TOP_HIGHLIGHT)))
 
-    # Label lifts under each icon so black Finder names read on Pro Black.
+    # Supreme top motif: soft blue glow with a dotted pill row centred above
+    # the icons, in the Glance/Aside/Atoll manner.
     from PIL import ImageFilter
+    glow = Image.new("L", (w, h), 0)
+    gd = ImageDraw.Draw(glow)
+    gcx, gcy = w // 2, int(30 * scale)
+    grx, gry = int(190 * scale), int(70 * scale)
+    gd.ellipse((gcx - grx, gcy - gry, gcx + grx, gcy + gry), fill=80)
+    glow = glow.filter(ImageFilter.GaussianBlur(24 * scale))
+    tint = Image.new("RGB", (w, h), BLUE_GLOW)
+    image = Image.composite(tint, image, glow)
+    draw = ImageDraw.Draw(image)
+    pill_w, pill_h = 208 * scale, 26 * scale
+    pill = (w / 2 - pill_w / 2, 24 * scale, w / 2 + pill_w / 2, 24 * scale + pill_h)
+    draw.rounded_rectangle(pill, radius=int(pill_h / 2), outline=PILL_OUTLINE,
+                           width=max(1, scale // 2))
+    dots = 9
+    for i in range(dots):
+        t = i / (dots - 1) if dots > 1 else 0.5
+        dx = pill[0] + pill_h / 2 + t * (pill_w - pill_h)
+        dy = (pill[1] + pill[3]) / 2
+        r = 2.2 * scale
+        draw.ellipse((dx - r, dy - r, dx + r, dy + r), fill=MOTIF_DOT)
+
+    # Label lifts under each icon so black Finder names read on Pro Black.
     mask = Image.new("L", (w, h), 0)
     md = ImageDraw.Draw(mask)
     for ix in (ICON_LOCATIONS["Gaze.app"][0], ICON_LOCATIONS["Applications"][0]):
@@ -139,9 +170,9 @@ def _field(Image, ImageDraw, ImageFont, paper, foot, arrow, ink):
     draw = ImageDraw.Draw(image)
 
     _arrow(draw, width / 2 * scale, ICON_LOCATIONS["Gaze.app"][1] * scale,
-           92 * scale, 2.5 * scale, arrow)
+           104 * scale, 4.5 * scale, arrow)
     draw.text((width / 2 * scale, CAPTION_Y * scale), CAPTION,
-              font=_font(ImageFont, 13 * scale), fill=ink, anchor="mm")
+              font=_font(ImageFont, 13 * scale, weight=600), fill=ink, anchor="mm")
     return image
 
 

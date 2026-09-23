@@ -2,8 +2,9 @@
 """Package an existing signed Gaze app with a Retina Finder background.
 
 Staged root shows exactly two icons -- Gaze.app left, Applications symlink
-right -- over the Pro Black drag background (arrow + "Drag Gaze to
-Applications" caption, cf. Glance/Aside/Atoll). LICENSE/README never ship
+right -- over the Pro Black supreme drag background (top dotted-pill motif
+with blue glow, bold double-chevron arrow + white "Drag Gaze to
+Applications" caption, graphite label lifts, cf. Glance/Aside/Atoll). LICENSE/README never ship
 at the root; if ever added they belong in a docs subfolder so the root
 still shows two icons."""
 
@@ -122,8 +123,8 @@ def main():
         parser.error(f"Output already exists; choose a fresh --output-dir: {image}")
     artwork_dir = output_dir / "artwork"
     render(artwork_dir)
-    # Retina source carries the Pro Black arrow + caption; fail rather than
-    # shipping a white/empty fallback.
+    # Retina source carries the Pro Black supreme art (motif + bold arrow +
+    # white caption); fail rather than shipping a white/empty fallback.
     background = artwork_dir / "background.png"
     for candidate in (background, artwork_dir / "background.png"):
         if not candidate.is_file() or candidate.stat().st_size == 0:
@@ -138,8 +139,8 @@ def main():
 
     # Root stages exactly Gaze.app + Applications; docs (LICENSE/README) stay
     # out of the root so Finder keeps the two-icon drag layout. Window size,
-    # icon positions and background below are baked into .DS_Store by dmgbuild
-    # so the layout survives remount; verify_image re-checks them on mount.
+    # icon positions, icon size and text size below match the supreme art in
+    # artwork.py (imported, not forked) so the layout survives remount; verify_image re-checks them on mount.
     settings = {
         "format": "UDZO", "filesystem": "HFS+", "compression_level": 9,
         "files": [str(app)], "symlinks": {"Applications": "/Applications"},
