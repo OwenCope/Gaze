@@ -275,6 +275,8 @@ struct NotchCapsule: View {
 	/// screen either side of the camera housing — where a padlock can sit at menu bar height
 	/// without dropping anything out of the notch at all.
 	var cutoutWidth: CGFloat = 0
+	/// False on screens without a physical notch, where minimal draws a floating pill.
+	var hasNotch: Bool = true
 
 	@Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 	@Environment(\.notchReduceMotion) private var previewReduceMotion
@@ -388,6 +390,173 @@ struct NotchCapsule: View {
 	/// thing it is joining.
 	private var usesCompactBar: Bool { isIsland || isOnEar || model.phase.isCompact }
 
+	// MARK: - Minimal
+
+	/// The Dynamic-Island-style shape: black flanking the housing on both sides, never
+	/// over it. The middle of the row is the physical cutout, so nothing is drawn there.
+	private var isMinimal: Bool { model.shape == .minimal }
+
+	private enum MinimalMetrics {
+		/// Black beside the cutout on each side. The resting silhouette is the cutout
+		/// plus twice this, and grows only sideways from there.
+		static let flank: CGFloat = 42
+		/// The cutout's own height cannot change, so this is the visible black below it.
+		static let heightBump: CGFloat = 12
+		static let topRadius: CGFloat = 12
+		static let bottomRadius: CGFloat = 22
+		/// The floating pill on screens without a notch, and where it hangs.
+		static let pillWidth: CGFloat = 150
+		static let pillHeight: CGFloat = 40
+		static let pillTopGap: CGFloat = 4
+		static let lockSize: CGFloat = 16
+		static let faceSize: CGFloat = 40
+		/// Past this total width the caption truncates with an ellipsis.
+		static let maxTotalWidth: CGFloat = 320
+		static let slideDuration: TimeInterval = 0.25
+	}
+
+	/// The one-line caption between the lock and the face. Only the phases that carry
+	/// guidance show it here: challenge prompts and the two rejection captions. Pending
+	/// and success keep the resting silhouette.
+	private var minimalCaption: String? {
+		guard model.showsCaptions else { return nil }
+		switch model.phase {
+		case .challenge(let prompt, _, _, _, _, _) where !prompt.isEmpty:
+			return prompt
+		case .notRecognised:
+			return NotchCapsuleModel.Phase.notRecognisedCaption
+		case .spoofRejected:
+			return NotchCapsuleModel.Phase.spoofRejectedCaption
+		default:
+			return nil
+		}
+	}
+
+	private var isMinimalUnlocked: Bool {
+		model.phase == .success || model.phase == .unlocked
+	}
+
+	private var minimalNotchHeight: CGFloat { notchInset + MinimalMetrics.heightBump }
+
+	private var minimalLock: some View {
+		Image(systemName: isMinimalUnlocked ? "lock.open.fill" : "lock.fill")
+			.accessibilityHidden(true)
+			.font(.system(size: MinimalMetrics.lockSize, weight: .semibold))
+			.foregroundStyle(.white)
+			.contentTransition(.symbolEffect(.replace))
+	}
+
+	private var minimalFace: some View {
+		GazeFaceMark(phase: model.phase, active: model.isExpanded && !model.phase.isCompact)
+			.frame(width: MinimalMetrics.faceSize, height: MinimalMetrics.faceSize)
+	}
+
+	private var minimalShape: NotchPanelShape {
+		NotchPanelShape(
+			topRadius: MinimalMetrics.topRadius, bottomRadius: MinimalMetrics.bottomRadius)
+	}
+
+	/// The silhouette fill, honouring Style like the island does.
+	@ViewBuilder
+	private var minimalSilhouette: some View {
+		switch model.style {
+		case .normal:
+			minimalShape.fill(.black)
+		case .semiLiquidGlass:
+			minimalShape
+				.fill(.black.opacity(glassTint))
+				.background { minimalShape.fill(.ultraThinMaterial) }
+		case .liquidGlass:
+			Color.clear.glassEffect(
+				.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
+				in: minimalShape)
+		}
+	}
+
+	@ViewBuilder
+	private var minimalPillSilhouette: some View {
+		let pill = RoundedRectangle(
+			cornerRadius: MinimalMetrics.pillHeight / 2, style: .continuous)
+		switch model.style {
+		case .normal:
+			pill.fill(.black)
+		case .semiLiquidGlass:
+			pill
+				.fill(.black.opacity(glassTint))
+				.background { pill.fill(.ultraThinMaterial) }
+		case .liquidGlass:
+			Color.clear.glassEffect(
+				.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
+				in: pill)
+		}
+	}
+
+	@ViewBuilder
+	private var minimalBody: some View {
+		if hasNotch {
+			HStack(spacing: 0) {
+				minimalLock
+					.frame(width: MinimalMetrics.flank, height: minimalNotchHeight)
+				if let caption = minimalCaption {
+					Text(caption)
+						.font(.system(size: 13, weight: .semibold))
+						.foregroundStyle(.white)
+						.lineLimit(1)
+						.truncationMode(.tail)
+						.frame(
+							maxWidth: MinimalMetrics.maxTotalWidth - MinimalMetrics.flank * 2 - 8)
+						.accessibilityHidden(true)
+				} else {
+					// The physical cutout itself: reserved space, never drawn over.
+					Spacer(minLength: 0)
+						.frame(width: cutoutWidth)
+				}
+				minimalFace
+					.frame(width: MinimalMetrics.flank, height: minimalNotchHeight)
+			}
+			.padding(.horizontal, 4)
+			.frame(maxWidth: MinimalMetrics.maxTotalWidth)
+			.background { minimalSilhouette }
+			.frame(height: minimalNotchHeight)
+			.opacity(expanded ? 1 : 0)
+			.animation(reduceMotion ? nil : NotchAnimation.phase, value: minimalCaption ?? "")
+			.animation(
+				reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract),
+				value: expanded)
+		} else {
+			HStack(spacing: 0) {
+				minimalLock
+					.frame(width: MinimalMetrics.flank)
+				if let caption = minimalCaption {
+					Text(caption)
+						.font(.system(size: 13, weight: .semibold))
+						.foregroundStyle(.white)
+						.lineLimit(1)
+						.truncationMode(.tail)
+						.frame(
+							maxWidth: MinimalMetrics.maxTotalWidth - MinimalMetrics.flank * 2 - 8)
+						.accessibilityHidden(true)
+				} else {
+					Spacer(minLength: 0)
+				}
+				minimalFace
+					.frame(width: MinimalMetrics.flank)
+			}
+			.padding(.horizontal, 4)
+			.frame(width: minimalCaption == nil ? MinimalMetrics.pillWidth : nil)
+			.frame(maxWidth: MinimalMetrics.maxTotalWidth)
+			.frame(height: MinimalMetrics.pillHeight)
+			.background { minimalPillSilhouette }
+			.padding(.top, notchInset + MinimalMetrics.pillTopGap)
+			.offset(y: expanded || reduceMotion ? 0 : -16)
+			.opacity(expanded ? 1 : 0)
+			.animation(
+				reduceMotion ? nil : .easeOut(duration: MinimalMetrics.slideDuration),
+				value: expanded)
+			.animation(reduceMotion ? nil : NotchAnimation.phase, value: minimalCaption ?? "")
+		}
+	}
+
 	private var flareRadius: CGFloat {
 		min(17, max(0, usesCompactBar ? restingBarHeight - notchInset : visibleHeight) / 2.4)
 	}
@@ -404,13 +573,17 @@ struct NotchCapsule: View {
 			// Grows downward out of the cutout and retracts back into it. Collapsed, the
 			// shape is exactly the notch's height, so it is completely hidden behind the
 			// physical cutout — nothing appears or disappears, it emerges.
-			// The bar is always drawn, in every mode.
+			// The bar is always drawn, in every mode but minimal, which draws its own
+			// flanking silhouette instead (see minimalBody).
 			//
 			// Island mode used to draw the island *instead* of it, which left the padlock
 			// standing on bare menu bar with nothing behind it — the chip's ground is the
 			// bar, and taking the bar away took the ground with it. The bar is the notch;
 			// the island is a thing the notch hands down. Both, always.
-			background
+			if isMinimal {
+				minimalBody
+			} else {
+				background
 				// Widened by the flare on each side, not narrowed by it.
 				//
 				// `NotchPanelShape` insets its body to leave room for the flares, so
@@ -424,6 +597,7 @@ struct NotchCapsule: View {
 					height: expanded
 						? (isIsland || isOnEar ? restingBarHeight : currentHeight)
 						: notchInset)
+			}
 
 			// Always in the hierarchy while this is island mode, shown or not.
 			//
@@ -464,7 +638,7 @@ struct NotchCapsule: View {
 		// The padlock stays closed for the wait: pending shows the waiting words in the
 		// drop and the same padlock shut where it has sat all along. Only the confirmed
 		// unlock opens it.
-			if model.phase.showsLockChip {
+			if model.phase.showsLockChip && !isMinimal {
 				lockChip
 					// Always positioned against the *resting* bar, never the panel.
 					//
@@ -485,7 +659,7 @@ struct NotchCapsule: View {
 					.transition(.opacity)
 			}
 
-			if showsDrop && !isIsland {
+			if showsDrop && !isIsland && !isMinimal {
 				VStack(spacing: 7) {
 					content
 						.frame(width: glyphSide, height: glyphSide)
@@ -802,7 +976,7 @@ struct NotchCapsule: View {
 	/// Sized against the visible drop. The mask does not touch the glyph, so it only has
 	/// to fit — it does not have to stay inside the opaque part.
 	/// True when the mark sits on the ear rather than in a panel.
-	private var isOnEar: Bool { model.glyphPlacement == .ear }
+	private var isOnEar: Bool { model.shape != .minimal && model.glyphPlacement == .ear }
 
 	/// The style actually drawn, which is not always the one that is selected.
 	///

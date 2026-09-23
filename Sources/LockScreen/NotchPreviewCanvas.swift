@@ -9,7 +9,8 @@ struct NotchPreviewCanvas: View {
 	var background: Color = Color(nsColor: .underPageBackgroundColor)
 
 	var body: some View {
-		GeometryReader { geometry in
+		let hasNotch = NSScreen.main.map { NotchMetrics.hasNotch(on: $0) } ?? true
+		return GeometryReader { geometry in
 			ZStack(alignment: .top) {
 				background
 				if let wallpaper {
@@ -21,10 +22,12 @@ struct NotchPreviewCanvas: View {
 				}
 				NotchCapsule(model: model, width: 278 + widthAdjust,
 					height: (model.shape == .island ? 244 : 128) + heightAdjust,
-					notchInset: 32, cutoutWidth: 180)
-				UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9)
-					.fill(.black)
-					.frame(width: 180, height: 32)
+					notchInset: 32, cutoutWidth: 180, hasNotch: hasNotch)
+				if hasNotch {
+					UnevenRoundedRectangle(bottomLeadingRadius: 9, bottomTrailingRadius: 9)
+						.fill(.black)
+						.frame(width: 180, height: 32)
+				}
 			}
 			.frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
 			.clipped()

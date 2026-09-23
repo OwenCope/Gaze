@@ -147,7 +147,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			id: "notch",
 			title: "Notch panel",
 			subtitle: "How the panel under the notch looks",
-			keywords: ["notch", "panel", "style", "island", "caption", "captions", "instructions"],
+			keywords: ["notch", "panel", "style", "island", "minimal", "dynamic", "caption", "captions", "instructions"],
 			pane: "notch",
 			section: "NotchSettingsSection"
 		),
