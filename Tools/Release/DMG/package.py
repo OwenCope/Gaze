@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Package an existing signed Gaze app with a Retina Finder background."""
+"""Package an existing signed Gaze app with a Retina Finder background.
+
+Staged root shows exactly two icons -- Gaze.app left, Applications symlink
+right -- over the Pro Black drag background (arrow + "Drag Gaze to
+Applications" caption, cf. Glance/Aside/Atoll). LICENSE/README never ship
+at the root; if ever added they belong in a docs subfolder so the root
+still shows two icons."""
 
 import argparse
 from datetime import datetime, timezone
@@ -62,8 +68,9 @@ def verify_image(image, executable_hash):
                 for name, position in ICON_LOCATIONS.items():
                     if tuple(store[name]["Iloc"]) != position:
                         raise RuntimeError(f"Wrong Finder position for {name}")
-            if not (mount / ".background.tiff").is_file():
-                raise RuntimeError("Retina background missing from image")
+            background_image = mount / ".background.tiff"
+            if not background_image.is_file() or background_image.stat().st_size == 0:
+                raise RuntimeError("Pro Black Retina background missing; refusing white fallback")
         finally:
             if mounted:
                 run("/usr/bin/hdiutil", "detach", str(mount))
@@ -113,7 +120,14 @@ def main():
     image = output_dir / f"Gaze-{version}-{architecture.replace(' ', '-')}{suffix}.dmg"
     if image.exists():
         parser.error(f"Output already exists; choose a fresh --output-dir: {image}")
-    background = render(output_dir / "artwork")
+    artwork_dir = output_dir / "artwork"
+    render(artwork_dir)
+    # Retina source carries the Pro Black arrow + caption; fail rather than
+    # shipping a white/empty fallback.
+    background = artwork_dir / "background.png"
+    for candidate in (background, artwork_dir / "background.png"):
+        if not candidate.is_file() or candidate.stat().st_size == 0:
+            raise RuntimeError(f"Pro Black background missing: {candidate}; refusing fallback")
     executable_hash = digest(binary)
 
     def check_copied_app(mount_point, _options):
@@ -122,6 +136,10 @@ def main():
         if digest(copied / "Contents/MacOS/Gaze") != executable_hash:
             raise RuntimeError("App copy failed; refusing to finish the DMG")
 
+    # Root stages exactly Gaze.app + Applications; docs (LICENSE/README) stay
+    # out of the root so Finder keeps the two-icon drag layout. Window size,
+    # icon positions and background below are baked into .DS_Store by dmgbuild
+    # so the layout survives remount; verify_image re-checks them on mount.
     settings = {
         "format": "UDZO", "filesystem": "HFS+", "compression_level": 9,
         "files": [str(app)], "symlinks": {"Applications": "/Applications"},

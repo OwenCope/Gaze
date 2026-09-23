@@ -50,6 +50,10 @@ DARK_CAPTION_INK = CAPTION_INK
 GRAPHITE_CURVE = (40, 40, 47)
 GRAPHITE_CURVE_INNER = (30, 30, 36)
 TOP_HIGHLIGHT = (72, 72, 82)
+# SoftAnchor glow behind Finder icon labels: Finder draws icon names in black,
+# unreadable on Pro Black, so each label zone gets a faint graphite lift.
+LABEL_GLOW = (78, 78, 90)
+LABEL_GLOW_Y = 258
 
 # gaze-mark.png composited over this gradient when no built AppIcon.icns is
 # passed to volume_icon(); matches the light gradient in icon.json.
@@ -121,6 +125,19 @@ def _field(Image, ImageDraw, ImageFont, paper, foot, arrow, ink):
         draw.line(((0, i), (w, i)), fill=tuple(
             round(a + (b - a) * t) for a, b in zip(paper, TOP_HIGHLIGHT)))
 
+    # Label lifts under each icon so black Finder names read on Pro Black.
+    from PIL import ImageFilter
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    for ix in (ICON_LOCATIONS["Gaze.app"][0], ICON_LOCATIONS["Applications"][0]):
+        cx, cy = ix * scale, LABEL_GLOW_Y * scale
+        rx, ry = 100 * scale, 30 * scale
+        md.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=150)
+    mask = mask.filter(ImageFilter.GaussianBlur(18 * scale))
+    lift = Image.new("RGB", (w, h), LABEL_GLOW)
+    image = Image.composite(lift, image, mask)
+    draw = ImageDraw.Draw(image)
+
     _arrow(draw, width / 2 * scale, ICON_LOCATIONS["Gaze.app"][1] * scale,
            92 * scale, 2.5 * scale, arrow)
     draw.text((width / 2 * scale, CAPTION_Y * scale), CAPTION,
@@ -141,6 +158,14 @@ def render(directory: Path):
             directory / f"{stem}@2x.png", dpi=(144, 144))
         field.resize(WINDOW_SIZE, Image.Resampling.LANCZOS).save(
             directory / f"{stem}.png", dpi=(72, 72))
+    expected = [directory / f"{stem}{suffix}.png"
+                for stem in ("background", "background-dark")
+                for suffix in ("", "@2x")]
+    for path in expected:
+        if not path.is_file() or path.stat().st_size == 0:
+            raise RuntimeError(
+                f"Background render failed: {path} missing or empty; "
+                "refusing to continue without 1x + retina Pro Black backgrounds.")
     return directory / "background.png"
 
 
