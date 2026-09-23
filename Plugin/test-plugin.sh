@@ -62,9 +62,24 @@ plutil -replace GazeAgentRequirement -string "$REQUIREMENT" \
 SIGNER="${SUDO_USER:-$(stat -f %Su /dev/console)}"
 IDENTITY="$(sudo -u "$SIGNER" security find-identity -v -p codesigning 2>/dev/null \
 	| awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')"
-[ -n "$IDENTITY" ] || { echo "No codesigning identity found; refusing ad-hoc sign." >&2; exit 1; }
-sudo -u "$SIGNER" codesign --force --sign "$IDENTITY" \
-	--identifier com.gazeunlock.Gaze.plugin "$ROOT/build/Gaze.bundle"
+if [ "${DIST:-0}" = "1" ]; then
+	[ -n "$IDENTITY" ] || { echo "DIST=1 requires a real codesigning identity and timestamp; refusing ad-hoc sign." >&2; exit 1; }
+	sudo -u "$SIGNER" codesign --force --sign "$IDENTITY" --timestamp \
+		--identifier com.gazeunlock.Gaze.plugin "$ROOT/build/Gaze.bundle" \
+		|| { echo "Signing failed." >&2; exit 1; }
+elif [ -n "$IDENTITY" ]; then
+	sudo -u "$SIGNER" codesign --force --sign "$IDENTITY" \
+		--identifier com.gazeunlock.Gaze.plugin "$ROOT/build/Gaze.bundle" \
+		|| { echo "Signing failed." >&2; exit 1; }
+elif [ "${GAZE_ALLOW_ADHOC:-0}" = "1" ]; then
+	echo "WARNING: GAZE_ALLOW_ADHOC=1 — ad-hoc signing for local testing only, not for distribution." >&2
+	sudo -u "$SIGNER" codesign --force --sign - \
+		--identifier com.gazeunlock.Gaze.plugin "$ROOT/build/Gaze.bundle" \
+		|| { echo "Ad-hoc signing failed." >&2; exit 1; }
+else
+	echo "No codesigning identity found; refusing ad-hoc sign. Set GAZE_ALLOW_ADHOC=1 to permit local ad-hoc sign." >&2
+	exit 1
+fi
 
 echo "→ Installing the bundle"
 mkdir -p "$PLUGIN_DIR"
