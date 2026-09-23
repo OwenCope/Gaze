@@ -81,7 +81,7 @@ struct NotchSettingsSection: View {
 		}
 	}
 		.onChange(of: settings.panelShape, initial: true) { _, shape in
-			if shape == .island && settings.glyphPlacement != .centred {
+			if shape != .attached && settings.glyphPlacement != .centred {
 				settings.glyphPlacement = .centred
 			}
 		}
@@ -157,7 +157,7 @@ private struct NotchAppearancePreview: View {
 		let model = NotchCapsuleModel()
 		model.shape = settings.panelShape
 		model.style = settings.notchStyle
-		model.glyphPlacement = settings.panelShape == .island ? .centred : settings.glyphPlacement
+		model.glyphPlacement = settings.panelShape != .attached ? .centred : settings.glyphPlacement
 		model.transparency = settings.notchTransparency
 		model.showsCaptions = settings.showNotchCaptions
 		model.isExpanded = true
@@ -205,7 +205,7 @@ private struct NotchAppearancePreview: View {
 	private func syncAppearance() {
 		model.shape = settings.panelShape
 		model.style = settings.notchStyle
-		model.glyphPlacement = settings.panelShape == .island ? .centred : settings.glyphPlacement
+		model.glyphPlacement = settings.panelShape != .attached ? .centred : settings.glyphPlacement
 		model.transparency = settings.notchTransparency
 		model.showsCaptions = settings.showNotchCaptions
 	}

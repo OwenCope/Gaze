@@ -46,6 +46,8 @@ final class Preferences {
 		case attached
 		/// A separate rounded island, detached from the notch and floating under it.
 		case island
+		/// Flanks the housing on both sides, never covering it — the Dynamic Island look.
+		case minimal
 
 		/// A matched pair, which "Attached" and "Island" were not: one described a
 		/// relationship, the other described an object, so the two never read as two answers
@@ -54,6 +56,7 @@ final class Preferences {
 			switch self {
 			case .attached: return "Connected"
 			case .island: return "Floating"
+			case .minimal: return "Minimal"
 			}
 		}
 
@@ -63,6 +66,8 @@ final class Preferences {
 				return "Grows out of the notch, the way the Dynamic Island expands"
 			case .island:
 				return "A separate rounded panel that floats below the notch"
+			case .minimal:
+				return "Keeps to the notch's width, like the Dynamic Island"
 			}
 		}
 	}

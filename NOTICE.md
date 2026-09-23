@@ -28,6 +28,18 @@ same conclusion about the only route macOS leaves open: there is no API that let
 third-party app authorise a login, so the password is typed. Worth reading if you
 are here for how any of this works.
 
+## Design references
+
+### Glance — the Minimal panel shape
+
+`Sources/LockScreen/NotchCapsule.swift` (minimal shape)
+
+The Minimal panel shape was inspired by the minimal unlock style in **Glance**
+by Jonathan Zhou (<https://github.com/jonnyoo/glance> — MIT licence,
+© 2026 Jonathan Zhou): a silhouette that widens sideways to flank the notch,
+with a lock glyph on one side and the unlock mark on the other. Reimplemented
+here in Gaze's own panel structure and style; no Glance code was copied.
+
 ## Third-party code
 
 ### TourKit

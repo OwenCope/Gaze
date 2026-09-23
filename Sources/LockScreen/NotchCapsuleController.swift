@@ -185,18 +185,26 @@ final class NotchCapsuleController {
 		// capped on width, so the extra height stays empty margin rather than making the
 		// island taller.
 		let isIsland = Preferences.shared.panelShape == .island
+		let isMinimal = Preferences.shared.panelShape == .minimal
+		let hasNotch = NotchMetrics.hasNotch(on: screen)
 		let cutout = NotchMetrics.width(on: screen) ?? 180
 		// Always reserved, captions or not. Tying this to the captions toggle made the
 		// panel a third shorter for anyone who turned captions off, and the owner's
 		// call is that the panel keeps its size — the toggle hides words, it does not
 		// shrink the thing. Do not make this conditional again.
-		let challengeRoom: CGFloat = isIsland ? 0 : 30
+		//
+		// Minimal and island carry their captions inline, so neither reserves room below.
+		let challengeRoom: CGFloat = (isIsland || isMinimal) ? 0 : 30
 		let dropHeight =
-			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout) : 66)
+			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout)
+				: isMinimal ? (hasNotch ? 12 : 4 + 40 + 16) : 66)
 			+ challengeRoom
 			+ Preferences.shared.notchHeightAdjust
+		// Minimal widens inline to fit its caption (up to 320pt), so the window is built
+		// wide enough to hold it at full stretch.
+		let contentWidth = isMinimal ? max(notchWidth, 300) : notchWidth
 		let panelFrame = NotchMetrics.panelFrame(
-			size: CGSize(width: notchWidth, height: notchHeight + dropHeight),
+			size: CGSize(width: contentWidth, height: notchHeight + dropHeight),
 			screenFrame: screen.frame,
 			scale: screen.backingScaleFactor)
 		let size = panelFrame.size
@@ -242,7 +250,8 @@ final class NotchCapsuleController {
 				NotchCapsule(
 					model: model, width: size.width, height: size.height,
 					notchInset: notchHeight,
-					cutoutWidth: NotchMetrics.width(on: screen) ?? 180)
+					cutoutWidth: NotchMetrics.width(on: screen) ?? 180,
+					hasNotch: NotchMetrics.hasNotch(on: screen))
 					.frame(width: windowSize.width, height: windowSize.height, alignment: .top)))
 		host.frame = NSRect(origin: .zero, size: windowSize)
 		window.contentView = host
