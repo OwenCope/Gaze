@@ -3,6 +3,14 @@
 #
 #   ./build.sh                              # or DIST=1 for release
 #   DIST=1 ./Tools/Release/BuildDMG.sh      # writes build/installers/Gaze-<version>.dmg
+#   ./Tools/Release/BuildDMG.sh --help      # usage, env overrides, then exit
+#
+# Env overrides:
+#   GAZE_DMG_APP         input app bundle (default build/Gaze.app,
+#                        or build/release/Gaze.app when DIST=1).
+#   GAZE_DMG_OUTPUT_DIR  output dir (default build/installers).
+#   GAZE_SIGNING_IDENTITY, GAZE_SIGNING_REFERENCE  see Signing.sh.
+# Refuses to overwrite an existing Gaze-<version>.dmg.
 #
 # Never builds, signs the app, or changes an install. The app must already
 # exist at build/Gaze.app (local) or build/release/Gaze.app (DIST=1).
@@ -20,6 +28,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=Signing.sh
 . "$ROOT/Tools/Release/Signing.sh"
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+	sed -n '2,/^set /p' "$0" | sed 's/^# \{0,1\}//'
+	echo "Version is read from the staged app's CFBundleShortVersionString."
+	echo "Existing Gaze-<version>.dmg is never overwritten."
+	exit 0
+fi
+[ $# -eq 0 ] || { echo "Usage: $(basename "$0") [-h|--help]" >&2; exit 1; }
 
 BUNDLE_ID=com.gazeunlock.Gaze
 OUT_DIR="${GAZE_DMG_OUTPUT_DIR:-$ROOT/build/installers}"
@@ -86,7 +102,7 @@ if [ -d "$SIGNING_REFERENCE" ] && [ "$SIGNING_REFERENCE" != "$APP" ]; then
 	fi
 fi
 
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null)" || { echo "Could not read CFBundleShortVersionString from $APP." >&2; exit 1; }
 case "$VERSION" in
 	""|*[!0-9A-Za-z.\-]*)
 		echo "Version '$VERSION' is unsuitable for a filename." >&2; exit 1;;
