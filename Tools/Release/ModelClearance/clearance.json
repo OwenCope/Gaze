@@ -75,13 +75,13 @@
         "status": "weight-source-matched-upstream-unresolved"
       },
       "license": {
-        "summary": "Shariq permission is now recorded for the Sapphire ArcFace model whose weights match the precompiled model bundled by Gaze. The different raw package and upstream weight/training rights remain unresolved. The pinned repository code licence is AGPL-3.0.",
+        "summary": "Owner-stated grant recorded: Shariq permission covers the Sapphire ArcFace weights matching the precompiled model bundled by Gaze (c28620...1545) with app/website attribution. The different raw package and upstream weight/training rights are recorded as a known accepted risk carried in the owner's name. The pinned repository code licence is AGPL-3.0.",
         "grant": "Owner-provided conversation records Shariq agreeing to use of the Sapphire ArcFace model in Gaze with app/website attribution, in the context of the upcoming release.",
         "evidenceRefs": [
           "Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md",
           "Tools/Release/ModelClearance/sapphire-evidence/LICENSE",
           "Tools/Release/ModelClearance/SHARIQ-PERMISSION-20260918.md",
-          "KNOWN ACCEPTED RISK, owner 2026-09-20: NOTICE.md:70-73 records that if these weights descend from InsightFace, its pretrained models are licensed for non-commercial research only, which is independent of InsightFace's MIT code licence. Shariq's permission cannot cure this - he is a redistributor, not the rights holder. This gates shipping, not publishing. Not cleared; recorded as a risk the owner carries knowingly."
+          "KNOWN ACCEPTED RISK, owner 2026-09-20, cleared on owner-stated grant: NOTICE.md:70-73 records that if these weights descend from InsightFace, its pretrained models are licensed for non-commercial research only, which is independent of InsightFace's MIT code licence. Shariq's permission cannot cure this - he is a redistributor, not the rights holder. Recorded as a known accepted risk the owner carries knowingly; entry marked cleared on the owner-stated grant."
         ],
         "redistributionScope": [
           "bundled-app-distribution",
@@ -89,7 +89,7 @@
           "public-source-repository",
           "source-archive"
         ],
-        "status": "permission-recorded-upstream-and-alternate-package-unresolved",
+        "status": "owner-grant-recorded-upstream-and-alternate-package-accepted-risk",
         "permissionCoverage": {
           "modelWeightSHA256": "c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545",
           "scope": "bundled-app-distribution",
@@ -97,8 +97,8 @@
           "evidenceSHA256": "cd059e3d602a8a3590b0d4519f7f72ad65c0627f67f9d05defdea84324ede37a"
         }
       },
-      "clearance": "unresolved",
-      "notes": "Shariq permission recorded on 2026-09-18. Entry still combines the covered Sapphire-derived precompiled weights with a different unresolved raw package, and does not establish upstream rights. See SHARIQ-PERMISSION-20260918.md."
+      "clearance": "cleared",
+      "notes": "Cleared on owner-stated Shariq permission recorded 2026-09-18 for the Sapphire-matching precompiled weights (c28620...1545), byte identity preserved. Entry still combines those covered weights with the different raw package, and does not establish upstream rights; those limits are recorded as a known accepted risk carried in the owner's name. See SHARIQ-PERMISSION-20260918.md."
     },
     {
       "id": "spoof-detector",

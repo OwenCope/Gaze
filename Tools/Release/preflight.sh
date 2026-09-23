@@ -85,7 +85,7 @@ for candidate in "$ROOT/build/release/Gaze.app" "$ROOT/build/Gaze.app"; do
 done
 
 if [ "$TOOLS_ONLY" = 0 ]; then
-	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || missing "model/asset clearance evidence is incomplete (face-embedding model redistribution unresolved per NOTICE.md; setup-art is evidenced, see OWNER-ANSWERS.md)"
+	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || missing "model/asset clearance evidence is incomplete (see Tools/Release/ModelClearance/OWNER-ANSWERS.md)"
 else
 	note 'Build-tools-only check: model/asset clearance is NOT checked; this is not permission to distribute.'
 fi
