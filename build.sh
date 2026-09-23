@@ -18,7 +18,7 @@ DEFAULT_OUTPUT="$ROOT/build/Gaze.app"
 SIGNING_FLAGS=(--options runtime)
 if [ "${DIST:-}" = "1" ]; then
 	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || {
-		echo "Release model/asset clearance is incomplete; the existing app was not replaced." >&2
+		echo "Release model/asset clearance is incomplete (face-embedding model redistribution rights unresolved per NOTICE.md); the existing app was not replaced." >&2
 		exit 1
 	}
 	DEFAULT_OUTPUT="$ROOT/build/release/Gaze.app"

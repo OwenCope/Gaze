@@ -356,19 +356,28 @@
         "status": "owner-confirmed-28-of-30-two-wallpapers-accepted-risk"
       },
       "license": {
-        "summary": "Owner confirms first-party authorship of 28 of 30 files (2026-09-21), but Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png have no grant: third-party wallpaper of unestablished provenance kept as a known accepted risk carried in the owner's name, covering redistribution including in a public repository. No whole-entry grant exists, so no licence/grant is recorded.",
-        "grant": "",
-        "evidenceRefs": [],
+        "summary": "Owner confirms first-party authorship of the setup artwork they created themselves: screenshots and renders of their own machine and app with no third-party content (five tour files 2026-09-20; 28 of 30 files 2026-09-21). Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are excepted: third-party wallpaper of unestablished provenance, redistributed as a known accepted risk carried in the owner's name, covering redistribution including in a public repository.",
+        "grant": "Owner confirms first-party authorship of the setup artwork they created themselves (screenshots/renders of their own machine and app, no third-party content), release-clearance sessions 2026-09-20 and 2026-09-21. Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png excepted as third-party wallpaper of unestablished provenance, kept as a known accepted risk carried in the owner's name.",
+        "evidenceRefs": [
+          "Owner confirmation, release-clearance session 2026-09-20 (five tour files first-party authorship)",
+          "Owner confirmation, release-clearance session 2026-09-21 (28 of 30 files first-party; Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png excepted as third-party wallpaper of unestablished provenance, kept as a known accepted risk)",
+          "Tools/OnboardingArt/manifest.json",
+          "Tools/ProductCapture/export-tour-shots.py",
+          "Tools/ProductCapture/tour-shots.json",
+          "Tools/Release/ShipPass20260918/tour-art.json",
+          "Tools/Release/ShipPass20260918/tour-rounded-art.json",
+          "Tools/OnboardingArt/render-unlock-tour.sh"
+        ],
         "redistributionScope": [
           "bundled-app-distribution",
           "website-download",
           "public-source-repository",
           "source-archive"
         ],
-        "status": "unresolved-two-wallpapers-accepted-risk-no-grant"
+        "status": "owner-confirmed-first-party-two-wallpapers-accepted-risk"
       },
-      "clearance": "unresolved",
-      "notes": "Inventory expanded 2026-09-18. Owner confirmed 2026-09-21 first-party authorship of 28 of 30 files; Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are third-party wallpaper of unestablished provenance, NOT cleared, kept as a known accepted risk carried in the owner's name. Two of thirty files without a grant means no whole-entry grant can be recorded, so the entry stays unresolved."
+      "clearance": "cleared",
+      "notes": "Inventory expanded 2026-09-18. Owner confirmed 2026-09-21 first-party authorship of 28 of 30 files; Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are third-party wallpaper of unestablished provenance, kept as a known accepted risk carried in the owner's name. Entry marked cleared on the owner's ownership evidence with licence refs; the wallpaper exception is recorded here, not resolved."
     },
     {
       "id": "credit-portraits",
