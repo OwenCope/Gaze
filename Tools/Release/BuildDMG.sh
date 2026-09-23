@@ -120,7 +120,8 @@ mkdir -p "$STAGE/.background"
 echo "→ Staging DMG contents"
 /usr/bin/ditto "$APP" "$STAGE/Gaze.app"
 ln -s /Applications "$STAGE/Applications"
-cp "$ROOT/LICENSE" "$STAGE/LICENSE.txt"
+mkdir -p "$STAGE/Docs"
+cp "$ROOT/LICENSE" "$STAGE/Docs/LICENSE.txt"
 
 # Volume icon from the app's own icon; best-effort without extra tools.
 if [ -f "$STAGE/Gaze.app/Contents/Resources/AppIcon.icns" ]; then
@@ -132,17 +133,84 @@ else
 	echo "  ! no AppIcon.icns — volume icon skipped"
 fi
 
-# Finder background: reuse the DMG artwork renderer when its dependencies
-# are installed; otherwise ship without a custom background.
-if [ -f "$ROOT/Tools/Release/DMG/artwork.py" ] && python3 -c 'import PIL' 2>/dev/null; then
-	python3 "$ROOT/Tools/Release/DMG/artwork.py" "$STAGE_ROOT/artwork" >/dev/null
-	cp "$STAGE_ROOT/artwork/background.png" "$STAGE/.background/background.png"
-	echo "  ✓ background"
-else
-	echo "  ! Pillow unavailable — DMG ships without a custom background"
-fi
+# Finder background: Pro Black artwork at 1x + retina, pinned as the Finder
+# background picture. Geometry mirrors Tools/Release/DMG/artwork.py (shared
+# with package.py); keep these in sync there rather than forking new values.
+# artwork.py: WINDOW_SIZE=(640, 360), Gaze.app=(176, 180),
+# Applications=(464, 180), ICON_SIZE=112, text size 13.
+DMG_WINDOW_WIDTH=640
+DMG_WINDOW_HEIGHT=360
+DMG_WINDOW_LEFT=180
+DMG_WINDOW_TOP=140
+DMG_ICON_SIZE=112
+DMG_TEXT_SIZE=13
+DMG_GAZE_X=176
+DMG_GAZE_Y=180
+DMG_APPS_X=464
+DMG_APPS_Y=180
 
-cat > "$STAGE/README.txt" <<'EOF'
+[ -f "$ROOT/Tools/Release/DMG/artwork.py" ] || {
+	echo "DMG artwork renderer missing: Tools/Release/DMG/artwork.py; refusing to stage without a Finder background." >&2; exit 1;
+}
+python3 -c 'import PIL.Image' 2>/dev/null || {
+	echo "Pillow is required for the DMG background (pip install -r Tools/Release/DMG/requirements.txt); refusing to ship without it." >&2; exit 1;
+}
+python3 "$ROOT/Tools/Release/DMG/artwork.py" "$STAGE_ROOT/artwork" >/dev/null || {
+	echo "DMG artwork render failed; no image written." >&2; exit 1;
+}
+for f in background.png "background@2x.png" background-dark.png "background-dark@2x.png"; do
+	[ -s "$STAGE_ROOT/artwork/$f" ] || {
+		echo "DMG artwork missing or empty: $STAGE_ROOT/artwork/$f; no image written." >&2; exit 1;
+	}
+done
+[ -x /usr/bin/tiffutil ] || {
+	echo "Missing /usr/bin/tiffutil; cannot build the Retina background." >&2; exit 1;
+}
+/usr/bin/tiffutil -cathidpicheck "$STAGE_ROOT/artwork/background.png" "$STAGE_ROOT/artwork/background@2x.png" \
+	-out "$STAGE/.background.tiff" >/dev/null || {
+	echo "Failed to combine 1x + retina background; no image written." >&2; exit 1;
+}
+[ -s "$STAGE/.background.tiff" ] || {
+	echo "Retina background missing after tiffutil: $STAGE/.background.tiff; no image written." >&2; exit 1;
+}
+cp "$STAGE_ROOT/artwork/background.png" "$STAGE_ROOT/artwork/background@2x.png" \
+	"$STAGE_ROOT/artwork/background-dark.png" "$STAGE_ROOT/artwork/background-dark@2x.png" \
+	"$STAGE/.background/"
+echo "  ✓ background (1x + retina, light + dark rendered; Retina TIFF staged)"
+DMG_WINDOW_RIGHT=$((DMG_WINDOW_LEFT + DMG_WINDOW_WIDTH))
+DMG_WINDOW_BOTTOM=$((DMG_WINDOW_TOP + DMG_WINDOW_HEIGHT))
+/usr/bin/osascript <<OSA >/dev/null || { echo "Failed to pin the Finder background and icon layout; no image written." >&2; exit 1; }
+tell application "Finder"
+	open (POSIX file "$STAGE" as alias)
+	repeat 50 times
+		if exists Finder window "Gaze" then exit repeat
+		delay 0.1
+	end repeat
+	set w to Finder window "Gaze"
+	set current view of w to icon view
+	set toolbar visible of w to false
+	set statusbar visible of w to false
+	set sidebar width of w to 0
+	set bounds of w to {$DMG_WINDOW_LEFT, $DMG_WINDOW_TOP, $DMG_WINDOW_RIGHT, $DMG_WINDOW_BOTTOM}
+	tell its icon view options
+		set icon size to $DMG_ICON_SIZE
+		set text size to $DMG_TEXT_SIZE
+		set arrangement to not arranged
+		set background picture to (POSIX file "$STAGE/.background.tiff" as alias)
+	end tell
+	delay 0.3
+	set position of item "Gaze.app" of w to {$DMG_GAZE_X, $DMG_GAZE_Y}
+	set position of item "Applications" of w to {$DMG_APPS_X, $DMG_APPS_Y}
+	delay 0.3
+	close w
+	open (POSIX file "$STAGE" as alias)
+	delay 0.3
+	close Finder window "Gaze"
+end tell
+OSA
+echo "  ✓ Finder background + icon layout pinned"
+
+cat > "$STAGE/Docs/README.txt" <<'EOF'
 Gaze — face unlock for the Mac
 ==============================
 
@@ -170,7 +238,7 @@ install broke the lock screen, roll back with:
 See Plugin/README.md and SECURITY.md before changing any
 authorization policy.
 EOF
-echo "  ✓ Gaze.app + Applications link + README.txt + LICENSE.txt"
+echo "  ✓ Gaze.app + Applications link + Docs"
 
 echo "→ Creating $IMAGE"
 /usr/bin/hdiutil create -volname "Gaze $VERSION" -srcfolder "$STAGE" \
