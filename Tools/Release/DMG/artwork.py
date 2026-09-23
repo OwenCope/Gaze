@@ -25,6 +25,7 @@ this module never silently skips.
 """
 
 from pathlib import Path
+from typing import Optional
 import sys
 
 WINDOW_SIZE = (640, 360)
@@ -143,7 +144,7 @@ def render(directory: Path):
     return directory / "background.png"
 
 
-def volume_icon(directory: Path, app_icon: Path | None = None):
+def volume_icon(directory: Path, app_icon: Optional[Path] = None):
     """Write VolumeIcon.icns into directory; see module docstring for sources."""
     Image, ImageDraw, _ = _pil()
     directory.mkdir(parents=True, exist_ok=True)
