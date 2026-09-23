@@ -1,13 +1,14 @@
-"""Gaze installer artwork, rendered at 1x and 2x in light and dark.
+"""Gaze installer artwork, rendered at 1x and 2x in Pro Black.
 
-A light field and a dark field, the two icon positions left empty for Finder,
-a thin arrow between them and one line of instruction. Nothing competes with
-the drag. `WINDOW_SIZE`, `ICON_LOCATIONS` and `ICON_SIZE` are shared with
-`package.py`; keep them in sync there rather than forking new values here.
+A near-black field with soft graphite curves, the two icon positions left
+empty for Finder, a thin arrow between them and one line of instruction.
+Nothing competes with the drag. `WINDOW_SIZE`, `ICON_LOCATIONS` and
+`ICON_SIZE` are shared with `package.py`; keep them in sync there rather
+than forking new values here.
 
 Outputs in the target directory:
-  background.png / background@2x.png (light, 1x/retina)
-  background-dark.png / background-dark@2x.png (dark, 1x/retina)
+  background.png / background@2x.png (1x/retina)
+  background-dark.png / background-dark@2x.png (same Pro Black style, 1x/retina)
   VolumeIcon.icns (from `volume_icon`, see below)
 
 Volume icon: `volume_icon()` renders the DMG volume icon from the app's own
@@ -34,19 +35,20 @@ FONT = "/System/Library/Fonts/SFNS.ttf"
 CAPTION = "Drag Gaze to Applications"
 # Below the names Finder draws under the icons, with room to breathe.
 CAPTION_Y = 304
-# Finder draws icon names in dark text over a background picture whatever the
-# system appearance, so the light window stays light in dark mode too. A flat
-# field rather than the app's backdrop: the two icons are the only things to
-# look at. The dark files are for a dark-aware packaging step.
-PAPER = (246, 246, 248)
-# A faint top-to-bottom falloff so the field doesn't read as a blank export.
-PAPER_FOOT = (238, 238, 241)
-ARROW = (174, 174, 180)
-CAPTION_INK = (134, 134, 139)
-DARK_PAPER = (34, 34, 38)
-DARK_PAPER_FOOT = (24, 24, 27)
-DARK_ARROW = (150, 150, 158)
-DARK_CAPTION_INK = (176, 176, 184)
+# Finder icon labels render white over this background. Pro Black: near-black
+# base with a faint top-to-bottom falloff so the field has depth without
+# competing with the icons. Both stems render this same style.
+PAPER = (10, 10, 12)
+PAPER_FOOT = (24, 24, 28)
+ARROW = (208, 208, 216)
+CAPTION_INK = (255, 255, 255)
+DARK_PAPER = PAPER
+DARK_PAPER_FOOT = PAPER_FOOT
+DARK_ARROW = ARROW
+DARK_CAPTION_INK = CAPTION_INK
+GRAPHITE_CURVE = (40, 40, 47)
+GRAPHITE_CURVE_INNER = (30, 30, 36)
+TOP_HIGHLIGHT = (72, 72, 82)
 
 # gaze-mark.png composited over this gradient when no built AppIcon.icns is
 # passed to volume_icon(); matches the light gradient in icon.json.
@@ -104,6 +106,19 @@ def _field(Image, ImageDraw, ImageFont, paper, foot, arrow, ink):
         t = (y / (h - 1)) ** 2
         draw.line(((0, y), (w, y)), fill=tuple(
             round(a + (b - a) * t) for a, b in zip(paper, foot)))
+
+    # Soft graphite curves: two large rounded bands arcing behind the icons.
+    draw.rounded_rectangle((-w * 0.25, -h * 0.55, w * 1.25, h * 0.52),
+                           radius=int(h * 0.30), outline=GRAPHITE_CURVE_INNER,
+                           width=scale)
+    draw.rounded_rectangle((-w * 0.18, -h * 0.48, w * 1.18, h * 0.44),
+                           radius=int(h * 0.26), outline=GRAPHITE_CURVE,
+                           width=2 * scale)
+    # Subtle top highlight fading down over a few pixels.
+    for i in range(3 * scale):
+        t = 1 - i / (3 * scale)
+        draw.line(((0, i), (w, i)), fill=tuple(
+            round(a + (b - a) * t) for a, b in zip(paper, TOP_HIGHLIGHT)))
 
     _arrow(draw, width / 2 * scale, ICON_LOCATIONS["Gaze.app"][1] * scale,
            92 * scale, 2.5 * scale, arrow)

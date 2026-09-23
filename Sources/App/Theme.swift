@@ -37,8 +37,11 @@ enum Theme {
 
 	/// Opaque ground, for the windows that are not vibrant — enrolment and the recognition
 	/// test, both of which are full of camera preview and want no wallpaper behind them.
+	///
+	/// Pro Black: near-black base in both appearances (dark-first). White text on this
+	/// ground holds WCAG AA by a wide margin.
 	static let background = dynamic(
-		light: Color(red: 0.93, green: 0.93, blue: 0.94),
+		light: Color(red: 0.078, green: 0.078, blue: 0.082),
 		dark: Color(red: 0.078, green: 0.078, blue: 0.082))
 
 	/// A group's fill — and, since `GlassSurface` lost its outline, the only thing marking
@@ -51,14 +54,16 @@ enum Theme {
 	/// because a hairline was drawn round it to say where the edge was. Tone has to carry
 	/// that on its own now, the way System Settings does it, so the step up from the ground
 	/// is a step you can actually see.
-	static let surface = dynamic(light: .white.opacity(0.62), dark: .white.opacity(0.12))
-	static let surfaceRaised = dynamic(light: .white.opacity(0.88), dark: .white.opacity(0.18))
+	/// Pro Black: graphite-over-black in both appearances (dark-first), so a group reads
+	/// by tone alone against `background`.
+	static let surface = dynamic(light: .white.opacity(0.12), dark: .white.opacity(0.12))
+	static let surfaceRaised = dynamic(light: .white.opacity(0.18), dark: .white.opacity(0.18))
 	/// Settings groups only: a calmer, more solid neutral fill so rows stay readable over
-	/// wallpaper. White in light, neutral grey in dark, both at 0.86.
-	static let settingsGroupFill = dynamic(light: .white.opacity(0.86), dark: Color(white: 0.14).opacity(0.86))
+	/// wallpaper. Graphite in both appearances (dark-first).
+	static let settingsGroupFill = dynamic(light: Color(white: 0.14).opacity(0.86), dark: Color(white: 0.14).opacity(0.86))
 	/// Keep the original group tint over the Semi Liquid Glass backdrop.
 	static let settingsGlassGroupFill = surface
-	static let separator = dynamic(light: .black.opacity(0.10), dark: .white.opacity(0.09))
+	static let separator = dynamic(light: .white.opacity(0.09), dark: .white.opacity(0.09))
 
 	static let setupGround = dynamic(light: Color(white: 0.96), dark: .black)
 	/// The muted line under a title — same level as `secondaryLabel` resolves to in dark.
@@ -151,13 +156,11 @@ enum Theme {
 
 	/// Label opacities are set against the *worst* case, not the average one.
 	///
-	/// The window is translucent, so the ground under a label is whatever wallpaper the user
-	/// happens to have. Tuned on a dark desktop, 0.35 looked like a restrained tertiary; on a
-	/// light one it was gone. These are the lowest values that still hold up over a bright
-	/// wallpaper coming through the glass.
-	static let label = dynamic(light: .black, dark: .white)
-	static let secondaryLabel = dynamic(light: .black.opacity(0.62), dark: .white.opacity(0.68))
-	static let tertiaryLabel = dynamic(light: .black.opacity(0.45), dark: .white.opacity(0.52))
+	/// Pro Black: white primary text in both appearances (dark-first), holding WCAG AA
+	/// against the near-black ground. Values match the dark-appearance ramps.
+	static let label = dynamic(light: .white, dark: .white)
+	static let secondaryLabel = dynamic(light: .white.opacity(0.68), dark: .white.opacity(0.68))
+	static let tertiaryLabel = dynamic(light: .white.opacity(0.52), dark: .white.opacity(0.52))
 
 	/// Controls are neutral.
 	///
@@ -172,14 +175,9 @@ enum Theme {
 	/// What a filled control's label is knocked out in: the opposite of `accent`.
 	static let onAccent = dynamic(light: .white.opacity(0.95), dark: .black.opacity(0.88))
 
-	/// Selected and hovered rows.
-	///
-	/// These have to be a pair, not one colour: a wash of white marks a row on dark glass and
-	/// is completely invisible on light. The selected sidebar row disappearing in light mode
-	/// was exactly this — a hardcoded `white.opacity(0.14)` with nothing lighter behind it to
-	/// stand out from.
-	static let selection = dynamic(light: .black.opacity(0.13), dark: .white.opacity(0.16))
-	static let hoverFill = dynamic(light: .black.opacity(0.06), dark: .white.opacity(0.07))
+	/// Selected and hovered rows: white washes for the dark-first ground, in both appearances.
+	static let selection = dynamic(light: .white.opacity(0.16), dark: .white.opacity(0.16))
+	static let hoverFill = dynamic(light: .white.opacity(0.07), dark: .white.opacity(0.07))
 
 	/// Apple's system green. Gaze identity only, never chrome.
 	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
@@ -224,14 +222,13 @@ struct WindowGlass: View {
 		extraTranslucent ? .black.opacity(opacity) : Theme.scrim(opacity)
 	}
 
-	/// A plain solid ground, in whichever appearance it's drawn: white in light, grey in
-	/// dark. This is the default now — a window that shows the desktop through itself reads
-	/// as an overlay, not an app, and the translucency was most of what made it feel
-	/// "vibe-coded". `VibrantBackground` stays underneath purely for its title-bar handling;
-	/// the opaque colour on top of it is what you actually see. Semi Liquid Glass
-	/// (`extraTranslucent`) still gets the real material for anyone who wants it.
+	/// A plain solid ground, graphite in both appearances (Pro Black dark-first), so the
+	/// window never renders as a white slab. `VibrantBackground` stays underneath purely
+	/// for its title-bar handling; the opaque colour on top of it is what you actually see.
+	/// Semi Liquid Glass (`extraTranslucent`) still gets the real material for anyone who
+	/// wants it.
 	private static let solidGround = Theme.dynamic(
-		light: Color(white: 0.98),
+		light: Color(white: 0.145),
 		dark: Color(white: 0.145))
 
 	var body: some View {
