@@ -551,7 +551,9 @@ struct NotchCapsule: View {
 				}
 				.foregroundStyle(.white)
 				.opacity(hidesReturnCaption || !model.showsCaptions ? 0 : 1)
-				.accessibilityHidden(hidesReturnCaption || !model.showsCaptions)
+				// Always hidden: GazeFaceMark already announces this same text, so
+				// exposing the caption would read every state twice.
+				.accessibilityHidden(true)
 				.id(prompt)
 				.transition(.opacity)
 			}

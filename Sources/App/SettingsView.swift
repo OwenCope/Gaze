@@ -765,7 +765,7 @@ struct SettingsView: View {
 	}
 
 	private var capsuleOutcomeLine: String {
-		guard let capsule = NotchCapsuleController.lastBuildOutcome else { return "Unknown" }
+		guard let capsule = NotchCapsuleController.lastBuildOutcome else { return "Not built yet" }
 		return capsule.message + " (" + Self.relative.localizedString(for: capsule.at, relativeTo: Date()) + ")"
 	}
 

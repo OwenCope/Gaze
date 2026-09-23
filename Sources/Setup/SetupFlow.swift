@@ -321,11 +321,12 @@ struct SetupFlow: View {
 
 	/// Where Back goes from a step, or nil when there is nowhere to go.
 	///
-	/// A destination of capture is blocked once the capture has succeeded: the face is
+	/// A destination of capture is skipped once the capture has succeeded: the face is
 	/// saved by then, so stepping back into it would re-run enrolment over finished work.
+	/// Back jumps over it to the nearest earlier shown step instead of disappearing.
 	private func backDestination(from step: SetupStep) -> SetupStep? {
 		guard let previous = plan.previous(before: step) else { return nil }
-		if previous == .capture, model?.phase == .complete { return nil }
+		if previous == .capture, model?.phase == .complete { return plan.previous(before: .capture) }
 		return previous
 	}
 

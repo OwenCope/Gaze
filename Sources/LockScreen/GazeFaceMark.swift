@@ -119,8 +119,8 @@ struct GazeFaceMark: View {
 		case .scanning: "Looking for your face"
 		case .pending: "Waiting for macOS"
 		case .success: "Face verified"
-		case .notRecognised: "Face not recognised"
-		case .spoofRejected: "Face rejected"
+		case .notRecognised: "Face not recognised. Try again."
+		case .spoofRejected: "Face rejected. Use your password."
 		case .locked: "Locked"
 		case .unlocked: "Unlocked"
 		}
