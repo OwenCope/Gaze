@@ -38,7 +38,7 @@ if [ "${DIST:-}" = "1" ] \
 	|| [ -d "$ROOT/../Resources/Spoof.mlpackage" ] \
 	|| [ -f "$ROOT/../Resources/Spoof.mlmodel" ]; then
 	python3 "$ROOT/../Tools/Release/ModelClearance/validate.py" || {
-		echo "Model/asset clearance is incomplete; the existing bundle was not replaced, and test-plugin.sh must not copy ../build/Gaze.app to /Applications." >&2
+		echo "Model/asset clearance is incomplete (face-embedding model redistribution rights unresolved per NOTICE.md); the existing bundle was not replaced, and test-plugin.sh must not copy ../build/Gaze.app to /Applications." >&2
 		exit 1
 	}
 fi
