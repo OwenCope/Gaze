@@ -16,6 +16,7 @@ import os
 final class LockWatcher {
 
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "LockWatcher")
+	private static let renderTimingLogger = Logger(subsystem: "com.gazeunlock.Gaze", category: "RenderTiming")
 
 	private let store: FaceEnrollmentStore
 	private let lockout: LockoutManager
@@ -362,11 +363,34 @@ final class LockWatcher {
 		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces, antiSpoof: antiSpoof)
 		let challenge: LivenessChallenge? = LivenessChallenge()
 		var challengeGate = UnlockChallengeGate(requiredActions: movementCount.rawValue)
+		// Opt-in render timing (GAZE_RENDER_DIAGNOSTICS=1). Measurement and logging only:
+		// no branch below reads these values, so unlock behaviour is identical either way.
+		// drawableWaitMs stays 0: this loop never acquires a drawable; the field exists
+		// so windows correlate with the renderer's drawable-wait counters.
+		let renderDiagnostics = RenderTiming.enabled
+		let renderAttempt = String(identifier.uuidString.prefix(8))
+		var renderTiming = RenderTiming(attemptID: renderAttempt)
+		var renderPhase = "locked"
+		let renderClockStart = ContinuousClock.now
+		var renderPreviousTick: ContinuousClock.Instant?
+		var tickCapsuleMs = 0.0
+		var tickInferenceMs = 0.0
+		func renderMs(_ from: ContinuousClock.Instant, _ to: ContinuousClock.Instant) -> Double {
+			let parts = from.duration(to: to).components
+			return Double(parts.seconds) * 1_000 + Double(parts.attoseconds) / 1_000_000_000_000_000
+		}
+		func updateCapsule(_ name: String, _ phase: NotchCapsuleModel.Phase) {
+			guard renderDiagnostics else { capsule.update(phase: phase); return }
+			let started = ContinuousClock.now
+			capsule.update(phase: phase)
+			tickCapsuleMs += renderMs(started, ContinuousClock.now)
+			renderPhase = name
+		}
 		func resetMovementGuidance(reason: String) {
 			challenge?.reset()
 			guard challengeGate.reset() else { return }
 			report(.scanning)
-			capsule.update(phase: .challenge(prompt: "Face the camera to retry", symbol: "viewfinder",
+			updateCapsule("retry", .challenge(prompt: "Face the camera to retry", symbol: "viewfinder",
 				hintX: 0, hintY: 0, pulses: false))
 			StateBroadcast.post(.detecting)
 			Self.logger.notice("Movement guidance withdrawn; reacquiring face. reason=\(reason, privacy: .public)")
@@ -430,6 +454,20 @@ final class LockWatcher {
 		let attemptDeadline = ContinuousClock.now.advanced(by: .seconds(60))
 		var previousPoll = ContinuousClock.now
 		while requestIsCurrent(), ContinuousClock.now < attemptDeadline {
+			let tickStart = ContinuousClock.now
+			let tickGapMs = renderDiagnostics ? renderPreviousTick.map { renderMs($0, tickStart) } ?? 0 : 0
+			if renderDiagnostics { renderPreviousTick = tickStart }
+			defer {
+				guard renderDiagnostics else { return }
+				let tickStartMs = renderMs(renderClockStart, tickStart)
+				if let window = renderTiming.record(tick: ticks, frameID: camera.frameID,
+					phase: renderPhase, tickStartMs: tickStartMs, capsuleUpdateMs: tickCapsuleMs,
+					callbackGapMs: tickGapMs, drawableWaitMs: 0, inferenceMs: tickInferenceMs) {
+					Self.renderTimingLogger.notice("\(window, privacy: .public)")
+				}
+			}
+			tickCapsuleMs = 0
+			tickInferenceMs = 0
 			let delay = RecognitionScanPacing.delay(since: previousPoll, now: .now)
 			if delay > .zero {
 				do { try await Task.sleep(for: delay) }
@@ -443,7 +481,7 @@ final class LockWatcher {
 				report(freshFrames.hasReceivedFrame ? .cameraStalled : .firstFrameTimeout)
 				let stage = freshFrames.hasReceivedFrame ? "running stream" : "first frame"
 				Self.logger.error("Camera timed out at \(stage, privacy: .public); analyzed=\(camera.analyzedFrames) expired=\(camera.expiredFrames). No password submitted.")
-				capsule.update(phase: .notRecognised)
+				updateCapsule("notRecognised", .notRecognised)
 				return
 			case .waiting:
 				continue
@@ -453,7 +491,7 @@ final class LockWatcher {
 					let elapsed = cameraRequestedAt.duration(to: .now).components
 					let milliseconds = elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
 					Self.logger.notice("First fresh camera frame ready after \(milliseconds)ms; analyzed=\(camera.analyzedFrames) expired=\(camera.expiredFrames).")
-					capsule.update(phase: .scanning)
+					updateCapsule("scanning", .scanning)
 					StateBroadcast.post(.detecting)
 					shownAt = Date()
 				}
@@ -469,7 +507,7 @@ final class LockWatcher {
 				Self.logger.notice("Challenge not answered in time; treating as a rejection.")
 				lockout.recordFailure()
 				StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
-				capsule.update(phase: .notRecognised)
+				updateCapsule("notRecognised", .notRecognised)
 				challenge?.next()
 				challengeGate.reset()
 				matchingHold.reset()
@@ -496,7 +534,7 @@ final class LockWatcher {
 				guard Date() >= until else { continue }
 				cooldownUntil = nil
 				report(.scanning)
-				capsule.update(phase: .scanning)
+				updateCapsule("scanning", .scanning)
 				StateBroadcast.post(.detecting)
 			}
 
@@ -527,6 +565,7 @@ final class LockWatcher {
 			guard let sampleCapturedAt = camera.lastFrameCapturedAt else { continue }
 			let inferenceStarted = ContinuousClock.now
 			let result = await evaluator.evaluate(sample)
+			if renderDiagnostics { tickInferenceMs = renderMs(inferenceStarted, ContinuousClock.now) }
 			guard requestIsCurrent(), camera.state == .running,
 				camera.boundDeviceID == pinnedCamera else { return }
 			let evaluatedAt = ContinuousClock.now
@@ -555,7 +594,11 @@ final class LockWatcher {
 						poseOffset: pose?.offset, poseTarget: pose?.target, returnTolerance: pose?.returnTolerance),
 						for: identifier)
 					let failure = result.failure?.rawValue ?? "belowThreshold"
-					Self.logger.notice("Movement identity check failed; action=\(challenge.action.prompt, privacy: .public) compared=\(result.comparedIdentity) failure=\(failure, privacy: .public) score=\(result.score) returning=\(challenge.isReturningToRest). No movement proof retained.")
+					if renderDiagnostics {
+						renderTiming.lastIdentity = "\(failure) score=\(result.score) compared=\(result.comparedIdentity)"
+					}
+					let identityAttempt = renderDiagnostics ? " attempt=\(renderAttempt)" : ""
+					Self.logger.notice("Movement identity check failed; action=\(challenge.action.prompt, privacy: .public) compared=\(result.comparedIdentity) failure=\(failure, privacy: .public) score=\(result.score) returning=\(challenge.isReturningToRest)\(identityAttempt, privacy: .public). No movement proof retained.")
 				}
 				resetMovementGuidance(reason: "identity mismatch")
 
@@ -566,7 +609,7 @@ final class LockWatcher {
 					report(.notRecognized)
 					lockout.recordFailure()
 					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
-					capsule.update(phase: .notRecognised)
+					updateCapsule("notRecognised", .notRecognised)
 					Self.logger.notice("Not recognised (score \(result.score)); will try again.")
 					challenge?.next()
 					challengeGate.reset()
@@ -581,7 +624,7 @@ final class LockWatcher {
 				if case .unavailable = decision {
 					report(.verificationUnavailable)
 					Self.logger.error("Anti-spoof inference failed; refusing password submission.")
-					capsule.update(phase: .notRecognised)
+					updateCapsule("notRecognised", .notRecognised)
 					return
 				}
 				if case .spoof(let reason, let score) = decision {
@@ -593,7 +636,7 @@ final class LockWatcher {
 					Self.logger.notice("Match rejected by anti-spoof: \(reason, privacy: .public) (\(String(format: "%.3f", score), privacy: .public)).")
 					lockout.recordFailure()
 					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed, score: Double(score))
-					capsule.update(phase: .spoofRejected)
+					updateCapsule("spoofRejected", .spoofRejected)
 					challenge?.next()
 					challengeGate.reset()
 					matchingHold.reset()
@@ -607,7 +650,7 @@ final class LockWatcher {
 				matchingHold.reset()
 				challenge?.reset()
 				challengeGate.reset()
-				capsule.update(phase: .notRecognised)
+				updateCapsule("notRecognised", .notRecognised)
 				return
 			}
 			if matchingHold.faceID != face.id {
@@ -643,12 +686,13 @@ final class LockWatcher {
 					// below stays bare: the animated return is deliberately captionless.
 					let outwardPrompt = NotchCapsuleModel.Phase.outwardPrompt(challenge.guidancePrompt,
 						completedActions: challengeGate.completedActions, requiredActions: challengeGate.requiredActions)
-					capsule.update(
-						phase: .challenge(
-							prompt: outwardPrompt,
-							symbol: challenge.guidanceSymbol,
-							hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
-					Self.logger.notice("Movement prompt presented; action=\(challenge.action.prompt, privacy: .public); requiring fresh response \(challengeGate.completedActions + 1) of \(challengeGate.requiredActions).")
+					updateCapsule("challenge", .challenge(
+						prompt: outwardPrompt,
+						symbol: challenge.guidanceSymbol,
+						hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
+					if renderDiagnostics { renderTiming.lastPrompt = challenge.action.prompt }
+					let promptAttempt = renderDiagnostics ? " attempt=\(renderAttempt)" : ""
+					Self.logger.notice("Movement prompt presented; action=\(challenge.action.prompt, privacy: .public); requiring fresh response \(challengeGate.completedActions + 1) of \(challengeGate.requiredActions)\(promptAttempt, privacy: .public).")
 					continue
 				}
 				guard challengeGate.admits(frameID: sampleFrameID, capturedAt: sampleCapturedAt, now: .now)
@@ -663,7 +707,7 @@ final class LockWatcher {
 				}
 				if challenge.isReturningToRest && !wasReturningToRest {
 					let hint = challenge.guidanceHint
-					capsule.update(phase: .challenge(prompt: challenge.guidancePrompt,
+					updateCapsule("return", .challenge(prompt: challenge.guidancePrompt,
 						symbol: challenge.guidanceSymbol, hintX: hint.x, hintY: hint.y, pulses: hint.pulses,
 						isReturningToRest: true))
 					Self.logger.notice("Requested movement observed; waiting for return to rest. action=\(challenge.action.prompt, privacy: .public)")
@@ -706,7 +750,7 @@ final class LockWatcher {
 				didSubmitPassword = false
 				lockout.recordFailure()
 				StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
-				capsule.update(phase: .notRecognised)
+				updateCapsule("notRecognised", .notRecognised)
 				Self.logger.error("Unlock failed: \(error.localizedDescription)")
 				return
 			}
@@ -717,7 +761,7 @@ final class LockWatcher {
 			// Waiting, neutrally: the padlock stays closed with "Waiting for macOS" until the
 			// Mac confirms the unlock. No tick and no opening padlock before then — either
 			// would announce an outcome the login window has not reported yet.
-			capsule.update(phase: .pending)
+			updateCapsule("pending", .pending)
 
 			// Unless nothing happens. A password can be refused, and a panel left showing a
 			// waiting state over a lock screen that never opened would insist something is
