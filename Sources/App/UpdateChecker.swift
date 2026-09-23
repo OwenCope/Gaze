@@ -3,12 +3,12 @@ import Foundation
 
 /// Repo-reveal helper for the Settings About row, not an updater.
 ///
-/// Despite the name, this type never checks for updates: it only reports the running
+/// Despite the legacy name, this type never checks for updates: it only reports the running
 /// version and reveals the checkout's source folder. Release checks live in
-/// `ReleaseUpdateChecker`. Kept under this name so SettingsView call sites stay untouched.
+/// `ReleaseUpdateChecker`.
 @MainActor
-final class UpdateChecker {
-	static let shared = UpdateChecker()
+final class RepoRevealHelper {
+	static let shared = RepoRevealHelper()
 
 	var repositoryURL: URL? {
 		var directory = Bundle.main.bundleURL.deletingLastPathComponent()
@@ -32,3 +32,6 @@ final class UpdateChecker {
 		NSWorkspace.shared.activateFileViewerSelecting([repositoryURL])
 	}
 }
+
+/// Legacy name for `RepoRevealHelper`, kept so older call sites keep compiling.
+typealias UpdateChecker = RepoRevealHelper

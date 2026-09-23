@@ -97,7 +97,7 @@ struct SettingsView: View {
 		return pane
 	}()
 	@State private var settings = Preferences.shared
-	@State private var updates = UpdateChecker.shared
+	@State private var updates = RepoRevealHelper.shared
 	@State private var releases = ReleaseUpdateChecker.shared
 	@State private var passwordEntry = ""
 	@State private var passwordError: String?
@@ -322,11 +322,11 @@ struct SettingsView: View {
 				case .notch:
 					NotchSettingsSection(settings: settings).id("NotchSettingsSection").modifier(searchDestination("NotchSettingsSection"))
 				case .credits:
-					SettingsCreditsPane(store: store, updates: updates).id("creditsSection").modifier(searchDestination("creditsSection"))
+					SettingsCreditsPane().id("creditsSection").modifier(searchDestination("creditsSection"))
 				case .about:
 					SettingsAboutPane(store: store, updates: updates).id("aboutSection").modifier(searchDestination("aboutSection"))
 					DisclosureGroup {
-						SettingsCreditsPane(store: store, updates: updates)
+						SettingsCreditsPane()
 					} label: {
 						Theme.disclosureLabel("Credits & Acknowledgements")
 					}
@@ -1345,12 +1345,8 @@ struct SettingsView: View {
 /// bottom of an About page is not where you put that.
 ///
 /// Split out of `SettingsView` so the settings hotspot stays navigable; renders exactly
-/// what `creditsSection` rendered. `store` and `updates` are shared reference types, so
-/// plain `let`s observe the same instances the settings window holds.
+/// what `creditsSection` rendered. Static rows only, so it takes no store or updates.
 private struct SettingsCreditsPane: View {
-	let store: FaceEnrollmentStore
-	let updates: UpdateChecker
-
 	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
 			// One glyph per row, not the app's name on a capsule.
@@ -1592,7 +1588,7 @@ private struct SettingsCreditsPane: View {
 /// plain `let`s observe the same instances the settings window holds.
 private struct SettingsAboutPane: View {
 	let store: FaceEnrollmentStore
-	let updates: UpdateChecker
+	let updates: RepoRevealHelper
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
