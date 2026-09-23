@@ -50,6 +50,8 @@ def verify_image(image, executable_hash):
             visible = {p.name for p in mount.iterdir() if not p.name.startswith(".")}
             if visible != {"Gaze.app", "Applications"}:
                 raise RuntimeError(f"Unexpected visible files: {sorted(visible)}")
+            if not (mount / ".DS_Store").is_file():
+                raise RuntimeError("Pinned Finder layout missing: .DS_Store was not written")
             with DSStore.open(str(mount / ".DS_Store"), "r") as store:
                 view = store["."]["icvp"]
                 window = store["."]["bwsp"]
@@ -135,6 +137,8 @@ def main():
     icon = app / "Contents/Resources/AppIcon.icns"
     if icon.is_file():
         settings["badge_icon"] = str(icon)
+    elif not args.local_preview:
+        parser.error("Release DMG requires Contents/Resources/AppIcon.icns for the volume icon")
 
     with tempfile.TemporaryDirectory(prefix=".gaze-package-", dir=output_dir) as scratch:
         staged = Path(scratch) / image.name
@@ -142,14 +146,29 @@ def main():
         dmgbuild.build_dmg(str(staged), "Gaze", settings=settings)
         verify_image(staged, executable_hash)
         if authority:
-            run("/usr/bin/codesign", "--sign", authority, "--timestamp", str(staged))
-            result = json.loads(run("xcrun", "notarytool", "submit", str(staged),
-                                    "--keychain-profile", args.notary_profile,
-                                    "--wait", "--output-format", "json", capture=True))
+            try:
+                run("/usr/bin/codesign", "--sign", authority, "--timestamp", str(staged))
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(f"DMG Developer ID signing failed: {exc}") from exc
+            signature = subprocess.run(["/usr/bin/codesign", "-dv", "--verbose=4", str(staged)],
+                                       capture_output=True, text=True, check=True).stderr
+            if "Authority=Developer ID Application: " not in signature:
+                raise RuntimeError("DMG signature is not Developer ID Application; no image written")
+            if "Timestamp=" not in signature:
+                raise RuntimeError("DMG signature has no secure timestamp; no image written")
+            try:
+                result = json.loads(run("xcrun", "notarytool", "submit", str(staged),
+                                        "--keychain-profile", args.notary_profile,
+                                        "--wait", "--output-format", "json", capture=True))
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(f"Notarization submit failed; check --notary-profile: {exc}") from exc
             if result.get("status") != "Accepted":
                 raise RuntimeError(f"Notarization was not accepted: {result.get('id')}")
-            run("xcrun", "stapler", "staple", str(staged))
-            run("xcrun", "stapler", "validate", str(staged))
+            try:
+                run("xcrun", "stapler", "staple", str(staged))
+                run("xcrun", "stapler", "validate", str(staged))
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(f"Notarization staple failed; no image written: {exc}") from exc
             run("/usr/bin/codesign", "--verify", "--strict", str(staged))
             run("/usr/sbin/spctl", "--assess", "--type", "open", "--context",
                 "context:primary-signature", "--verbose=2", str(staged))
