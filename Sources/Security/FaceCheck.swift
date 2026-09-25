@@ -52,6 +52,8 @@ enum FaceCheck {
 		let deadline = ContinuousClock.now.advanced(by: timeout)
 		var matchingHold = RecognitionMatchHold()
 		var freshFrames = RecognitionFrameGate()
+		let evaluator = UnlockFrameEvaluator(
+			embedder: store.embedder, faces: store.faces, antiSpoof: nil)
 
 		while ContinuousClock.now < deadline {
 			guard !Task.isCancelled, !Preferences.shared.isPaused, camera.state == .running,
@@ -78,8 +80,6 @@ enum FaceCheck {
 			// Inference runs on the evaluator actor, off the main thread; the
 			// continuation hops back here only to update the hold. Any
 			// evaluation failure is fail-closed: it resets the hold like a miss.
-			let evaluator = UnlockFrameEvaluator(
-				embedder: store.embedder, faces: store.faces, antiSpoof: nil)
 			let evaluation = await evaluator.evaluate(sample)
 			guard evaluation.failure == nil, evaluation.matched, let face = evaluation.face else {
 				// A frame that is not you resets the hold. Anything else would let a

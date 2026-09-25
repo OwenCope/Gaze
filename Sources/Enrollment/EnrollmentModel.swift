@@ -39,7 +39,7 @@ final class EnrollmentModel {
 	private(set) var captureStatus: CaptureStatus = .noFace
 
 	enum CaptureStatus: Equatable {
-		case noFace, tooSmall, lowQuality, invalidMeasurements, embeddingUnavailable, steady, turning
+		case noFace, tooSmall, lowQuality, invalidMeasurements, embeddingUnavailable, inconsistentFace, steady, turning
 	}
 
 	var targetSegment: Int? {
@@ -53,6 +53,7 @@ final class EnrollmentModel {
 		case .tooSmall: return "Move a little closer"
 		case .lowQuality: return "Pause in brighter light"
 		case .invalidMeasurements, .embeddingUnavailable: return "Hold your face toward the camera"
+		case .inconsistentFace: return "Return to the starting position"
 		case .steady, .turning:
 			if case .positioning = phase { return "Center your face" }
 			return targetSegment == nil ? "Move your head slowly" : "Follow the highlighted gap"
@@ -74,6 +75,7 @@ final class EnrollmentModel {
 			case .lowQuality: return "Your face is visible, but this frame isn’t clear enough to save. Face a light and pause briefly."
 			case .invalidMeasurements: return "Your face measurements aren’t usable yet. Look straight ahead for a moment."
 			case .embeddingUnavailable: return "Gaze sees your face but couldn’t create a faceprint. No new progress was saved."
+			case .inconsistentFace: return "This capture doesn’t agree with your starting face. Look toward the camera in steady light, then turn slowly."
 			case .steady, .turning: break
 			}
 		}
@@ -112,11 +114,14 @@ final class EnrollmentModel {
 
 		let rejection: CaptureStatus? = {
 			guard let sample else { return .noFace }
+			guard sample.pose.yaw.isFinite, sample.pose.pitch.isFinite,
+				sample.pose.yawSource != .unavailable, sample.pose.pitchSource != .unavailable
+			else { return .invalidMeasurements }
 			switch FrameQuality.rejection(sample) {
 			case .invalidMeasurements: return .invalidMeasurements
 			case .tooSmall: return .tooSmall
 			case .tooBlurred: return .lowQuality
-			case nil: return sample.quality < Self.minimumQuality ? .lowQuality : nil
+			case nil: return sample.hasQualityMeasurement && sample.quality < Self.minimumQuality ? .lowQuality : nil
 			}
 		}()
 		guard let sample, rejection == nil else {
@@ -133,6 +138,10 @@ final class EnrollmentModel {
 		// from a single lucky detection as the user is still sitting down.
 		framesWithFace += 1
 		if case .positioning = phase {
+			guard sample.pose.offCentre < Self.engagementThreshold else {
+				framesWithFace = 0
+				return
+			}
 			guard framesWithFace > 8 else { return }
 			// Capture one straight-ahead print before the turning begins.
 			//
@@ -143,7 +152,7 @@ final class EnrollmentModel {
 			// This lands the most-used direction in the set on the first pass. Only pass 1, so
 			// it isn't duplicated.
 			if pass == 1 {
-				guard let frontal = embedder.embed(sample) else { captureStatus = .embeddingUnavailable; return }
+				guard let frontal = validatedPrint(sample) else { return }
 				prints.append(frontal)
 			}
 			phase = .capturing(pass: pass)
@@ -171,13 +180,33 @@ final class EnrollmentModel {
 		// set fills with near-identical frontal prints and matching gets slower for
 		// nothing.
 		if isNewDirection {
-			guard let faceprint = embedder.embed(sample) else { captureStatus = .embeddingUnavailable; return }
+			guard let faceprint = validatedPrint(sample) else { return }
 			prints.append(faceprint)
 		}
 		for index in neighbours { covered[index] = true }
 
 		guard progress >= 1 else { return }
 		advancePass()
+	}
+
+	private func validatedPrint(_ sample: FaceSample) -> Faceprint? {
+		guard let candidate = embedder.embed(sample), candidate.source == embedder.identifier,
+			(1...4096).contains(candidate.values.count),
+			prints.first.map({ $0.values.count == candidate.values.count }) ?? true,
+			Faceprint.normalized(candidate.values, source: candidate.source) != nil else {
+			captureStatus = .embeddingUnavailable
+			return nil
+		}
+		// Anchor every learned print to the frontal capture, rather than only to the
+		// previous frame: a chain of locally similar faces must not drift to another person.
+		if embedder.usesCosineSimilarity, let anchor = prints.first {
+			let score = embedder.similarity(anchor, candidate)
+			guard score.isFinite, score >= embedder.matchThreshold else {
+				captureStatus = .inconsistentFace
+				return nil
+			}
+		}
+		return candidate
 	}
 
 	private func advancePass() {

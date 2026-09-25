@@ -55,6 +55,7 @@ struct GazeCompanionView: View {
 						renderError = $0
 						Self.logger.error("Metal companion failed in \(renderContext, privacy: .public); fell back to 2D drawing: \($0, privacy: .public)")
 					})
+			}
 		}
 		.accessibilityHidden(true)
 		.onAppear { visible = true }

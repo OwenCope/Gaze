@@ -37,6 +37,8 @@ struct FaceSample: @unchecked Sendable {
 	let pose: FacePose
 	/// Vision's own view of whether this frame is good enough to identify from.
 	let quality: Float
+	/// A reported zero means unusable; missing quality is a separate state.
+	var hasQualityMeasurement: Bool = true
 	let pixelBuffer: CVPixelBuffer
 }
 
@@ -353,7 +355,7 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 			return
 		}
 
-		let quality = qualityRequest.results?.first?.faceCaptureQuality ?? 0
+		let quality = qualityRequest.results?.first?.faceCaptureQuality
 
 		// Vision's own estimate when it gives one, geometry when it doesn't, per-axis
 		// provenance always. Some revisions populate yaw but leave pitch nil, so the
@@ -371,7 +373,8 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 				landmarks: landmarks,
 				boundingBox: face.boundingBox,
 				pose: pose,
-				quality: quality,
+				quality: quality ?? 0,
+				hasQualityMeasurement: quality != nil,
 				pixelBuffer: buffer),
 			nil, capturedAt)
 	}

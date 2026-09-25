@@ -28,7 +28,7 @@ struct RecognitionTestView: View {
 	@State private var peak: Float = 0
 	@State private var floor: Float = 1
 	@State private var samples = 0
-	@State private var lastDisplayUpdate = Date.distantPast
+	@State private var testRevision = UUID()
 	@State private var showsDetail = false
 
 	/// Object-detector anti-spoof (`SpoofDetector`): how confidently the Roboflow-trained
@@ -85,12 +85,13 @@ struct RecognitionTestView: View {
 			// camera access. The setup button owns the path forward instead.
 			guard store.isEnrolled else { return }
 			await camera.start(pinnedDeviceID: store.pinnedCameraID)
+			await runRecognition()
 		}
 		.onDisappear {
 			camera.stop()
 			AppActivation.returnToBackgroundIfIdle()
 		}
-		.onChange(of: camera.frameID) { _, _ in evaluate() }
+		.onChange(of: camera.frameID) { _, _ in updateMeasurements() }
 		.onChange(of: camera.state) { _, state in
 			guard state != .running else { return }
 			matched = false
@@ -210,6 +211,7 @@ struct RecognitionTestView: View {
 	}
 
 	private func reset() {
+		testRevision = UUID()
 		pending.peak = 0
 		pending.floor = 1
 		pending.samples = 0
@@ -258,38 +260,58 @@ struct RecognitionTestView: View {
 		return matched ? "Recognised" : "Not recognised"
 	}
 
-	/// Throttles the visible score to ~10Hz. Embedding still runs on every frame — the peak
-	/// and floor need every sample — but publishing to the view on all of them rebuilt this
-	/// whole screen 30 times a second.
-	private static let displayInterval: TimeInterval = 0.1
-
-	private func evaluate() {
-		guard store.isEnrolled, !camera.faceMissing, let sample = camera.sample else {
-			if matched || score != 0 {
-				matched = false
-				score = 0
-			}
+	private func updateMeasurements() {
+		guard store.isEnrolled, !camera.faceMissing, let sample = camera.sample,
+			FrameQuality.isUsable(sample) else {
+			clearMatch()
+			challenge.reset()
 			return
 		}
-
-		let result = store.matches(sample)
-
-		pending.peak = max(pending.peak, result.score)
-		pending.floor = min(pending.floor, result.score)
-		pending.samples += 1
-		pending.matched = result.matched
-		pending.score = result.score
-
-		let now = Date()
-		guard now.timeIntervalSince(lastDisplayUpdate) >= Self.displayInterval else { return }
-		lastDisplayUpdate = now
-		// Score the anti-spoof signal on the throttled tick only — it's a Core ML pass, too
-		// heavy to run on all 30 frames a second.
-		spoofConf = spoof?.spoofConfidence(sample)
 		pose = sample.pose
 		updateBlink(sample)
 		challenge.consume(sample)
-		publish()
+	}
+
+	/// One inference at a time, at most 10Hz. The actor keeps both neural passes off
+	/// the UI thread, and the loop reads the latest frame instead of queueing old ones.
+	private func runRecognition() async {
+		let enrolledIDs = store.faces.map(\.id)
+		let worker = RecognitionTestWorker(embedder: store.embedder, faces: store.faces, spoof: spoof)
+		var frames = RecognitionFrameGate()
+		while !Task.isCancelled, camera.state == .running, store.faces.map(\.id) == enrolledIDs {
+			let start = ContinuousClock.now
+			let observation = frames.observe(id: camera.frameID, capturedAt: camera.lastFrameCapturedAt, now: start)
+			if observation == .stalled { clearMatch(); return }
+			if case .fresh = observation, !camera.faceMissing, let sample = camera.sample,
+				let capturedAt = camera.lastFrameCapturedAt, FrameQuality.isUsable(sample) {
+				let continuity = camera.evidenceContinuity.revision
+				let revision = testRevision
+				let (result, confidence) = await worker.evaluate(sample)
+				guard !Task.isCancelled, camera.state == .running else { clearMatch(); return }
+				if revision == testRevision, store.faces.map(\.id) == enrolledIDs,
+					capturedAt.duration(to: .now) <= CameraFrameLease.maximumAge,
+					camera.evidenceContinuity.permits(continuity, at: .now), result.failure == nil {
+					pending.peak = max(pending.peak, result.score)
+					pending.floor = min(pending.floor, result.score)
+					pending.samples += 1
+					pending.matched = result.matched
+					pending.score = result.score
+					spoofConf = confidence
+					publish()
+				} else { clearMatch() }
+			}
+			let delay = max(.zero, Duration.milliseconds(100) - start.duration(to: .now))
+			do { try await Task.sleep(for: delay) } catch { break }
+		}
+		clearMatch()
+	}
+
+	private func clearMatch() {
+		matched = false
+		score = 0
+		pending.matched = false
+		pending.score = 0
+		spoofConf = nil
 	}
 
 	private func publish() {
@@ -298,5 +320,21 @@ struct RecognitionTestView: View {
 		peak = pending.peak
 		floor = pending.floor
 		samples = pending.samples
+	}
+}
+
+private actor RecognitionTestWorker {
+	private let evaluator: UnlockFrameEvaluator
+	private let spoof: SpoofDetector?
+
+	init(embedder: any FaceEmbedder, faces: [FaceEnrollment], spoof: SpoofDetector?) {
+		evaluator = UnlockFrameEvaluator(embedder: embedder, faces: faces, antiSpoof: nil)
+		self.spoof = spoof
+	}
+
+	func evaluate(_ sample: FaceSample) async -> (UnlockFrameEvaluator.Result, Float?) {
+		let result = await evaluator.evaluate(sample)
+		guard !Task.isCancelled, result.failure == nil else { return (result, nil) }
+		return (result, spoof?.spoofConfidence(sample))
 	}
 }
