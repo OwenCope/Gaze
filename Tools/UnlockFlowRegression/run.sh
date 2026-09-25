@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD="$(mktemp -d "${TMPDIR:-/tmp}/gaze-unlock-flow.XXXXXX")"
 trap 'rm -rf "$BUILD"' EXIT
+export CLANG_MODULE_CACHE_PATH="${CLANG_MODULE_CACHE_PATH:-$BUILD/modules}"
 xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Camera/CameraFrameLease.swift" \
 	"$ROOT/Sources/Security/UnlockChallengeGate.swift" \
@@ -11,21 +12,11 @@ xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
 	"$ROOT/Tools/UnlockFlowRegression/Tests.swift" -o "$BUILD/tests"
 "$BUILD/tests"
-xcrun swiftc -parse-as-library -warnings-as-errors \
-	"$ROOT/Sources/Camera/CameraFrameLease.swift" \
-	"$ROOT/Sources/Camera/CameraEvidenceContinuity.swift" \
-	"$ROOT/Sources/Recognition/UnlockFrameEvaluator.swift" \
-	"$ROOT/Tools/UnlockFlowRegression/EvaluatorTests.swift" -o "$BUILD/evaluator-tests"
-"$BUILD/evaluator-tests"
+bash "$ROOT/Tools/RecognitionRegression/run.sh"
 xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Camera/CameraFrameLease.swift" \
 	"$ROOT/Sources/Camera/CameraEvidenceContinuity.swift" \
 	"$ROOT/Sources/Recognition/FrameQuality.swift" \
-	"$ROOT/Tools/UnlockFlowRegression/ContinuityTests.swift" -o "$BUILD/continuity-tests"
-"$BUILD/continuity-tests"
-xcrun swiftc -parse-as-library -warnings-as-errors \
-	"$ROOT/Sources/Camera/CameraFrameLease.swift" \
-	"$ROOT/Sources/Camera/CameraEvidenceContinuity.swift" \
 	"$ROOT/Sources/Recognition/RecognitionFrameGate.swift" \
 	"$ROOT/Tools/UnlockFlowRegression/FrameGateTests.swift" -o "$BUILD/frame-gate-tests"
 "$BUILD/frame-gate-tests"

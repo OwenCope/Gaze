@@ -458,12 +458,13 @@ final class LockWatcher {
 			let tickGapMs = renderDiagnostics ? renderPreviousTick.map { renderMs($0, tickStart) } ?? 0 : 0
 			if renderDiagnostics { renderPreviousTick = tickStart }
 			defer {
-				guard renderDiagnostics else { return }
-				let tickStartMs = renderMs(renderClockStart, tickStart)
-				if let window = renderTiming.record(tick: ticks, frameID: camera.frameID,
-					phase: renderPhase, tickStartMs: tickStartMs, capsuleUpdateMs: tickCapsuleMs,
-					callbackGapMs: tickGapMs, drawableWaitMs: 0, inferenceMs: tickInferenceMs) {
-					Self.renderTimingLogger.notice("\(window, privacy: .public)")
+				if renderDiagnostics {
+					let tickStartMs = renderMs(renderClockStart, tickStart)
+					if let window = renderTiming.record(tick: ticks, frameID: camera.frameID,
+						phase: renderPhase, tickStartMs: tickStartMs, capsuleUpdateMs: tickCapsuleMs,
+						callbackGapMs: tickGapMs, drawableWaitMs: 0, inferenceMs: tickInferenceMs) {
+						Self.renderTimingLogger.notice("\(window, privacy: .public)")
+					}
 				}
 			}
 			tickCapsuleMs = 0

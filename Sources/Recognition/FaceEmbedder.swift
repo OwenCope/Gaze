@@ -1,3 +1,4 @@
+import Accelerate
 import CoreML
 import CoreVideo
 import Foundation
@@ -12,10 +13,12 @@ struct Faceprint: Codable, Sendable, Equatable {
 	static func normalized(_ values: [Float], source: String) -> Faceprint? {
 		guard !source.isEmpty, !values.isEmpty, values.allSatisfy(\.isFinite) else { return nil }
 		var energy: Float = 0
-		for value in values { energy += value * value }
+		vDSP_svesq(values, 1, &energy, vDSP_Length(values.count))
 		guard energy.isFinite, energy > 0 else { return nil }
-		let norm = sqrt(energy)
-		return Faceprint(values: values.map { $0 / norm }, source: source)
+		var norm = sqrt(energy)
+		var normalized = [Float](repeating: 0, count: values.count)
+		vDSP_vsdiv(values, 1, &norm, &normalized, 1, vDSP_Length(values.count))
+		return Faceprint(values: normalized, source: source)
 	}
 
 	/// Cosine similarity, 0...1 for learned embeddings (all produce non-negative prints
@@ -45,6 +48,8 @@ struct Faceprint: Codable, Sendable, Equatable {
 
 protocol FaceEmbedder: Sendable {
 	var identifier: String { get }
+	/// Opts into normalized vector matching. Custom metrics default to dynamic dispatch.
+	var usesCosineSimilarity: Bool { get }
 	/// The similarity above which two prints are considered the same person.
 	var matchThreshold: Float { get }
 	func embed(_ sample: FaceSample) -> Faceprint?
@@ -58,6 +63,7 @@ protocol FaceEmbedder: Sendable {
 }
 
 extension FaceEmbedder {
+	var usesCosineSimilarity: Bool { false }
 	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float { a.similarity(to: b) }
 }
 
@@ -70,9 +76,9 @@ enum Embedders {
 	/// Their distribution rights are tracked separately in NOTICE.md; a source-code
 	/// license does not establish the license of a weight file. The geometry fallback
 	/// remains available for practice, but UnlockGuard refuses it for Mac unlocking.
-	// Shared by readiness checks so they reuse the selected model instead of loading another instance.
-	// Computed so each call re-checks the bundled model presence rather than caching it once.
-	private static var selected: any FaceEmbedder { CoreMLEmbedder() ?? LandmarkEmbedder() }
+	// The signed app bundle is immutable for the lifetime of this process. Reuse the
+	// model for enrollment, scans and readiness checks; a new build needs a relaunch.
+	private static let selected: any FaceEmbedder = CoreMLEmbedder() ?? LandmarkEmbedder()
 
 	static func best() -> FaceEmbedder {
 		selected
@@ -108,10 +114,7 @@ struct LandmarkEmbedder: FaceEmbedder {
 		else { return 0 }
 
 		var sumSquares: Float = 0
-		for i in a.values.indices {
-			let delta = a.values[i] - b.values[i]
-			sumSquares += delta * delta
-		}
+		vDSP_distancesq(a.values, 1, b.values, 1, &sumSquares, vDSP_Length(a.values.count))
 		guard sumSquares.isFinite else { return 0 }
 		// Two coordinates per landmark, so halve the count to get per-point displacement.
 		let rms = sqrt(sumSquares / Float(a.values.count / 2))
@@ -173,29 +176,24 @@ struct LandmarkEmbedder: FaceEmbedder {
 
 // MARK: - Core ML
 
-/// Wraps a bundled embedding model. Expects a single image input and a single
-/// multi-array output — the shape most face-recognition exports already have.
+/// Wraps the bundled embedding model: one square NCHW RGB tensor input and one
+/// multi-array output. Models with a different preprocessing contract are rejected.
 ///
-/// `@unchecked` because `MLModel` is not marked `Sendable`, though `prediction(from:)`
-/// is documented as safe to call concurrently and we never mutate the model.
+/// `@unchecked` because `MLModel` is not marked `Sendable`. Copies share a lock
+/// that serializes predictions; each caller owns its crop and input tensor.
 struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 	let identifier: String
-	/// Set from measurement, and specifically from measurement *at the lock screen*.
-	///
-	/// In-app testing showed 0.85+ for the enrolled user and 0.23 for a different person,
-	/// which suggested 0.55. Real unlocks then scored 0.58–0.77 — the display is dark when
-	/// locked, so the face is lit far less than it was during testing, and frames were
-	/// landing barely above the line. The failure that produced is silent: nothing
-	/// happens, and there is no feedback saying why.
-	///
-	/// 0.45 restores the headroom the dark-room case needs while still sitting 0.22 clear
-	/// of the highest score a different face reached. The sustained-match requirement in
-	/// `LockWatcher` is what makes a lower per-frame threshold safe: three continuous
-	/// seconds of matching is far stronger evidence than any single frame.
+	let usesCosineSimilarity = true
+	/// Historical operating point, not a calibrated false-accept guarantee. Repeated
+	/// webcam frames are correlated; holding a match cannot make a weak threshold safe.
+	/// Template agreement and movement checks supplement this threshold. Population
+	/// and low-light validation are still required with the actual bundled weights.
 	let matchThreshold: Float = 0.45
 
 	private let model: MLModel
+	private let predictionLock = NSLock()
 	private let inputName: String
+	private let outputName: String
 	private let side: Int
 
 	/// Bump whenever the bundled model file changes. It becomes part of the print's
@@ -213,14 +211,21 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 		// Models in this family take a planar [1, 3, S, S] tensor rather than an image
 		// feature, so accept a multi-array input and read the side length from its shape.
 		let inputs = model.modelDescription.inputDescriptionsByName
+		let outputs = model.modelDescription.outputDescriptionsByName
 		guard
-			let input = inputs.first(where: { $0.value.multiArrayConstraint != nil })?.value,
+			inputs.count == 1, let input = inputs.values.first,
 			let constraint = input.multiArrayConstraint,
-			constraint.shape.count == 4
+			constraint.shape.count == 4,
+			constraint.shape[0].intValue == 1, constraint.shape[1].intValue == 3,
+			constraint.shape[2] == constraint.shape[3],
+			(16...1024).contains(constraint.shape[3].intValue),
+			outputs.count == 1, let output = outputs.values.first,
+			output.multiArrayConstraint != nil
 		else { return nil }
 
 		self.model = model
 		self.inputName = input.name
+		self.outputName = output.name
 		self.side = constraint.shape[3].intValue
 		// Version the identifier so swapping models invalidates old enrolments rather
 		// than silently comparing prints from different feature spaces.
@@ -231,13 +236,12 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 		guard
 			let crop = FaceAligner.alignedCrop(sample, side: side),
 			let tensor = Self.tensor(from: crop, side: side),
-			let output = try? model.prediction(
-				from: try MLDictionaryFeatureProvider(
-					dictionary: [inputName: MLFeatureValue(multiArray: tensor)])),
-			let name = output.featureNames.first(where: {
-				output.featureValue(for: $0)?.multiArrayValue != nil
+			let output = predictionLock.withLock({
+				try? model.prediction(from: try MLDictionaryFeatureProvider(
+					dictionary: [inputName: MLFeatureValue(multiArray: tensor)]))
 			}),
-			let array = output.featureValue(for: name)?.multiArrayValue
+			let array = output.featureValue(for: outputName)?.multiArrayValue,
+			(1...4096).contains(array.count)
 		else { return nil }
 
 		// L2-normalise. These embeddings are trained so identity lives in direction, not
@@ -264,7 +268,9 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 				shape: [1, 3, NSNumber(value: side), NSNumber(value: side)], dataType: .float32)
 		else { return nil }
 
-		CVPixelBufferLockBaseAddress(buffer, .readOnly)
+		guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
+			CVPixelBufferGetWidth(buffer) == side, CVPixelBufferGetHeight(buffer) == side,
+			CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
 		defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
 
 		guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }

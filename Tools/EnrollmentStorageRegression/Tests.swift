@@ -11,12 +11,19 @@ import Foundation
 struct Faceprint: Codable, Sendable, Equatable {
 	var values: [Float]
 	var source: String
+	static func normalized(_ values: [Float], source: String) -> Faceprint? {
+		let norm = sqrt(values.reduce(Float(0)) { $0 + $1 * $1 })
+		guard !source.isEmpty, norm.isFinite, norm > 0 else { return nil }
+		return Faceprint(values: values.map { $0 / norm }, source: source)
+	}
 }
 
 struct FaceSample: Sendable {}
+enum FrameQuality { static func isUsable(_ sample: FaceSample) -> Bool { true } }
 
 protocol FaceEmbedder: Sendable {
 	var identifier: String { get }
+	var usesCosineSimilarity: Bool { get }
 	var matchThreshold: Float { get }
 	func embed(_ sample: FaceSample) -> Faceprint?
 	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float
@@ -24,6 +31,7 @@ protocol FaceEmbedder: Sendable {
 
 struct FixtureEmbedder: FaceEmbedder {
 	let identifier = "fixture-embedder-v1"
+	let usesCosineSimilarity = false
 	let matchThreshold: Float = 0.5
 	func embed(_ sample: FaceSample) -> Faceprint? {
 		Faceprint(values: [1, 0], source: identifier)

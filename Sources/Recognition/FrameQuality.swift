@@ -22,9 +22,8 @@ enum FrameQuality {
 	/// Vision's own capture-quality floor. Its scale is roughly 0…1 and a well-framed face
 	/// sits far above this, so only motion-blurred or barely-detected faces fall under it.
 	///
-	/// Checked *only when Vision actually reported a quality* — `faceCaptureQuality` is nil on
-	/// some revisions and lands here as 0, and a hard floor would then reject every frame and
-	/// nobody could ever unlock. A reported 0-ish quality is real; an absent one is not.
+	/// Checked only when Vision actually reported a quality. `hasQualityMeasurement`
+	/// distinguishes an unavailable measurement from a reported zero (unusable).
 	static let minVisionQuality: Float = 0.1
 
 	/// Why a frame was not worth grading.
@@ -53,7 +52,7 @@ enum FrameQuality {
 			return .invalidMeasurements
 		}
 		if sample.boundingBox.height < minFaceHeight { return .tooSmall }
-		if sample.quality > 0, sample.quality < minVisionQuality { return .tooBlurred }
+		if sample.hasQualityMeasurement, sample.quality < minVisionQuality { return .tooBlurred }
 		return nil
 	}
 
