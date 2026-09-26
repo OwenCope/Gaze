@@ -1,17 +1,9 @@
-# Development tools
+# Tools
 
-| Task | Start here |
-| --- | --- |
-| Package an installer | [Release/DMG](Release/DMG/README.md) |
-| Check release readiness | [Release](Release/README.md) |
-| Preview Gaze without the live unlock flow | [GazePreview](GazePreview/README.md) |
-| Work on the passwords companion | [GazePasswords](GazePasswords/README.md) |
-| Evaluate experimental models | [ModelLab](ModelLab/README.md) |
-| Check onboarding | [OnboardingRegression](OnboardingRegression/README.md) |
-| Check Settings interactions | [SettingsInteractionRegression](SettingsInteractionRegression/README.md) |
-| Check unlock behavior | [UnlockFlowRegression](UnlockFlowRegression/README.md) |
-| Check security boundaries | [SecurityRegression](SecurityRegression/README.md) |
-
-Other `*Regression` directories contain focused checks and their own runners.
-Generated binaries, logs and captures belong in `build/`. Older local outputs are
-grouped under `build/archive/`; each cleanup has a manifest mapping the old paths.
+- `Scripts/`: the toolchain check used by every build and test, the list of app sources,
+  and the source-archive builder.
+- `Release/BuildDMG.sh`: builds the app and packages the disk image.
+- `Release/DMG/`: the disk-image layout and artwork.
+- `Release/Homebrew/`: the cask for the `owencope/gaze` tap.
+- `Release/ModelClearance/`: the model and asset licence inventory that the build checks.
+- `Release/Signing.sh`, `preflight.sh`, `verify.sh`: signing and release checks.
