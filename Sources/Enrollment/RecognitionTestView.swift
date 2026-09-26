@@ -1,4 +1,5 @@
 import AppKit
+import CoreVideo
 import Observation
 import SwiftUI
 import Vision
@@ -22,7 +23,8 @@ struct RecognitionTestView: View {
 	@Environment(\.openWindow) private var openWindow
 	@Environment(\.dismissWindow) private var dismissWindow
 
-	@State private var camera = CameraController()
+	// Same face selection as the lock screen, so the test reflects what unlocking will do.
+	@State private var camera = CameraController(allowsBystanders: true)
 	@State private var score: Float = 0
 	@State private var matched = false
 	@State private var peak: Float = 0
@@ -52,6 +54,16 @@ struct RecognitionTestView: View {
 	@State private var blinked = false
 
 	@State private var pose: FacePose = .zero
+
+	/// One label per face in view, so the test can be run with a friend beside the owner.
+	@State private var faceLabels: [FaceLabel] = []
+	@State private var frameSize: CGSize = .zero
+
+	private struct FaceLabel: Equatable {
+		var box: CGRect
+		var text: String
+		var matched: Bool
+	}
 
 	/// Accumulated between publishes. Deliberately a reference type held in @State so
 	/// mutating it does not invalidate the view.
@@ -98,6 +110,7 @@ struct RecognitionTestView: View {
 			pending.matched = false
 			pending.score = 0
 			spoofConf = nil
+			faceLabels = []
 			challenge.reset()
 		}
 	}
@@ -181,6 +194,7 @@ struct RecognitionTestView: View {
 			}
 		} else if camera.state == .running {
 			CameraPreview(controller: camera)
+				.overlay { faceBoxOverlay }
 		} else {
 			ZStack {
 				Theme.surface
@@ -264,15 +278,24 @@ struct RecognitionTestView: View {
 	private static let displayInterval: TimeInterval = 0.1
 
 	private func evaluate() {
-		guard store.isEnrolled, !camera.faceMissing, let sample = camera.sample else {
+		guard store.isEnrolled, !camera.faceMissing, var sample = camera.sample else {
 			if matched || score != 0 {
 				matched = false
 				score = 0
 			}
+			if !faceLabels.isEmpty { faceLabels = [] }
 			return
 		}
 
-		let result = store.matches(sample)
+		let primary = sample
+		var result = store.matches(sample)
+		// Same rule as the lock screen: with several faces in view, the one that matches.
+		if !result.matched {
+			for other in sample.bystanders where FrameQuality.rejection(other) == nil {
+				let candidate = store.matches(other)
+				if candidate.matched { result = candidate; sample = other; break }
+			}
+		}
 
 		pending.peak = max(pending.peak, result.score)
 		pending.floor = min(pending.floor, result.score)
@@ -289,7 +312,61 @@ struct RecognitionTestView: View {
 		pose = sample.pose
 		updateBlink(sample)
 		challenge.consume(sample)
+		// Each face gets its own verdict, scored on the throttled tick for the same reason.
+		var labels: [FaceLabel] = []
+		for face in [primary] + primary.bystanders where FrameQuality.rejection(face) == nil {
+			let verdict = store.matches(face)
+			labels.append(FaceLabel(box: face.boundingBox,
+				text: Self.labelText(score: verdict.score, matched: verdict.matched),
+				matched: verdict.matched))
+		}
+		faceLabels = labels
+		frameSize = CGSize(width: CVPixelBufferGetWidth(primary.pixelBuffer),
+			height: CVPixelBufferGetHeight(primary.pixelBuffer))
 		publish()
+	}
+
+	private static func labelText(score: Float, matched: Bool) -> String {
+		matched ? "\(Int((score * 100).rounded()))%" : "Not you"
+	}
+
+	@ViewBuilder private var faceBoxOverlay: some View {
+		GeometryReader { geometry in
+			ZStack {
+				ForEach(faceLabels.indices, id: \.self) { index in
+					let label = faceLabels[index]
+					let rect = Self.mappedBox(label.box, frame: frameSize, in: geometry.size)
+					RoundedRectangle(cornerRadius: 8, style: .continuous)
+						.strokeBorder(label.matched ? Theme.faceID : Color.white.opacity(0.7), lineWidth: 2)
+						.frame(width: rect.width, height: rect.height)
+						.position(x: rect.midX, y: rect.midY)
+					Text(label.text)
+						.font(.caption.weight(.semibold))
+						.foregroundStyle(.white)
+						.padding(.horizontal, 8).padding(.vertical, 4)
+						.background(.black.opacity(0.55), in: Capsule())
+						.position(x: min(max(rect.minX + 30, 34), geometry.size.width - 34),
+							y: max(rect.minY - 14, 14))
+				}
+			}
+		}
+		.accessibilityHidden(true)
+	}
+
+	/// Vision's normalized box (origin lower-left) into view points for the mirrored
+	/// aspect-fill preview.
+	private static func mappedBox(_ box: CGRect, frame: CGSize, in size: CGSize) -> CGRect {
+		guard frame.width > 0, frame.height > 0, size.width > 0, size.height > 0 else { return .zero }
+		let scale = max(size.width / frame.width, size.height / frame.height)
+		let drawn = CGSize(width: frame.width * scale, height: frame.height * scale)
+		let offset = CGSize(width: (size.width - drawn.width) / 2, height: (size.height - drawn.height) / 2)
+		let left = box.minX * frame.width * scale
+		let width = box.width * frame.width * scale
+		let bottom = box.minY * frame.height * scale
+		let height = box.height * frame.height * scale
+		return CGRect(x: offset.width + drawn.width - left - width,
+			y: offset.height + drawn.height - bottom - height,
+			width: width, height: height)
 	}
 
 	private func publish() {

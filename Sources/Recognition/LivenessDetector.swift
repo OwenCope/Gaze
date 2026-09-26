@@ -1,17 +1,18 @@
 import CoreML
 import Foundation
 
-/// Optional anti-spoof check, off by default.
+/// Legacy texture-liveness path; not used.
 ///
-/// What it catches: someone holding a printed photo or a phone screen up to the camera.
-/// The models in this family (MiniFASNet and relatives, trained on CelebA-Spoof) score
-/// *capture artefacts* — moiré from a display, paper grain, print edges, the flatness of
-/// a reflected highlight.
+/// The anti-spoof check that runs is `SpoofDetector` via `AntiSpoofGate`: an object
+/// detector that spots a held phone, screen or printed photo in frame.
+///
+/// What this path caught: someone holding a printed photo or a phone screen up to the
+/// camera. Texture models score *capture artefacts* — moiré from a display, paper
+/// grain, print edges, the flatness of a reflected highlight.
 ///
 /// What it does not catch: frame injection. A virtual camera feeding a recording produces
 /// no capture artefacts, because nothing was filmed, and these models happily call it
-/// genuine. `CameraDevice` is what defends against that, and it is on by default while
-/// this is not.
+/// genuine. `CameraDevice` is what defends against that.
 protocol LivenessDetector: Sendable {
 	var identifier: String { get }
 	/// Score above which a frame is treated as a real face in front of the lens.
@@ -28,9 +29,8 @@ enum Liveness {
 
 	/// The detector to use, or nil when none is available.
 	///
-	/// Nil is the normal state: no model ships with the app, since Sapphire's `MiniFAS`
-	/// weights come from a GPL-3.0 repository we are not copying from. Drop a compatible
-	/// model at `Resources/Liveness.mlpackage` to enable the feature.
+	/// Legacy path only: this detector is not consulted by the unlock loop, which
+	/// runs `SpoofDetector` via `AntiSpoofGate` instead.
 	static func detector() -> LivenessDetector? {
 		CoreMLLiveness()
 	}
@@ -38,15 +38,16 @@ enum Liveness {
 	static var isAvailable: Bool { detector() != nil }
 }
 
-/// Wraps a bundled anti-spoof model. Handles two shapes of model, because the two
-/// anti-spoof models worth trying take their input differently:
+/// Wraps a legacy texture-liveness model. Not used by the unlock loop, which runs
+/// `SpoofDetector` via `AntiSpoofGate`. Kept for reference; handles two shapes of
+/// model, because the two texture models worth trying take their input differently:
 ///
 ///  - **Image input** — the model declares an image feature. Fed a `contextCrop`
 ///    (face + margin, so screen bezels and paper edges stay in frame) as a pixel
 ///    buffer. This is the drop-in path for a typical CoreML anti-spoof export.
-///  - **Multi-array input** `[1,3,S,S]` — Sapphire's `MiniFAS`. Fed the frame's centre
-///    square scaled to S, RGB, `/255`, exactly as Sapphire serves it. Its output is
-///    `[realLogit, spoofLogit]`, so the genuine score is `softmax(...)[0]`.
+///  - **Multi-array input** `[1,3,S,S]` — the MiniFAS family. Fed the frame's centre
+///    square scaled to S, RGB, `/255`. Its output is `[realLogit, spoofLogit]`, so
+///    the genuine score is `softmax(...)[0]`.
 ///
 /// Getting the serving wrong here is worse than having no model — a mis-fed model is
 /// confidently wrong rather than absent — so each path mirrors its model's training
@@ -78,7 +79,7 @@ struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 			self.identifier = "coreml-liveness-img:\(constraint.pixelsWide)"
 		} else if let arr = inputs.first(where: { $0.value.multiArrayConstraint != nil })?.value,
 			let constraint = arr.multiArrayConstraint, constraint.shape.count == 4 {
-			// MiniFAS-family: [1, 3, S, S].
+			// Legacy MiniFAS-family path (unused): [1, 3, S, S].
 			self.model = model
 			self.inputName = arr.name
 			self.side = constraint.shape[3].intValue
@@ -106,10 +107,10 @@ struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 			return array.count >= 2 ? array[1].floatValue : array[0].floatValue
 		}
 
-		// Multi-array path (MiniFAS): the MiniFASNet family is trained on a face crop
-		// scaled by the number in its name (2.7), NOT the whole frame. Fed a full frame it
-		// stops discriminating and calls everything real (a photo scored 1.000). The 2.7
-		// context crop is that training framing. RGB, /255, softmax[0].
+		// Legacy multi-array path (unused): the MiniFASNet family is trained on a face
+		// crop scaled by the number in its name (2.7), NOT the whole frame. Fed a full
+		// frame it stops discriminating and calls everything real (a photo scored 1.000).
+		// The 2.7 context crop is that training framing. RGB, /255, softmax[0].
 		guard
 			let crop = FaceAligner.contextCrop(sample, side: side, margin: Liveness.cropMargin),
 			let tensor = Self.tensor(from: crop, side: side),

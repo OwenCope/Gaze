@@ -19,6 +19,7 @@ import subprocess
 import tempfile
 
 import dmgbuild
+import time
 from ds_store import DSStore
 
 from artwork import ICON_LOCATIONS, ICON_SIZE, WINDOW_SIZE, render
@@ -162,7 +163,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix=".gaze-package-", dir=output_dir) as scratch:
         staged = Path(scratch) / image.name
         print("Creating Gaze disk image…", flush=True)
-        dmgbuild.build_dmg(str(staged), "Gaze", settings=settings)
+        # A unique volume name per build. Finder finds the background through an alias
+        # that names the volume; if an older "Gaze" disk is still mounted, this one
+        # mounts as "Gaze 1", the alias resolves to the old disk and the window opens
+        # white. It also stops Finder reusing a cached window from a previous build.
+        volume = f"Gaze {version} ({time.strftime('%m%d-%H%M')})"
+        dmgbuild.build_dmg(str(staged), volume, settings=settings)
         verify_image(staged, executable_hash)
         if authority:
             try:

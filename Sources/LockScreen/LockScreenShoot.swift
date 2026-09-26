@@ -72,11 +72,29 @@ final class LockScreenShoot {
 			// getting it right first time; looping means starting the recording whenever
 			// and trimming afterwards, which is how anyone captures a UI animation.
 			let loops = !CommandLine.arguments.contains("--shoot-once")
+			// `--shoot-movements` adds the two-movement prompt a real unlock asks for, built
+			// from the same prompts, symbols and hints LockWatcher presents, so a recording can
+			// show what the panel asks of you rather than only the scan and the result.
+			let movements = CommandLine.arguments.contains("--shoot-movements")
 			repeat {
 				capsule.update(phase: .locked)
-				try? await Task.sleep(for: .seconds(2))
+				try? await Task.sleep(for: .seconds(movements ? 1.5 : 2))
 				capsule.update(phase: .scanning)
-				try? await Task.sleep(for: .seconds(3))
+				try? await Task.sleep(for: .seconds(movements ? 1.2 : 3))
+				if movements {
+					for (index, action) in [LivenessChallenge.Action.turnLeft, .blink].enumerated() {
+						let hint = action.hint
+						capsule.update(phase: .challenge(
+							prompt: NotchCapsuleModel.Phase.outwardPrompt(action.prompt, completedActions: index, requiredActions: 2),
+							symbol: action.symbol, hintX: hint.x, hintY: hint.y, pulses: hint.pulses))
+						try? await Task.sleep(for: .seconds(2.2))
+						if action == .turnLeft {
+							capsule.update(phase: .challenge(prompt: "Return to your starting position",
+								symbol: "viewfinder", hintX: 0, hintY: 0, pulses: false, isReturningToRest: true))
+							try? await Task.sleep(for: .seconds(0.9))
+						}
+					}
+				}
 				capsule.update(phase: .success)
 				try? await Task.sleep(for: .seconds(loops ? 3 : 3600))
 			} while loops && !Task.isCancelled

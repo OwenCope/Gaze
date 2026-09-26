@@ -172,12 +172,13 @@ struct SetupMeetGazeStep: View {
 	var position: SetupPosition?
 	var onContinue: () -> Void
 	var onBack: (() -> Void)?
+	var onClose: (() -> Void)? = nil
 	var movementCount = 2
 
 	var body: some View {
 		SetupScaffold(position: position, title: "Meet Gaze",
 			message: "Gaze asks for \(movementCount == 1 ? "one small movement" : "two small movements").\nWhen it turns back, return your head to where you started.",
-			figureHeight: 0, onBack: onBack) {
+			figureHeight: 0, onBack: onBack, onClose: onClose) {
 			EmptyView()
 		} detail: {
 			// Opens on the scanning lesson: it carries the one/two-movement instruction,

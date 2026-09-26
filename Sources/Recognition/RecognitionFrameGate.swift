@@ -42,7 +42,10 @@ struct RecognitionRejectionHold {
 }
 
 struct RecognitionFrameGate {
-	static let firstFrameTimeout: Duration = .seconds(4)
+	/// The lock-screen camera is cold after sleep and regularly took 3.6 s or more to
+	/// deliver its first frame, so 4 s ended real attempts before a frame arrived.
+	/// Waiting longer releases nothing: no frame, no evidence, no password.
+	static let firstFrameTimeout: Duration = .seconds(8)
 	static let runningFrameTimeout: Duration = .seconds(1)
 
 	enum Result: Equatable {

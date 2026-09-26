@@ -109,7 +109,7 @@ struct SetupDoneStep: View {
 			description = message
 		}
 		return TourPage(
-			imageName: "Art/tour-general.png",
+			imageName: "Art/tour-backdrop.png",
 			imageBundle: .main,
 			title: "\(Self.title(failed: didFail, unfinished: unfinished, isAddingFace: isAddingFace))",
 			description: "\(description)"
@@ -146,8 +146,25 @@ struct SetupDoneStep: View {
 			continueButtonTitle: "\(primaryTitle)",
 			finishButtonTitle: "\(primaryTitle)",
 			onFinish: primaryAction,
-			onClose: onDone
+			onClose: onDone,
+			pageMedia: { _ in AnyView(SetupDoneArt(failed: didFail)) }
 		)
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
+	}
+}
+
+/// The companion on Pro Black, reacting to how setup went: a happy nod on success, a small
+/// shake on failure. Nothing else; the face is the message.
+private struct SetupDoneArt: View {
+	let failed: Bool
+	var body: some View {
+		ZStack {
+			RadialGradient(colors: [.black.opacity(0.7), .clear], center: .center, startRadius: 60, endRadius: 170)
+				.frame(width: 340, height: 340)
+			GazeLessonAnimation(motion: failed ? .rejected : .accepted, paused: false, material: .ink)
+				.frame(width: 170, height: 170)
+		}
+		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		.accessibilityHidden(true)
 	}
 }

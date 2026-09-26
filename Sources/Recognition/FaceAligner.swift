@@ -94,11 +94,43 @@ enum FaceAligner {
 	/// like a face.
 	///
 	/// `margin` is how many face-widths across the crop is: 1 is the bounding box
-	/// itself, 2.7 is the operating point the MiniFASNet family is trained at.
+	/// itself, 2.7 is the legacy operating point the MiniFASNet family was trained at,
+	/// kept because the shipped Spoof model is served the same framing.
 	///
 	/// No rotation either. A held phone is often slightly tilted, and that tilt is
 	/// evidence — straightening it throws the evidence away.
 	static func contextCrop(_ sample: FaceSample, side: Int, margin: CGFloat = 2.7) -> CVPixelBuffer? {
+		let image = CIImage(cvPixelBuffer: sample.pixelBuffer)
+		guard let (crop, _) = contextWindow(sample, margin: margin) else { return nil }
+
+		let scale = CGFloat(side) / crop.width
+		let rendered = image
+			.cropped(to: crop)
+			.transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
+			.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+			.cropped(to: CGRect(x: 0, y: 0, width: side, height: side))
+		guard !rendered.extent.isEmpty else { return nil }
+
+		var buffer: CVPixelBuffer?
+		let status = CVPixelBufferCreate(
+			kCFAllocatorDefault, side, side, kCVPixelFormatType_32BGRA,
+			[
+				kCVPixelBufferCGImageCompatibilityKey: true,
+				kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+			] as CFDictionary,
+			&buffer)
+		guard status == kCVReturnSuccess, let buffer else { return nil }
+
+		context.render(rendered, to: buffer)
+		return buffer
+	}
+
+	/// The square image window `contextCrop` renders, plus the face box inside it, in
+	/// image pixels. Shared so the passive deny cues measure the face at exactly the
+	/// position the crop put it — duplicating this math beside `contextCrop` would let
+	/// the two drift apart and the bezel overlap fraction would be measured against
+	/// the wrong box.
+	private static func contextWindow(_ sample: FaceSample, margin: CGFloat) -> (crop: CGRect, face: CGRect)? {
 		let image = CIImage(cvPixelBuffer: sample.pixelBuffer)
 		let extent = image.extent
 		guard extent.width > 0, extent.height > 0 else { return nil }
@@ -126,26 +158,22 @@ enum FaceAligner {
 		crop.origin.y = min(max(crop.minY, extent.minY), extent.maxY - crop.height)
 		crop = crop.intersection(extent)
 		guard crop.width > 1, crop.height > 1 else { return nil }
+		return (crop, faceRect)
+	}
 
+	/// The face box in the `side`×`side` context crop's pixel space, lower-left
+	/// origin to match Vision's normalized coordinates.
+	///
+	/// Same geometry as `contextCrop(_:side:margin:)` by construction — both go
+	/// through `contextWindow` — so the rectangle the bezel cue overlaps against the
+	/// face is the face as the crop actually rendered it, including the edge slide.
+	static func contextFaceRect(_ sample: FaceSample, side: Int, margin: CGFloat = 2.7) -> CGRect? {
+		guard let (crop, face) = contextWindow(sample, margin: margin) else { return nil }
 		let scale = CGFloat(side) / crop.width
-		let rendered = image
-			.cropped(to: crop)
-			.transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
-			.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-			.cropped(to: CGRect(x: 0, y: 0, width: side, height: side))
-		guard !rendered.extent.isEmpty else { return nil }
-
-		var buffer: CVPixelBuffer?
-		let status = CVPixelBufferCreate(
-			kCFAllocatorDefault, side, side, kCVPixelFormatType_32BGRA,
-			[
-				kCVPixelBufferCGImageCompatibilityKey: true,
-				kCVPixelBufferCGBitmapContextCompatibilityKey: true,
-			] as CFDictionary,
-			&buffer)
-		guard status == kCVReturnSuccess, let buffer else { return nil }
-
-		context.render(rendered, to: buffer)
-		return buffer
+		return CGRect(
+			x: (face.minX - crop.minX) * scale,
+			y: (face.minY - crop.minY) * scale,
+			width: face.width * scale,
+			height: face.height * scale)
 	}
 }

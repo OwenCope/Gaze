@@ -55,6 +55,12 @@ protocol FaceEmbedder: Sendable {
 	/// carries identity, and cosine is correct for them. Raw coordinates are not: see
 	/// `LandmarkEmbedder`.
 	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float
+	/// Runs one throwaway prediction so the first real frame doesn't pay for loading the model.
+	func warmUp()
+}
+
+extension FaceEmbedder {
+	func warmUp() {}
 }
 
 extension FaceEmbedder {
@@ -225,6 +231,13 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 		// Version the identifier so swapping models invalidates old enrolments rather
 		// than silently comparing prints from different feature spaces.
 		self.identifier = "coreml:\(self.side)x\(self.side):\(Self.modelTag)"
+	}
+
+	func warmUp() {
+		guard let tensor = try? MLMultiArray(shape: [1, 3, NSNumber(value: side), NSNumber(value: side)], dataType: .float32),
+			let input = try? MLDictionaryFeatureProvider(dictionary: [inputName: MLFeatureValue(multiArray: tensor)])
+		else { return }
+		_ = try? model.prediction(from: input)
 	}
 
 	func embed(_ sample: FaceSample) -> Faceprint? {

@@ -18,6 +18,8 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 	/// `uniqueID` of the camera used at enrolment, re-checked at every unlock.
 	var cameraID: String
 	var enrolledAt: Date
+	/// Switched off in Settings. Kept on disk, never matched against.
+	var isEnabled: Bool
 
 	init(
 		id: UUID = UUID(),
@@ -25,7 +27,8 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 		prints: [Faceprint],
 		embedder: String,
 		cameraID: String,
-		enrolledAt: Date = Date()
+		enrolledAt: Date = Date(),
+		isEnabled: Bool = true
 	) {
 		self.id = id
 		self.name = name
@@ -33,6 +36,7 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 		self.embedder = embedder
 		self.cameraID = cameraID
 		self.enrolledAt = enrolledAt
+		self.isEnabled = isEnabled
 	}
 
 	/// Decoded with `id` and `name` optional.
@@ -49,6 +53,10 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 		embedder = try container.decode(String.self, forKey: .embedder)
 		cameraID = try container.decode(String.self, forKey: .cameraID)
 		enrolledAt = try container.decode(Date.self, forKey: .enrolledAt)
+		// Absent on records written before the switch existed. Defaulting to
+		// true keeps those faces working with no migration, the same way a
+		// missing `id` or `name` above falls back instead of throwing.
+		isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
 	}
 
 	/// The name a newly enrolled face gets.
@@ -114,6 +122,14 @@ final class FaceEnrollmentStore {
 
 	private(set) var faces: [FaceEnrollment] = []
 
+	#if PRODUCT_CAPTURE
+	/// Capture tool only: shows one enrolled face without touching the vault or the
+	/// Secure Enclave. Never compiled into the shipping app.
+	func loadProductCaptureDemoFace() {
+		faces = [FaceEnrollment(name: "You", prints: [], embedder: embedder.identifier, cameraID: "demo")]
+	}
+	#endif
+
 	/// Bumped whenever a portrait is written or cleared.
 	///
 	/// Portraits live on disk rather than in `faces`, so changing one does not touch any
@@ -146,6 +162,18 @@ final class FaceEnrollmentStore {
 
 	var isEnrolled: Bool { !faces.isEmpty }
 	var canAddFace: Bool { faces.count < Self.maximumFaces }
+
+	/// Whether any face is currently allowed to unlock.
+	///
+	/// The five-face limit counts disabled faces (`canAddFace` reads the whole
+	/// list), so this is the check Settings uses to decide between "nothing
+	/// enrolled" and "everything switched off".
+	var anyEnabled: Bool { faces.contains(where: \.isEnabled) }
+
+	/// The sentence shown wherever a miss needs explaining because every face
+	/// is switched off. One string shared by `matches(_:)` and Settings, so
+	/// the two cannot drift apart.
+	static let allFacesOffMessage = "All faces are off, so Gaze won't unlock your Mac."
 
 	/// The camera every enrolled face was taken on, when they agree.
 	///
@@ -257,6 +285,19 @@ final class FaceEnrollmentStore {
 		do { try persist() } catch { faces[index].name = previous }
 	}
 
+	/// Switches one face on or off, keeping the record on disk either way.
+	///
+	/// Authorisation, if any, happens at the call site: switching off only
+	/// reduces who can unlock so it needs none, while switching on goes through
+	/// the same `BiometricGate.authorize` check Settings uses for removing a face.
+	func setEnabled(_ id: UUID, _ enabled: Bool) {
+		guard let index = faces.firstIndex(where: { $0.id == id }) else { return }
+		guard faces[index].isEnabled != enabled else { return }
+		let previous = faces[index].isEnabled
+		faces[index].isEnabled = enabled
+		do { try persist() } catch { faces[index].isEnabled = previous }
+	}
+
 	func remove(_ id: UUID) {
 		let previous = faces
 		faces.removeAll { $0.id == id }
@@ -290,20 +331,28 @@ final class FaceEnrollmentStore {
 	///
 	/// This is only half of an authentication decision — the caller must also clear
 	/// liveness and the lockout counter before acting on it.
-	func matches(_ sample: FaceSample) -> (matched: Bool, score: Float, face: FaceEnrollment?) {
-		guard !faces.isEmpty, let candidate = embedder.embed(sample) else {
-			return (false, 0, nil)
+	///
+	/// Only faces switched on are scored. When every face is off the result is a
+	/// miss carrying `allFacesOffMessage`, so a caller with somewhere to show it
+	/// (Settings, the recognition test) can say why instead of just failing.
+	func matches(_ sample: FaceSample) -> (matched: Bool, score: Float, face: FaceEnrollment?, reason: String?) {
+		let enabled = faces.filter(\.isEnabled)
+		guard !enabled.isEmpty else {
+			return (false, 0, nil, faces.isEmpty ? nil : Self.allFacesOffMessage)
+		}
+		guard let candidate = embedder.embed(sample) else {
+			return (false, 0, nil, nil)
 		}
 
 		var best: (score: Float, face: FaceEnrollment)?
-		for face in faces {
+		for face in enabled {
 			let score = face.bestSimilarity(to: candidate, using: embedder)
 			if score > (best?.score ?? -1) { best = (score, face) }
 		}
 
-		guard let best else { return (false, 0, nil) }
+		guard let best else { return (false, 0, nil, nil) }
 		let matched = best.score >= embedder.matchThreshold
-		return (matched, best.score, matched ? best.face : nil)
+		return (matched, best.score, matched ? best.face : nil, nil)
 	}
 }
 

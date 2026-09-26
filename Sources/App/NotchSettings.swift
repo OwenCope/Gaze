@@ -134,7 +134,7 @@ struct NotchSettingsSection: View {
 
 	private var styleFooter: String {
 		if isOnEar {
-			return "The mark sits beside the camera. No panel drops below the notch."
+			return "The lock and face flank the camera, widening only to carry a message."
 		}
 		switch settings.notchStyle {
 		case .normal:
@@ -160,6 +160,7 @@ private struct NotchAppearancePreview: View {
 		model.glyphPlacement = settings.panelShape != .attached ? .centred : settings.glyphPlacement
 		model.transparency = settings.notchTransparency
 		model.showsCaptions = settings.showNotchCaptions
+		model.phase = Self.previewPhase(for: settings.panelShape)
 		model.isExpanded = true
 		_model = State(initialValue: model)
 	}
@@ -202,8 +203,15 @@ private struct NotchAppearancePreview: View {
 		return "\(model.shape.title), \(appearance). Simulated appearance; camera off."
 	}
 
+	/// Always the dropped, scanning panel. At rest every shape is the same small bar by the
+	/// notch, so a resting preview showed a lock and nothing about the shape being chosen.
+	private static func previewPhase(for shape: Preferences.PanelShape) -> NotchCapsuleModel.Phase {
+		.scanning
+	}
+
 	private func syncAppearance() {
 		model.shape = settings.panelShape
+		model.phase = Self.previewPhase(for: settings.panelShape)
 		model.style = settings.notchStyle
 		model.glyphPlacement = settings.panelShape != .attached ? .centred : settings.glyphPlacement
 		model.transparency = settings.notchTransparency

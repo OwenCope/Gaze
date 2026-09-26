@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import Observation
+import UserNotifications
 import os
 
 /// Checks gazeunlock.com for a newer release.
@@ -68,10 +69,35 @@ final class ReleaseUpdateChecker {
 		set { defaults.set(newValue, forKey: Self.lastCheckKey) }
 	}
 
+	/// The last version a notification was posted for, so each version notifies once.
+	///
+	/// Persisted in `UserDefaults` rather than memory: the app is often quit and reopened,
+	/// and re-notifying on every launch would train people to dismiss it unread.
+	private static let lastNotifiedTagKey = "lastNotifiedReleaseTag"
+
+	private var lastNotifiedTag: String? {
+		get { defaults.string(forKey: Self.lastNotifiedTagKey) }
+		set { defaults.set(newValue, forKey: Self.lastNotifiedTagKey) }
+	}
+
+	/// Posts the per-version notification. A closure so tests can observe without delivering.
+	/// Nil means post for real; tests set a closure to observe instead.
+	@ObservationIgnored var notificationPoster: (@MainActor (Release) -> Void)?
+
 	/// How often to look, unprompted.
 	private static let interval: TimeInterval = 60 * 60 * 24
 
+	/// Never check on a timer more often than this, however often one is triggered.
+	private static let minimumInterval: TimeInterval = 60 * 60
+
+	/// Randomised per launch and added to the daily check, so every copy of the app
+	/// does not poll the site in the same second.
+	private static let maximumJitter: TimeInterval = 30 * 60
+
 	private var timer: Timer?
+
+	/// Retried at unlock when a due check was skipped while locked.
+	private var unlockObserver: NSObjectProtocol?
 
 	/// Outstanding scheduled work: the deferred post-launch check or a
 	/// timer-triggered one. Tracked so stopping the schedule cancels a check
@@ -112,7 +138,9 @@ final class ReleaseUpdateChecker {
 			await self.runScheduledCheck(generation: generation)
 		}
 
-		let timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
+		let timer = Timer.scheduledTimer(
+			withTimeInterval: Self.interval + Double.random(in: 0...Self.maximumJitter), repeats: true
+		) { [weak self] _ in
 			Task { @MainActor [weak self] in
 				guard let self else { return }
 				self.enqueueTimerCheck()
@@ -121,6 +149,16 @@ final class ReleaseUpdateChecker {
 		// Common modes, so it keeps firing while a menu is open.
 		RunLoop.main.add(timer, forMode: .common)
 		self.timer = timer
+
+		// A check skipped while locked is picked up at the next unlock.
+		unlockObserver = DistributedNotificationCenter.default().addObserver(
+			forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: nil
+		) { [weak self] _ in
+			Task { @MainActor [weak self] in
+				guard let self else { return }
+				await self.checkIfDue()
+			}
+		}
 	}
 
 	/// Stops the background schedule and cancels any scheduled check in flight.
@@ -132,11 +170,18 @@ final class ReleaseUpdateChecker {
 		timer = nil
 		scheduledWork?.cancel()
 		scheduledWork = nil
+		if let unlockObserver {
+			DistributedNotificationCenter.default().removeObserver(unlockObserver)
+			self.unlockObserver = nil
+		}
 	}
 
 	isolated deinit {
 		timer?.invalidate()
 		scheduledWork?.cancel()
+		if let unlockObserver {
+			DistributedNotificationCenter.default().removeObserver(unlockObserver)
+		}
 	}
 
 	/// Queues one daily-timer check as cancellable scheduled work on this instance.
@@ -164,11 +209,24 @@ final class ReleaseUpdateChecker {
 	/// gazeunlock.com", turning a working notification into an error nobody asked for.
 	func checkIfDue() async {
 		if case .available = state { return }
+		// Never while locked: there is nobody to tell, and the next unlock or the
+		// next scheduled time picks the check up. The timestamp is left alone so
+		// the check stays due rather than looking freshly done.
+		if Self.isLocked() { return }
 		if let last = lastCheck {
 			let elapsed = Date().timeIntervalSince(last)
-			if elapsed >= 0, elapsed < Self.interval { return }
+			if elapsed >= 0, elapsed < Self.minimumInterval { return }
 		}
 		await check()
+	}
+
+	/// Asked of the window server rather than remembered.
+	private static func isLocked() -> Bool {
+		guard
+			let session = CGSessionCopyCurrentDictionary() as? [String: Any],
+			let locked = session["CGSSessionScreenIsLocked"] as? Bool
+		else { return false }
+		return locked
 	}
 
 	// MARK: - Checking
@@ -195,8 +253,8 @@ final class ReleaseUpdateChecker {
 			var request = URLRequest(url: Self.feed)
 			// Short. This runs on a timer in the background and, when someone presses the
 			// button, in front of a spinner — neither is a reason to hold a connection open
-			// for the default sixty seconds on a flaky network.
-			request.timeoutInterval = 12
+			// on a flaky network.
+			request.timeoutInterval = 15
 			request.cachePolicy = .reloadRevalidatingCacheData
 
 			let session = URLSession(configuration: sessionConfiguration(),
@@ -239,6 +297,15 @@ final class ReleaseUpdateChecker {
 				return
 			}
 
+			// The app has no prerelease channel, so a prerelease build is never offered,
+			// whatever the tag says. A check, not a failure: the timestamp still advances.
+			if latest.prerelease == true {
+				Self.logger.notice(
+					"Checked \(Self.feed.absoluteString, privacy: .public): latest \(latest.tag, privacy: .public) is prerelease — up to date")
+				state = .upToDate
+				return
+			}
+
 			guard let candidate = Version(latest.tag), let current = Version(currentVersion) else {
 				state = .failed("Couldn't read the release version.")
 				return
@@ -250,13 +317,18 @@ final class ReleaseUpdateChecker {
 				return
 			}
 
-			state = .available(
-				Release(
-					tag: latest.tag,
-					name: latest.name,
-					notes: latest.notes,
-					downloadURL: ReleaseURLPolicy.download(latest.download?.url)))
+			let release = Release(
+				tag: latest.tag,
+				name: latest.name,
+				notes: latest.notes,
+				downloadURL: ReleaseURLPolicy.download(latest.download?.url))
+			state = .available(release)
 			Self.logger.notice("Update available: \(latest.tag, privacy: .public)")
+			// One notification per version, however often the state is re-entered.
+			if lastNotifiedTag != release.tag {
+				lastNotifiedTag = release.tag
+				if let notificationPoster { notificationPoster(release) } else { ReleaseUpdateChecker.postNotification(for: release) }
+			}
 		} catch {
 			// A stopped schedule is not an offline Mac. Cancellation — the
 			// task dying, a CancellationError, or the session reporting a
@@ -279,6 +351,29 @@ final class ReleaseUpdateChecker {
 		let url = release.downloadURL.flatMap { ReleaseURLPolicy.isTrusted($0) ? $0 : nil }
 			?? ReleaseURLPolicy.releases
 		NSWorkspace.shared.open(url)
+	}
+
+	// MARK: - Notifications
+
+	/// Posts one notification per version; clicking it opens the same URL as Download.
+	private static func postNotification(for release: Release) {
+		// UNUserNotificationCenter raises outside an app bundle (test harnesses,
+		// command-line runs); there is nobody to notify there anyway.
+		guard Bundle.main.bundleURL.pathExtension == "app" else { return }
+		let center = UNUserNotificationCenter.current()
+		center.delegate = ReleaseNotificationDelegate.shared
+		let content = UNMutableNotificationContent()
+		content.title = "Gaze \(release.tag) is available"
+		content.body = release.name.isEmpty ? "A new version is ready to download." : release.name
+		let url = release.downloadURL.flatMap { ReleaseURLPolicy.isTrusted($0) ? $0 : nil }
+			?? ReleaseURLPolicy.releases
+		content.userInfo = ["url": url.absoluteString]
+		let request = UNNotificationRequest(
+			identifier: "gaze-release-\(release.tag)", content: content, trigger: nil)
+		center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+			guard granted else { return }
+			center.add(request)
+		}
 	}
 
 	// MARK: - Versions
@@ -366,11 +461,35 @@ final class ReleaseUpdateChecker {
 			let tag: String
 			let name: String
 			let notes: String
+			let prerelease: Bool?
 			let download: Download?
 		}
 
 		struct Download: Decodable {
 			let url: String
+			let name: String?
+			let size: Int?
 		}
+	}
+}
+
+/// Opens the notification's URL in the browser. The URL was allow-listed when the
+/// notification was posted and is checked again here, so only gazeunlock.com opens.
+private final class ReleaseNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Sendable {
+	static let shared = ReleaseNotificationDelegate()
+
+	func userNotificationCenter(
+		_ center: UNUserNotificationCenter, willPresent notification: UNNotification
+	) async -> UNNotificationPresentationOptions {
+		[.banner, .sound]
+	}
+
+	func userNotificationCenter(
+		_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+	) async {
+		guard let value = response.notification.request.content.userInfo["url"] as? String,
+			let url = URL(string: value), ReleaseURLPolicy.isTrusted(url)
+		else { return }
+		await MainActor.run { NSWorkspace.shared.open(url) }
 	}
 }

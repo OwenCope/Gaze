@@ -65,7 +65,7 @@ public struct TourSlideshowView: View {
     let onFinish: (() -> Void)?
     let onClose: (() -> Void)?
     /// Optional live content for the active page, inside the existing media region.
-    let pageMedia: ((Int) -> AnyView)?
+    let pageMedia: ((Int) -> AnyView?)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State var currentIndex: Int
@@ -80,7 +80,7 @@ public struct TourSlideshowView: View {
         buttonBundle: Bundle? = nil,
         onFinish: (() -> Void)? = nil,
         onClose: (() -> Void)? = nil,
-        pageMedia: ((Int) -> AnyView)? = nil
+        pageMedia: ((Int) -> AnyView?)? = nil
     ) {
         self.pages = pages
         self.width = width
@@ -109,7 +109,20 @@ public struct TourSlideshowView: View {
                     imageSection
                     bottomPanel
                 }
-                .background(Color(white: 0.10))
+                // The page's picture fills the whole card, and the text panel is frosted
+                // glass over it, rather than the picture fading into a flat grey panel.
+                .background {
+                    ZStack {
+                        Color(white: 0.06)
+                        image(for: pages[currentIndex])
+                            .resizable()
+                            .scaledToFill()
+                            .id(currentIndex)
+                            .transition(.opacity)
+                    }
+                    .accessibilityHidden(true)
+                }
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -148,14 +161,17 @@ public struct TourSlideshowView: View {
         // Only the active media cross-fades; navigation and page dots stay visible.
         ZStack(alignment: .top) {
             Group {
-                if let pageMedia {
-                    pageMedia(currentIndex)
-                        .environment(\.colorScheme, .dark)
-                        .padding(.horizontal, 48)
-                        .padding(.top, 36)
-                        .padding(.bottom, 40)
+                if let media = pageMedia?(currentIndex) {
+                    // The page's image is the card's backdrop; live media draws over it.
+                    ZStack {
+                        media
+                            .environment(\.colorScheme, .dark)
+                            .padding(.horizontal, 48)
+                            .padding(.top, 36)
+                            .padding(.bottom, 40)
+                    }
                 } else {
-                    photograph
+                    Color.clear
                 }
             }
                 .frame(width: width, height: imageHeight)
@@ -163,44 +179,17 @@ public struct TourSlideshowView: View {
                 .id(currentIndex)
                 .transition(.opacity)
 
-            PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
-                .padding(.bottom, 14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .allowsHitTesting(false)
+            // No indicator for a single page: one dot says nothing.
+            if pages.count > 1 {
+                PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
+                    .padding(.bottom, 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .allowsHitTesting(false)
+            }
 
             topControls
         }
         .frame(width: width, height: imageHeight)
-    }
-
-    private var photograph: some View {
-        let photo = image(for: pages[currentIndex])
-            .resizable()
-            .scaledToFill()
-            .frame(width: width, height: imageHeight)
-
-        return photo
-            .overlay {
-                photo
-                    .blur(radius: 14, opaque: true)
-                    .mask {
-                        LinearGradient(stops: [
-                            .init(color: .clear, location: 0.45),
-                            .init(color: .white, location: 0.83)
-                        ], startPoint: .top, endPoint: .bottom)
-                    }
-            }
-            .mask {
-                LinearGradient(stops: [
-                    .init(color: .white, location: 0),
-                    .init(color: .white, location: 0.52),
-                    .init(color: .white.opacity(0.85), location: 0.70),
-                    .init(color: .white.opacity(0.30), location: 0.85),
-                    .init(color: .clear, location: 0.98),
-                    .init(color: .clear, location: 1)
-                ], startPoint: .top, endPoint: .bottom)
-            }
-            .accessibilityHidden(true)
     }
 
     // MARK: - Bottom panel (text + button)
@@ -231,6 +220,16 @@ public struct TourSlideshowView: View {
         .padding(.horizontal, 32)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            // See-through frosted glass: the picture stays visible, softened, behind the text.
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .opacity(0.75)
+                .background(.black.opacity(0.12))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
+                }
+        }
         // Per-slide identity so title, description, and button cross-fade
         // as one unit alongside the image above.
         .id(currentIndex)
@@ -292,6 +291,9 @@ public struct TourSlideshowView: View {
 
     // MARK: - Primary CTA
 
+    /// The website's glass button, drawn here: a solid blue capsule, a thin light rim
+    /// brighter at the top-left, and a soft top highlight. System glass tints don't render
+    /// in this borderless window, and came out grey.
     private var primaryActionButton: some View {
         Button(action: advance) {
             Text(
@@ -301,24 +303,23 @@ public struct TourSlideshowView: View {
             )
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 220, height: 42)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.10, green: 0.60, blue: 1.0),
-                                    Color(red: 0.04, green: 0.46, blue: 0.96)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                )
-                .clipShape(Capsule(style: .continuous))
+                .frame(width: 200, height: 40)
+                .background {
+                    ZStack {
+                        Capsule(style: .continuous)
+                            .fill(Color(red: 0.04, green: 0.52, blue: 1.0))
+                        Capsule(style: .continuous)
+                            .fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0)],
+                                startPoint: .top, endPoint: .center))
+                        Capsule(style: .continuous)
+                            .strokeBorder(LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0), .white.opacity(0.3)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                    }
+                }
+                .shadow(color: Color(red: 0, green: 0.12, blue: 0.27).opacity(0.3), radius: 8, y: 2)
                 .contentShape(Capsule(style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TourPressStyle())
         .keyboardShortcut(.defaultAction)
     }
 
@@ -659,5 +660,15 @@ public struct PageIndicator: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Page \(currentIndex + 1) of \(max(totalPages, 1))")
+    }
+}
+
+/// A small press-down, like the website button's active state.
+private struct TourPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .brightness(configuration.isPressed ? -0.05 : 0)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

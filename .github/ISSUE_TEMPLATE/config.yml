@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://discord.gg/2yNr5fWUEy
+    about: Chat with the community on Discord.
+  - name: Security issue
+    url: https://github.com/OwenCope/Gaze/security/advisories/new
+    about: Please report vulnerabilities privately, not as a public issue.

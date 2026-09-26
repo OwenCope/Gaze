@@ -1,0 +1,19 @@
+name: Feature request
+description: An idea for Gaze.
+title: "[Idea] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like?
+      description: The idea in a sentence or two.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help?
+      description: The situation it would improve.
+    validations:
+      required: false

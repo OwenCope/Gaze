@@ -1,67 +1,38 @@
-"""Gaze installer artwork, rendered at 1x and 2x in Pro Black supreme.
+"""Gaze installer artwork, rendered at 1x and 2x.
 
-A near-black field with a decorative top motif (dotted pill row over a soft
-blue glow), soft graphite curves, the two icon positions left empty for
-Finder, a bold double-chevron arrow between them and one white line of
-instruction. Nothing competes with the drag. `WINDOW_SIZE`, `ICON_LOCATIONS`
-and `ICON_SIZE` are shared with `package.py`; keep them in sync there rather
-than forking new values here.
+The top of a Mac screen on the Pro Black wallpaper, with Gaze's real panel
+hanging from the top edge. Below, the two icons are joined by a curved white
+arrow; frosted pills sit under their names so Finder's black label text stays
+readable. The arrow is the instruction; Finder clips anything near the bottom edge. It is light on purpose: Finder draws icon names in black in light
+mode, and a dark field leaves them unreadable.
 
-Outputs in the target directory:
-  background.png / background@2x.png (1x/retina)
-  background-dark.png / background-dark@2x.png (same Pro Black style, 1x/retina)
-  VolumeIcon.icns (from `volume_icon`, see below)
-
-Volume icon: `volume_icon()` renders the DMG volume icon from the app's own
-artwork. Pass a built `AppIcon.icns` when one is at hand; otherwise it falls
-back to composing `Resources/AppIcon.icon/Assets/gaze-mark.png` over the
-icon's light gradient. It fails with a clear message when neither source
-exists rather than writing a blank icon.
-
-Pillow is required. The render functions fail with a clear message when it is
-missing instead of silently producing nothing. Fallback path, kept in
-`Tools/Release/BuildDMG.sh` (not here): when Pillow is unavailable the DMG
-ships without a custom background. That fallback stays the caller's decision;
-this module never silently skips.
+`WINDOW_SIZE`, `ICON_LOCATIONS` and `ICON_SIZE` are shared with `package.py`.
+Outputs: background.png / background@2x.png, background-dark.png /
+background-dark@2x.png (the same field; macOS does not switch DMG backgrounds by
+appearance) and VolumeIcon.icns via `volume_icon`.
 """
 
 from pathlib import Path
 from typing import Optional
 import sys
 
-WINDOW_SIZE = (640, 360)
-ICON_LOCATIONS = {"Gaze.app": (176, 180), "Applications": (464, 180)}
-ICON_SIZE = 112
+WINDOW_SIZE = (660, 420)
+ICON_LOCATIONS = {"Gaze.app": (178, 250), "Applications": (482, 250)}
+ICON_SIZE = 128
 
 FONT = "/System/Library/Fonts/SFNS.ttf"
 CAPTION = "Drag Gaze to Applications"
-# Below the names Finder draws under the icons, with room to breathe.
-CAPTION_Y = 304
-# Finder icon labels render white over this background. Pro Black: near-black
-# base with a faint top-to-bottom falloff so the field has depth without
-# competing with the icons. Both stems render this same style.
-PAPER = (10, 10, 12)
-PAPER_FOOT = (24, 24, 28)
-ARROW = (208, 208, 216)
-CAPTION_INK = (255, 255, 255)
-DARK_PAPER = PAPER
-DARK_PAPER_FOOT = PAPER_FOOT
-DARK_ARROW = ARROW
-DARK_CAPTION_INK = CAPTION_INK
-GRAPHITE_CURVE = (40, 40, 47)
-GRAPHITE_CURVE_INNER = (30, 30, 36)
-TOP_HIGHLIGHT = (72, 72, 82)
-# Supreme top motif: dotted pill row over a soft blue glow, cf. Glance/Aside/Atoll.
-BLUE_GLOW = (42, 78, 150)
-PILL_OUTLINE = (68, 70, 84)
-MOTIF_DOT = (118, 124, 142)
-# SoftAnchor glow behind Finder icon labels: Finder draws icon names in black,
-# unreadable on Pro Black, so each label zone gets a faint graphite lift.
-LABEL_GLOW = (78, 78, 90)
-LABEL_GLOW_Y = 258
+TOP = (236, 238, 245)
+BOTTOM = (248, 248, 250)
+GLOW = (10, 132, 255)
+INK = (29, 29, 31)
+MUTED = (120, 120, 128)
+ARROW = (10, 132, 255)
 
-# gaze-mark.png composited over this gradient when no built AppIcon.icns is
-# passed to volume_icon(); matches the light gradient in icon.json.
+PANEL = Path(__file__).resolve().parent / "panel.png"
+WALLPAPER = Path(__file__).resolve().parent / "wallpaper.jpg"
+# Where Finder centres an icon name, below the icon centre, at icon size 128 and text size 13.
+LABEL_OFFSET = 83
 APP_ICON_MARK = Path(__file__).resolve().parents[3] / "Resources/AppIcon.icon/Assets/gaze-mark.png"
 VOLUME_GRADIENT = ((255, 255, 255), (240, 240, 242))
 VOLUME_ICON_SIZE = 1024
@@ -95,108 +66,158 @@ def _stroke(draw, a, b, width, fill):
         draw.ellipse((point[0] - r, point[1] - r, point[0] + r, point[1] + r), fill=fill)
 
 
-def _arrow(draw, cx, cy, length, stroke, fill):
-    """A bold shaft and double chevron, drawn here so the installer carries no
-    redistributed glyph."""
-    x0, x1 = cx - length / 2, cx + length / 2
-    barb = length * 0.16
-    gap = length * 0.11
-    _stroke(draw, (x0, cy), (x1, cy), stroke, fill)
-    _stroke(draw, (x1 - barb, cy - barb), (x1, cy), stroke, fill)
-    _stroke(draw, (x1 - barb, cy + barb), (x1, cy), stroke, fill)
-    _stroke(draw, (x1 - gap - barb, cy - barb), (x1 - gap, cy), stroke, fill)
-    _stroke(draw, (x1 - gap - barb, cy + barb), (x1 - gap, cy), stroke, fill)
+def _curve_arrow(draw, start, control, end, stroke, fill):
+    """A quadratic arc with an open chevron at its end, aligned to the curve.
+
+    Drawn as a run of round dabs rather than a polyline, so the stroke has
+    round joins all the way along.
+    """
+    import math
+
+    def point(t):
+        u = 1 - t
+        return (u * u * start[0] + 2 * u * t * control[0] + t * t * end[0],
+                u * u * start[1] + 2 * u * t * control[1] + t * t * end[1])
+
+    r = stroke / 2
+    steps = 400
+    for i in range(steps + 1):
+        x, y = point(i / steps)
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=fill)
+    tx, ty = end[0] - control[0], end[1] - control[1]
+    angle = math.atan2(ty, tx)
+    barb = stroke * 5.2
+    for spread in (math.radians(150), math.radians(-150)):
+        bx = end[0] + barb * math.cos(angle + spread)
+        by = end[1] + barb * math.sin(angle + spread)
+        _stroke(draw, (bx, by), end, stroke, fill)
 
 
-def _field(Image, ImageDraw, ImageFont, paper, foot, arrow, ink):
+def _curved_text(Image, ImageDraw, ImageFont, image, text, start, control, end, lift, px, fill):
+    """Set text along the arrow's quadratic curve, each glyph rotated to the tangent
+    and lifted off the line by `lift`, centred on the curve's arc length."""
+    import math
+
+    def point(t):
+        u = 1 - t
+        return (u * u * start[0] + 2 * u * t * control[0] + t * t * end[0],
+                u * u * start[1] + 2 * u * t * control[1] + t * t * end[1])
+
+    def tangent(t):
+        return (2 * (1 - t) * (control[0] - start[0]) + 2 * t * (end[0] - control[0]),
+                2 * (1 - t) * (control[1] - start[1]) + 2 * t * (end[1] - control[1]))
+
+    samples = [point(i / 1000) for i in range(1001)]
+    lengths = [0.0]
+    for (x0, y0), (x1, y1) in zip(samples, samples[1:]):
+        lengths.append(lengths[-1] + math.hypot(x1 - x0, y1 - y0))
+    total = lengths[-1]
+
+    def t_at(distance):
+        lo, hi = 0, len(lengths) - 1
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if lengths[mid] < distance: lo = mid + 1
+            else: hi = mid
+        return lo / 1000
+
+    font = _font(ImageFont, px, 500)
+    measure = ImageDraw.Draw(image)
+    width = measure.textlength(text, font=font)
+    cursor = (total - width) / 2
+    for ch in text:
+        cw = measure.textlength(ch, font=font)
+        t = t_at(cursor + cw / 2)
+        x, y = point(t)
+        dx, dy = tangent(t)
+        angle = math.degrees(math.atan2(dy, dx))
+        nx, ny = dy / math.hypot(dx, dy), -dx / math.hypot(dx, dy)
+        if ny > 0: nx, ny = -nx, -ny
+        x, y = x + nx * lift, y + ny * lift
+        tile = Image.new("RGBA", (round(cw + px), round(px * 2)), (0, 0, 0, 0))
+        ImageDraw.Draw(tile).text((tile.width / 2, tile.height / 2), ch, font=font, fill=fill, anchor="mm")
+        tile = tile.rotate(-angle, resample=Image.Resampling.BICUBIC, expand=True)
+        image.alpha_composite(tile, (round(x - tile.width / 2), round(y - tile.height / 2)))
+        cursor += cw
+    return image
+
+
+def _field(Image, ImageDraw, ImageFont):
+    from PIL import ImageFilter
+
     scale = 4
     width, height = WINDOW_SIZE
     w, h = width * scale, height * scale
 
-    image = Image.new("RGB", (w, h), paper)
+    # The Pro Black wallpaper, the same one the lock-screen footage uses,
+    # cropped to cover the window.
+    wall = Image.open(WALLPAPER).convert("RGB")
+    cover = max(w / wall.width, h / wall.height)
+    wall = wall.resize((round(wall.width * cover), round(wall.height * cover)), Image.Resampling.LANCZOS)
+    left, top = (wall.width - w) // 2, (wall.height - h) // 2
+    image = wall.crop((left, top, left + w, top + h)).convert("RGBA")
+    # Darken a little so the icons and panel stay the brightest things.
+    image = Image.alpha_composite(image, Image.new("RGBA", (w, h), (0, 0, 0, 70)))
+
+    # Gaze's own panel, photographed from the app's lock-screen window, widened
+    # the way it grows when it has something to say: the black middle is
+    # stretched, the curved shoulders and the happy companion are the app's own.
+    panel = Image.open(PANEL).convert("RGBA")
+    # Sized like the app's dropped scanning panel, not the slim resting bar.
+    ph = 128 * scale
+    pw0 = round(panel.width * ph / panel.height)
+    panel = panel.resize((pw0, ph), Image.Resampling.LANCZOS)
+    left_end, right_start = round(pw0 * 0.3), round(pw0 * 0.7)
+    face = panel.crop((left_end, 0, right_start, ph))
+    body = pw0 - left_end - (pw0 - right_start) + 230 * scale
+    wide = Image.new("RGBA", (left_end + body + pw0 - right_start, ph), (0, 0, 0, 0))
+    wide.alpha_composite(panel.crop((0, 0, left_end, ph)), (0, 0))
+    wide.alpha_composite(panel.crop((right_start, 0, pw0, ph)), (left_end + body, 0))
+    column = panel.crop((round(pw0 * 0.75), 0, round(pw0 * 0.75) + 1, ph)).resize((body, ph))
+    wide.alpha_composite(column, (left_end, 0))
+    # The happy companion moves to the left, with its line beside it.
+    fx = left_end + round(26 * scale)
+    wide.alpha_composite(face, (fx, 0))
+    wd = ImageDraw.Draw(wide)
+    wd.text((fx + face.width - 4 * scale, ph * 0.64), "Drag me to the right",
+            font=_font(ImageFont, 21 * scale, 600), fill=(255, 255, 255, 255), anchor="lm")
+    image.alpha_composite(wide, (round((w - wide.width) / 2), 0))
+
     draw = ImageDraw.Draw(image)
-    for y in range(h):
-        t = (y / (h - 1)) ** 2
-        draw.line(((0, y), (w, y)), fill=tuple(
-            round(a + (b - a) * t) for a, b in zip(paper, foot)))
+    # Finder draws icon names in the system text colour: black in light mode,
+    # which vanishes on this wallpaper. A frosted pill under each name keeps it
+    # readable in both appearances.
+    label_font = _font(ImageFont, 13 * scale, 500)
+    for name, (x, y) in ICON_LOCATIONS.items():
+        label = name.removesuffix(".app")
+        tw = draw.textlength(label, font=label_font)
+        cx, cy = x * scale, (y + LABEL_OFFSET) * scale
+        pad_x, half_h = 12 * scale, 11 * scale
+        box = (round(cx - tw / 2 - pad_x), round(cy - half_h), round(cx + tw / 2 + pad_x), round(cy + half_h))
+        frost = image.crop(box).filter(ImageFilter.GaussianBlur(10 * scale))
+        frost = Image.alpha_composite(frost, Image.new("RGBA", frost.size, (245, 245, 247, 215)))
+        mask = Image.new("L", frost.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, frost.width - 1, frost.height - 1), radius=half_h, fill=255)
+        image.paste(frost, box[:2], mask)
 
-    # Soft graphite curves: two large rounded bands arcing behind the icons.
-    draw.rounded_rectangle((-w * 0.25, -h * 0.55, w * 1.25, h * 0.52),
-                           radius=int(h * 0.30), outline=GRAPHITE_CURVE_INNER,
-                           width=scale)
-    draw.rounded_rectangle((-w * 0.18, -h * 0.48, w * 1.18, h * 0.44),
-                           radius=int(h * 0.26), outline=GRAPHITE_CURVE,
-                           width=2 * scale)
-    # Subtle top highlight fading down over a few pixels.
-    for i in range(3 * scale):
-        t = 1 - i / (3 * scale)
-        draw.line(((0, i), (w, i)), fill=tuple(
-            round(a + (b - a) * t) for a, b in zip(paper, TOP_HIGHLIGHT)))
-
-    # Supreme top motif: soft blue glow with a dotted pill row centred above
-    # the icons, in the Glance/Aside/Atoll manner.
-    from PIL import ImageFilter
-    glow = Image.new("L", (w, h), 0)
-    gd = ImageDraw.Draw(glow)
-    gcx, gcy = w // 2, int(30 * scale)
-    grx, gry = int(190 * scale), int(70 * scale)
-    gd.ellipse((gcx - grx, gcy - gry, gcx + grx, gcy + gry), fill=80)
-    glow = glow.filter(ImageFilter.GaussianBlur(24 * scale))
-    tint = Image.new("RGB", (w, h), BLUE_GLOW)
-    image = Image.composite(tint, image, glow)
-    draw = ImageDraw.Draw(image)
-    pill_w, pill_h = 208 * scale, 26 * scale
-    pill = (w / 2 - pill_w / 2, 24 * scale, w / 2 + pill_w / 2, 24 * scale + pill_h)
-    draw.rounded_rectangle(pill, radius=int(pill_h / 2), outline=PILL_OUTLINE,
-                           width=max(1, scale // 2))
-    dots = 9
-    for i in range(dots):
-        t = i / (dots - 1) if dots > 1 else 0.5
-        dx = pill[0] + pill_h / 2 + t * (pill_w - pill_h)
-        dy = (pill[1] + pill[3]) / 2
-        r = 2.2 * scale
-        draw.ellipse((dx - r, dy - r, dx + r, dy + r), fill=MOTIF_DOT)
-
-    # Label lifts under each icon so black Finder names read on Pro Black.
-    mask = Image.new("L", (w, h), 0)
-    md = ImageDraw.Draw(mask)
-    for ix in (ICON_LOCATIONS["Gaze.app"][0], ICON_LOCATIONS["Applications"][0]):
-        cx, cy = ix * scale, LABEL_GLOW_Y * scale
-        rx, ry = 100 * scale, 30 * scale
-        md.ellipse((cx - rx, cy - ry, cx + rx, cy + ry), fill=150)
-    mask = mask.filter(ImageFilter.GaussianBlur(18 * scale))
-    lift = Image.new("RGB", (w, h), LABEL_GLOW)
-    image = Image.composite(lift, image, mask)
-    draw = ImageDraw.Draw(image)
-
-    _arrow(draw, width / 2 * scale, ICON_LOCATIONS["Gaze.app"][1] * scale,
-           104 * scale, 4.5 * scale, arrow)
-    draw.text((width / 2 * scale, CAPTION_Y * scale), CAPTION,
-              font=_font(ImageFont, 13 * scale, weight=600), fill=ink, anchor="mm")
-    return image
+    gy = ICON_LOCATIONS["Gaze.app"][1] * scale
+    gx, ax = ICON_LOCATIONS["Gaze.app"][0] * scale, ICON_LOCATIONS["Applications"][0] * scale
+    start, control, end = (gx + 70 * scale, gy - 40 * scale), ((gx + ax) / 2, gy - 120 * scale), (ax - 70 * scale, gy - 40 * scale)
+    # The arrow alone: the panel above already says what to do.
+    _curve_arrow(draw, start, control, end, 2.4 * scale, (255, 255, 255, 215))
+    return image.convert("RGB")
 
 
 def render(directory: Path):
     Image, ImageDraw, ImageFont = _pil()
     directory.mkdir(parents=True, exist_ok=True)
     width, height = WINDOW_SIZE
-
-    for stem, palette in (("background", (PAPER, PAPER_FOOT, ARROW, CAPTION_INK)),
-                          ("background-dark", (DARK_PAPER, DARK_PAPER_FOOT,
-                                               DARK_ARROW, DARK_CAPTION_INK))):
-        field = _field(Image, ImageDraw, ImageFont, *palette)
+    field = _field(Image, ImageDraw, ImageFont)
+    for stem in ("background", "background-dark"):
         field.resize((width * 2, height * 2), Image.Resampling.LANCZOS).save(
             directory / f"{stem}@2x.png", dpi=(144, 144))
         field.resize(WINDOW_SIZE, Image.Resampling.LANCZOS).save(
             directory / f"{stem}.png", dpi=(72, 72))
-    expected = [directory / f"{stem}{suffix}.png"
-                for stem in ("background", "background-dark")
-                for suffix in ("", "@2x")]
-    for path in expected:
-        if not path.is_file() or path.stat().st_size == 0:
-            raise RuntimeError(
-                f"Background render failed: {path} missing or empty; "
-                "refusing to continue without 1x + retina Pro Black backgrounds.")
     return directory / "background.png"
 
 

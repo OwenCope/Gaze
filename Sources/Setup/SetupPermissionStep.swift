@@ -8,7 +8,11 @@ struct SetupPermissionStatus: Equatable {
 	var isReady: Bool { accessibility && keyboardEvents }
 
 	static var current: Self {
-		Self(accessibility: AXIsProcessTrusted(), keyboardEvents: CGPreflightPostEventAccess())
+		#if PRODUCT_CAPTURE
+		// Product captures photograph a finished setup; only the capture tool's build sets this.
+		if ProductCaptureDemo.isOn { return Self(accessibility: true, keyboardEvents: true) }
+		#endif
+		return Self(accessibility: AXIsProcessTrusted(), keyboardEvents: CGPreflightPostEventAccess())
 	}
 }
 
@@ -17,13 +21,14 @@ struct SetupPermissionStep: View {
 	var onContinue: () -> Void
 	var onSkip: () -> Void
 	var onBack: (() -> Void)?
+	var onClose: (() -> Void)? = nil
 	@State private var status = SetupPermissionStatus(accessibility: false, keyboardEvents: false)
 	@State private var settingsError: String?
 
 	var body: some View {
 		SetupPermissionContent(
 			position: position, status: status, settingsError: settingsError,
-			onContinue: onContinue, onSkip: onSkip, onBack: onBack,
+			onContinue: onContinue, onSkip: onSkip, onBack: onBack, onClose: onClose,
 			onOpenSettings: openSettings,
 			onRevealApp: { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
 		)
@@ -67,6 +72,7 @@ struct SetupPermissionContent: View {
 	var onContinue: () -> Void
 	var onSkip: () -> Void
 	var onBack: (() -> Void)?
+	var onClose: (() -> Void)? = nil
 	var onOpenSettings: () -> Void
 	var onRevealApp: () -> Void
 
@@ -77,10 +83,11 @@ struct SetupPermissionContent: View {
 			message: status.isReady
 				? "macOS has confirmed Accessibility access.\nYou can continue with setup."
 				: "Accessibility lets Gaze type your saved password at the lock screen, only after it recognises you.\nYou control this in System Settings, and you can skip it for now.",
-			figureHeight: 84,
-			onBack: onBack
+			figureHeight: 200,
+			onBack: onBack,
+			onClose: onClose
 		) {
-			SetupGlyph(symbol: "hand.raised", tint: status.isReady ? Theme.faceID : nil)
+			SetupPermissionFigure(isReady: status.isReady)
 		} detail: {
 			VStack(alignment: .leading, spacing: 18) {
 				HStack(spacing: 12) {
@@ -133,5 +140,38 @@ struct SetupPermissionContent: View {
 				.foregroundStyle(Theme.setupTertiary)
 			Text(text).font(.system(size: 13)).foregroundStyle(Theme.setupSecondary)
 		}
+	}
+}
+
+/// The companion beside the Accessibility glyph on the tour backdrop, brightening
+/// and ticking once macOS confirms access.
+private struct SetupPermissionFigure: View {
+	var isReady: Bool
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+	var body: some View {
+		ZStack {
+			if let url = Bundle.main.url(forResource: "tour-backdrop", withExtension: "png", subdirectory: "Art"),
+				let image = NSImage(contentsOf: url)
+			{
+				Image(nsImage: image)
+					.resizable()
+					.scaledToFill()
+			} else {
+				Color(white: 0.06)
+			}
+			HStack(spacing: 40) {
+				GazeLookingCompanion(look: 1, happy: isReady)
+					.frame(width: 110, height: 110)
+				Image(systemName: isReady ? "checkmark.circle.fill" : "accessibility")
+					.font(.system(size: 52, weight: .medium))
+					.foregroundStyle(.white)
+					.symbolRenderingMode(.monochrome)
+					.contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+			}
+		}
+		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+		.accessibilityHidden(true)
 	}
 }

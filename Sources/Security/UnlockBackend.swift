@@ -18,7 +18,7 @@ enum UnlockBackendKind: String, CaseIterable, Sendable {
 
 	var title: String {
 		switch self {
-		case .none: return "Just recognise me"
+		case .none: return "Recognition only"
 		case .authPlugin: return "Authorization plugin"
 		case .keystroke: return "Unlock my Mac"
 		}
@@ -82,7 +82,7 @@ enum UnlockGuard {
 		let identifier = Embedders.best().identifier
 		guard !trustedPrefixes.contains(where: identifier.hasPrefix) else { return nil }
 		return .unavailable(
-			"“\(identifier)” can't reliably tell people apart, so it isn't allowed to unlock "
+			"The installed face matcher can't reliably tell people apart, so it isn't allowed to unlock "
 				+ "your Mac. Install a recognition model at Resources/FaceEmbedding.mlpackage.")
 	}
 }
@@ -117,9 +117,12 @@ struct KeystrokeUnlockBackend: UnlockBackend {
 	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Keystroke")
 
 	@MainActor func readiness() -> BackendReadiness {
+		#if PRODUCT_CAPTURE
+		if ProductCaptureDemo.isOn { return .ready }
+		#endif
 		guard PasswordReplaySafety.isEnabled else { return .unavailable(PasswordReplaySafety.explanation) }
 		if let blocker = UnlockGuard.embedderBlocker() { return blocker }
-		if Preferences.shared.livenessEnabled && !SpoofDetector.isAvailable {
+		if !SpoofDetector.isAvailable {
 			return .unavailable("Anti-spoof protection is enabled, but its model is unavailable. Use macOS authentication until the model is restored.")
 		}
 		do {

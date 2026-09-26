@@ -1,8 +1,0 @@
-[
-  "Malformed tab draft does not replace saved notes",
-  "Draft key is scoped to the authenticated email",
-  "Unrestored draft warns before a full unload",
-  "Discard keeps server text and clears dirty-unload warning",
-  "Account distinction remains visible with contextual sign-in copy",
-  "Explanatory-page footer offers support"
-]

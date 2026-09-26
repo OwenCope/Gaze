@@ -30,15 +30,26 @@ are here for how any of this works.
 
 ## Design references
 
-### Glance — the Minimal panel shape
+### Glance — the 'Beside the camera' layout and the Dynamic Island capsule
 
-`Sources/LockScreen/NotchCapsule.swift` (minimal shape)
+`Sources/LockScreen/NotchCapsule.swift` (ear flank and dynamic island shapes)
 
-The Minimal panel shape was inspired by the minimal unlock style in **Glance**
+The 'Beside the camera' layout and the Dynamic Island capsule were inspired by
+the minimal unlock style in **Glance**
 by Jonathan Zhou (<https://github.com/jonnyoo/glance> — MIT licence,
 © 2026 Jonathan Zhou): a silhouette that widens sideways to flank the notch,
 with a lock glyph on one side and the unlock mark on the other. Reimplemented
 here in Gaze's own panel structure and style; no Glance code was copied.
+
+### Atoll — the Dynamic Island's expansion behaviour
+
+`Sources/LockScreen/NotchCapsule.swift` (dynamic island morph)
+
+The Dynamic Island's expansion behaviour — a small resting capsule morphing
+into a larger rounded panel on a spring, with the content fading in after the
+shape has mostly grown — was informed by studying **Atoll** by Ebullioscopic
+(<https://github.com/Ebullioscopic/Atoll> — GPL-3.0). Reimplemented here in
+Gaze's own structure and style; no Atoll code is included.
 
 ## Third-party code
 
@@ -59,12 +70,21 @@ module directly (no separate TourKit module), and the licence ships in the bundl
 
 ### The recognition model
 
+The recognition model is **ArcFace** (`w600k_r50`) by **InsightFace**
+([deepinsight/insightface](https://github.com/deepinsight/insightface)). Its
+weights are licensed for non-commercial research use. The Core ML build shipped
+with the app comes from **Sapphire** ([sapphire-app.tech](https://sapphire-app.tech/),
+by cshariq), which bundles the same model.
+
 The build prefers `Resources/FaceEmbedding.mlmodelc` over the raw package.
-Its 87,197,184-byte weight file matches the ArcFace weights in
-[Sapphire](https://github.com/cshariq/Sapphire) at commit
-`ee56de09a0c5ab2cbf442858de36780a0cb151b2` (Git blob SHA-1
-`004ee9ab6fbfb4fd0c4c34a2bc89be4db624ddf8`; SHA-256
-`c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545`).
+It is InsightFace's ArcFace (`w600k_r50`) by deepinsight
+(https://github.com/deepinsight/insightface), first obtained via
+[Sapphire](https://github.com/cshariq/Sapphire), which bundles the same model
+(commit `ee56de09a0c5ab2cbf442858de36780a0cb151b2`; Git blob SHA-1
+`004ee9ab6fbfb4fd0c4c34a2bc89be4db624ddf8` for the 87,197,184-byte weight file;
+SHA-256 `c28620613d146a56565eadaacc22bbe9dd54533000ba79a6d666995a123c1545`).
+InsightFace's model weights are licensed for non-commercial research use; the
+owner has emailed InsightFace about permission and is waiting for a reply.
 
 The repository's pinned LICENSE is **AGPL-3.0**, correcting the earlier GPL-3.0
 reference. The matching bytes identify an available source, not who trained the
@@ -86,12 +106,20 @@ and notice obligations for the intended distribution; attribution alone does
 not settle those questions.
 
 Evidence and inspected-source limits are recorded in
-[the Sapphire source report](Tools/Release/ModelClearance/SAPPHIRE-EVIDENCE-20260916.md).
-The owner supplied Shariq's permission to use the Sapphire ArcFace model with
-credit on September 18, 2026. The installed model still matches the Sapphire
-weight hash above. See [the permission record](Tools/Release/ModelClearance/SHARIQ-PERMISSION-20260918.md).
+[the Sapphire source report](docs/licensing/sapphire.md).
+The model was first obtained via Sapphire, which bundles the same model; the
+owner's September 18, 2026 permission note from Shariq is kept as a historical
+record. See [the permission record](docs/licensing/sapphire-permission.md).
+The installed model still matches the weight hash above.
 That evidence does not cover the different raw package or establish upstream
 weight/training rights; those questions remain separate from Shariq's permission.
+The upstream question is now identified: the bundled mlmodelc is InsightFace
+buffalo_l `w600k_r50` (ResNet-50 trained on WebFace600K), converted to Core ML fp16 —
+exact operator-count match plus cosine > 0.997 against the official ONNX weights on
+three test inputs. InsightFace's pretrained weights are non-commercial research only,
+so shipping them needs InsightFace's permission (recognition-oss-pack@insightface.ai)
+or a replacement model; Shariq's permission does not cover InsightFace's upstream
+rights. See [the InsightFace evidence report](docs/licensing/insightface.md).
 The source-archive script excludes model inputs. The geometry fallback is not an
 approved substitute for the Mac-unlock recognition model.
 

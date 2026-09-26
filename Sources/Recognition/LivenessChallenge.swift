@@ -285,7 +285,7 @@ final class LivenessChallenge {
 		guard !isComplete else { return ConsumeResult() }
 		switch action {
 		// In the mirrored camera preview, leftward turns increase Vision yaw.
-		// Verified against the September 15 recording; see CHALLENGE-INVESTIGATION.md.
+		// Verified against the September 15 recording; see docs/internal/CHALLENGE-INVESTIGATION.md.
 		case .turnLeft:
 			return consumeDirectional(yaw, source: yawSource, axis: .yaw,
 				threshold: Self.turnDelta, direction: 1, eyes: eyes, mouth: mouth)

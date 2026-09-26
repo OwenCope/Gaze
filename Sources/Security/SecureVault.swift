@@ -38,11 +38,35 @@ enum SecureVault {
 
 	// MARK: - Key material
 
+	/// The key, once read. Every vault read and write needs it, and each Keychain read of
+	/// it can put a password prompt in front of the user when macOS does not recognise
+	/// this copy of the app (a new signature, a moved build). One read per launch.
+	nonisolated(unsafe) private static var cachedKey: SecureEnclave.P256.KeyAgreement.PrivateKey?
+	/// Set when the user dismissed or failed that prompt. Asking again on every frame
+	/// is what turned one prompt into an endless stream; relaunching asks once more.
+	nonisolated(unsafe) private static var keyAccessRefused = false
+	private static let keyLock = NSLock()
+
 	private static func enclaveKey(createIfMissing: Bool) throws -> SecureEnclave.P256.KeyAgreement.PrivateKey {
 		guard SecureEnclave.isAvailable else { throw VaultError.enclaveUnavailable }
+		keyLock.lock()
+		defer { keyLock.unlock() }
+		if let cachedKey { return cachedKey }
+		guard !keyAccessRefused else { throw Keychain.ReadError.status(errSecUserCanceled) }
 
-		if let blob = try Keychain.load(keyAccount) {
-			return try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: blob)
+		let blob: Data?
+		do {
+			blob = try Keychain.load(keyAccount)
+		} catch Keychain.ReadError.status(let status)
+			where status == errSecUserCanceled || status == errSecAuthFailed || status == errSecInteractionNotAllowed
+		{
+			keyAccessRefused = true
+			throw Keychain.ReadError.status(status)
+		}
+		if let blob {
+			let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(dataRepresentation: blob)
+			cachedKey = key
+			return key
 		}
 		guard createIfMissing else { throw VaultError.missingKey }
 
@@ -50,6 +74,7 @@ enum SecureVault {
 		guard Keychain.write(key.dataRepresentation, to: keyAccount) else {
 			throw VaultError.writeFailed
 		}
+		cachedKey = key
 		logger.info("Created a new Secure Enclave vault key.")
 		return key
 	}
@@ -102,6 +127,7 @@ enum SecureVault {
 	/// Destroys the vault key, which renders every stored blob permanently unreadable.
 	static func destroy() throws {
 		try remove(keyAccount)
+		keyLock.withLock { cachedKey = nil }
 		logger.notice("Vault key deletion confirmed.")
 	}
 }

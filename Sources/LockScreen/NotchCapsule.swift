@@ -1,3 +1,4 @@
+import AppKit
 import Observation
 import SwiftUI
 
@@ -275,7 +276,8 @@ struct NotchCapsule: View {
 	/// screen either side of the camera housing — where a padlock can sit at menu bar height
 	/// without dropping anything out of the notch at all.
 	var cutoutWidth: CGFloat = 0
-	/// False on screens without a physical notch, where minimal draws a floating pill.
+	/// False on screens without a physical notch, where Connected + Beside the camera
+	/// falls back to the centred panel.
 	var hasNotch: Bool = true
 
 	@Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -388,41 +390,75 @@ struct NotchCapsule: View {
 	/// the physical cutout and a flare there would put two curves on screen that belong to
 	/// nothing; as it drops, the flare opens with it so the join is always the width of the
 	/// thing it is joining.
-	private var usesCompactBar: Bool { isIsland || isOnEar || model.phase.isCompact }
+	private var usesCompactBar: Bool { isIsland || model.phase.isCompact }
 
-	// MARK: - Minimal
+	// MARK: - Ear flank (Connected + Beside the camera)
 
-	/// The Dynamic-Island-style shape: black flanking the housing on both sides, never
-	/// over it. The middle of the row is the physical cutout, so nothing is drawn there.
-	private var isMinimal: Bool { model.shape == .minimal }
-
-	private enum MinimalMetrics {
-		/// Black beside the cutout on each side. The resting silhouette is the cutout
-		/// plus twice this, and grows only sideways from there.
-		static let flank: CGFloat = 42
-		/// The cutout's own height cannot change, so this is the visible black below it.
-		static let heightBump: CGFloat = 12
-		static let topRadius: CGFloat = 12
-		static let bottomRadius: CGFloat = 22
-		/// The floating pill on screens without a notch, and where it hangs.
-		static let pillWidth: CGFloat = 150
-		static let pillHeight: CGFloat = 40
-		static let pillTopGap: CGFloat = 4
-		static let lockSize: CGFloat = 16
-		static let faceSize: CGFloat = 40
-		/// Past this total width the caption truncates with an ellipsis.
-		static let maxTotalWidth: CGFloat = 320
-		static let slideDuration: TimeInterval = 0.25
+	/// Connected with the mark beside the camera: black flanking the housing on both
+	/// sides, never over it. The middle of the row is the physical cutout, so nothing
+	/// is drawn there.
+	///
+	/// Only Connected offers the choice, and only on a screen with a physical notch to
+	/// flank — without one this falls back to the centred panel, as before.
+	private var isEarFlank: Bool {
+		model.shape == .attached && model.glyphPlacement == .ear && hasNotch
 	}
 
-	/// The one-line caption between the lock and the face. Only the phases that carry
+	private enum EarFlankMetrics {
+		/// Black beside the cutout on each side. The resting silhouette is the cutout
+		/// plus twice this, and grows only sideways from there.
+		static let flank: CGFloat = 54
+		/// The cutout's own height cannot change, so this is the visible black below it.
+		static let heightBump: CGFloat = 8
+		static let topRadius: CGFloat = 12
+		static let bottomRadius: CGFloat = 12
+		static let lockSize: CGFloat = 15
+		static let faceSize: CGFloat = 30
+		/// Past this width the caption truncates with an ellipsis. The window controller
+		/// sizes the ear window for this, so the two must change together.
+		static let maxCaptionWidth: CGFloat = 170
+	}
+
+	// MARK: - Dynamic Island
+
+	/// A true floating capsule under the notch, on every Mac.
+	private var isDynamicIsland: Bool { model.shape == .dynamicIsland }
+
+	private enum DynamicIslandMetrics {
+		static let restingWidth: CGFloat = 126
+		static let restingHeight: CGFloat = 37
+		/// With something to say the island grows only a little taller and exactly as
+		/// wide as its words: a Mac has no hardware island to hide in, so a large dark
+		/// panel reads as empty space rather than as the island opening.
+		static let activeHeight: CGFloat = 44
+		static let successWidth: CGFloat = 170
+		/// Below the notch's bottom edge — or below the safe area top with no notch.
+		static let topGap: CGFloat = 6
+		static let edgeInset: CGFloat = 12
+		static let glyphSize: CGFloat = 15
+		static let restingFaceSize: CGFloat = 24
+		static let activeFaceSize: CGFloat = 30
+		/// Past this total width the words truncate.
+		static let maxWidth: CGFloat = 340
+		/// One spring for every change of size, so width, height and radius move as one.
+		static let morph = Animation.spring(response: 0.4, dampingFraction: 0.82)
+		/// The small celebratory scale on success, up and back.
+		static let successPulse = Animation.spring(response: 0.32, dampingFraction: 0.6)
+	}
+
+
+	/// The one-line caption on the face-side flank. Only the phases that carry
 	/// guidance show it here: challenge prompts and the two rejection captions. Pending
 	/// and success keep the resting silhouette.
-	private var minimalCaption: String? {
+	///
+	/// Same titles the island carries: the prompt without its " · N of M" step suffix,
+	/// which the flank has no room for — the island splits that half into a subtitle.
+	private var earCaption: String? {
 		guard model.showsCaptions else { return nil }
 		switch model.phase {
 		case .challenge(let prompt, _, _, _, _, _) where !prompt.isEmpty:
-			return prompt
+			let parts = prompt.components(separatedBy: " · ")
+			return parts.count > 1 ? parts.dropLast().joined(separator: " · ") : prompt
 		case .notRecognised:
 			return NotchCapsuleModel.Phase.notRecognisedCaption
 		case .spoofRejected:
@@ -432,129 +468,268 @@ struct NotchCapsule: View {
 		}
 	}
 
-	private var isMinimalUnlocked: Bool {
+	/// The measured words for the face-side flank, capped so a long prompt cannot push
+	/// the silhouette past its window. A number, not a hug, so the
+	/// flank width below animates as one value instead of re-measuring text each frame.
+	private var earMessageWidth: CGFloat {
+		guard let caption = earCaption else { return 0 }
+		return min(Self.textWidth(caption, size: 12, weight: .semibold), EarFlankMetrics.maxCaptionWidth)
+	}
+
+	/// The face-side flank widens only to carry a message: resting width plus the
+	/// measured words and the gap between face and text. No words, no widening.
+	private var earFaceFlankWidth: CGFloat {
+		guard earCaption != nil else { return EarFlankMetrics.flank }
+		return EarFlankMetrics.flank + 6 + earMessageWidth
+	}
+
+	private var isEarUnlocked: Bool {
 		model.phase == .success || model.phase == .unlocked
 	}
 
-	private var minimalNotchHeight: CGFloat { notchInset + MinimalMetrics.heightBump }
+	private var earNotchHeight: CGFloat { notchInset + EarFlankMetrics.heightBump }
 
-	private var minimalLock: some View {
-		Image(systemName: isMinimalUnlocked ? "lock.open.fill" : "lock.fill")
+	private var earLock: some View {
+		Image(systemName: isEarUnlocked ? "lock.open.fill" : "lock.fill")
 			.accessibilityHidden(true)
-			.font(.system(size: MinimalMetrics.lockSize, weight: .semibold))
+			.font(.system(size: EarFlankMetrics.lockSize, weight: .semibold))
 			.foregroundStyle(.white)
 			.contentTransition(.symbolEffect(.replace))
 	}
 
-	private var minimalFace: some View {
+	private var earFace: some View {
 		GazeFaceMark(phase: model.phase, active: model.isExpanded && !model.phase.isCompact)
-			.frame(width: MinimalMetrics.faceSize, height: MinimalMetrics.faceSize)
+			.frame(width: EarFlankMetrics.faceSize, height: EarFlankMetrics.faceSize)
 	}
 
-	private var minimalShape: NotchPanelShape {
+	private var earShape: NotchPanelShape {
 		NotchPanelShape(
-			topRadius: MinimalMetrics.topRadius, bottomRadius: MinimalMetrics.bottomRadius)
+			topRadius: EarFlankMetrics.topRadius, bottomRadius: EarFlankMetrics.bottomRadius)
 	}
 
 	/// The silhouette fill, honouring Style like the island does.
 	@ViewBuilder
-	private var minimalSilhouette: some View {
+	private var earSilhouette: some View {
 		switch model.style {
 		case .normal:
-			minimalShape.fill(.black)
+			earShape.fill(.black)
 		case .semiLiquidGlass:
-			minimalShape
+			earShape
 				.fill(.black.opacity(glassTint))
-				.background { minimalShape.fill(.ultraThinMaterial) }
+				.background { earShape.fill(.ultraThinMaterial) }
 		case .liquidGlass:
 			Color.clear.glassEffect(
 				.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
-				in: minimalShape)
+				in: earShape)
 		}
 	}
 
 	@ViewBuilder
-	private var minimalPillSilhouette: some View {
-		let pill = RoundedRectangle(
-			cornerRadius: MinimalMetrics.pillHeight / 2, style: .continuous)
-		switch model.style {
-		case .normal:
-			pill.fill(.black)
-		case .semiLiquidGlass:
-			pill
-				.fill(.black.opacity(glassTint))
-				.background { pill.fill(.ultraThinMaterial) }
-		case .liquidGlass:
-			Color.clear.glassEffect(
-				.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
-				in: pill)
+	private var earBody: some View {
+		HStack(spacing: 0) {
+			earLock
+				.frame(width: EarFlankMetrics.flank, height: earNotchHeight)
+			// The physical cutout itself: reserved space, never drawn over.
+			Spacer(minLength: 0)
+				.frame(width: cutoutWidth)
+			if let caption = earCaption {
+				// The message rides in the face-side flank, which widens to carry it.
+				// It cannot sit in the middle: that space is the camera housing itself.
+				HStack(spacing: 6) {
+					earFace
+					Text(caption)
+						.font(.system(size: 12, weight: .semibold))
+						.foregroundStyle(.white)
+						.lineLimit(1)
+						.truncationMode(.tail)
+						.frame(width: earMessageWidth)
+						.accessibilityHidden(true)
+				}
+				.frame(width: earFaceFlankWidth, height: earNotchHeight, alignment: .leading)
+				.transition(.opacity)
+			} else {
+				earFace
+					.frame(width: EarFlankMetrics.flank, height: earNotchHeight)
+			}
+		}
+		.padding(.horizontal, 4)
+		.background { earSilhouette }
+		// Only the face side grows, so matching clear space on the lock side keeps the
+		// reserved gap centred on the camera instead of sliding left of it.
+		.padding(.leading, earFaceFlankWidth - EarFlankMetrics.flank)
+		.frame(height: earNotchHeight)
+		.opacity(expanded ? 1 : 0)
+		.animation(reduceMotion ? nil : NotchAnimation.phase, value: earCaption ?? "")
+		.animation(reduceMotion ? nil : DynamicIslandMetrics.morph, value: earFaceFlankWidth)
+		.animation(
+			reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract),
+			value: expanded)
+	}
+
+	// MARK: - Dynamic island body
+
+	/// Whether the island has something to say. Locked and pending rest as the
+	/// small capsule; scanning cannot tell whether a face is in frame yet, so it
+	/// opens — "Looking for you" is something to say.
+	private var isDynamicExpanded: Bool {
+		switch model.phase {
+		case .scanning, .challenge, .notRecognised, .spoofRejected: true
+		case .locked, .pending, .success, .unlocked: false
 		}
 	}
 
-	@ViewBuilder
-	private var minimalBody: some View {
-		if hasNotch {
-			HStack(spacing: 0) {
-				minimalLock
-					.frame(width: MinimalMetrics.flank, height: minimalNotchHeight)
-				if let caption = minimalCaption {
-					Text(caption)
-						.font(.system(size: 13, weight: .semibold))
-						.foregroundStyle(.white)
-						.lineLimit(1)
-						.truncationMode(.tail)
-						.frame(
-							maxWidth: MinimalMetrics.maxTotalWidth - MinimalMetrics.flank * 2 - 8)
-						.accessibilityHidden(true)
-				} else {
-					// The physical cutout itself: reserved space, never drawn over.
-					Spacer(minLength: 0)
-						.frame(width: cutoutWidth)
-				}
-				minimalFace
-					.frame(width: MinimalMetrics.flank, height: minimalNotchHeight)
-			}
-			.padding(.horizontal, 4)
-			.frame(maxWidth: MinimalMetrics.maxTotalWidth)
-			.background { minimalSilhouette }
-			.frame(height: minimalNotchHeight)
-			.opacity(expanded ? 1 : 0)
-			.animation(reduceMotion ? nil : NotchAnimation.phase, value: minimalCaption ?? "")
-			.animation(
-				reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract),
-				value: expanded)
-		} else {
-			HStack(spacing: 0) {
-				minimalLock
-					.frame(width: MinimalMetrics.flank)
-				if let caption = minimalCaption {
-					Text(caption)
-						.font(.system(size: 13, weight: .semibold))
-						.foregroundStyle(.white)
-						.lineLimit(1)
-						.truncationMode(.tail)
-						.frame(
-							maxWidth: MinimalMetrics.maxTotalWidth - MinimalMetrics.flank * 2 - 8)
-						.accessibilityHidden(true)
-				} else {
-					Spacer(minLength: 0)
-				}
-				minimalFace
-					.frame(width: MinimalMetrics.flank)
-			}
-			.padding(.horizontal, 4)
-			.frame(width: minimalCaption == nil ? MinimalMetrics.pillWidth : nil)
-			.frame(maxWidth: MinimalMetrics.maxTotalWidth)
-			.frame(height: MinimalMetrics.pillHeight)
-			.background { minimalPillSilhouette }
-			.padding(.top, notchInset + MinimalMetrics.pillTopGap)
-			.offset(y: expanded || reduceMotion ? 0 : -16)
-			.opacity(expanded ? 1 : 0)
-			.animation(
-				reduceMotion ? nil : .easeOut(duration: MinimalMetrics.slideDuration),
-				value: expanded)
-			.animation(reduceMotion ? nil : NotchAnimation.phase, value: minimalCaption ?? "")
+	private var isDynamicSuccess: Bool { model.phase == .success }
+
+	private var isDynamicUnlocked: Bool {
+		model.phase == .success || model.phase == .unlocked
+	}
+
+	/// The open panel's headline. Challenge prompts arrive with their step count
+	/// as a " · N of M" suffix (see `outwardPrompt`), which splits into a title
+	/// and a step line; scanning and the rejections carry no step.
+	///
+	/// Ignores the caption setting on purpose: the island's whole job is to grow and carry
+	/// these words, and with captions off it stayed a small capsule while scanning.
+	private var dynamicTitle: String? {
+		switch model.phase {
+		case .challenge(let prompt, _, _, _, _, _) where !prompt.isEmpty:
+			let parts = prompt.components(separatedBy: " · ")
+			return parts.count > 1 ? parts.dropLast().joined(separator: " · ") : prompt
+		case .scanning:
+			return "Looking for you"
+		case .notRecognised:
+			return NotchCapsuleModel.Phase.notRecognisedCaption
+		case .spoofRejected:
+			return NotchCapsuleModel.Phase.spoofRejectedCaption
+		case .success:
+			return "Unlocked"
+		default:
+			return nil
 		}
+	}
+
+	private var dynamicSubtitle: String? {
+		if case .challenge(let prompt, _, _, _, _, _) = model.phase {
+			let parts = prompt.components(separatedBy: " · ")
+			if parts.count > 1, let step = parts.last, !step.isEmpty { return step }
+		}
+		return nil
+	}
+
+	private var dynamicHeight: CGFloat {
+		isDynamicExpanded ? DynamicIslandMetrics.activeHeight : DynamicIslandMetrics.restingHeight
+	}
+
+	/// Always a number, measured from the words when there are any.
+	///
+	/// It used to be nil with words showing so the capsule could hug them. SwiftUI cannot
+	/// interpolate between "hug" and a fixed width, so every open and close re-measured the
+	/// text each frame and the morph stuttered. A measured width animates as one value.
+	private var dynamicWidth: CGFloat {
+		guard (isDynamicExpanded || isDynamicSuccess), let title = dynamicTitle else {
+			return isDynamicSuccess ? DynamicIslandMetrics.successWidth : DynamicIslandMetrics.restingWidth
+		}
+		var words = Self.textWidth(title, size: 13, weight: .semibold)
+		if let step = dynamicSubtitle { words += 6 + Self.textWidth(step, size: 12, weight: .medium) }
+		words = min(words, DynamicIslandMetrics.maxWidth - 100)
+		let chrome = DynamicIslandMetrics.edgeInset * 2 + 20 + DynamicIslandMetrics.activeFaceSize + 20
+		// Success measures its word like any other title, with successWidth as the floor
+		// rather than the fixed size — a fixed size would clip a wider future caption.
+		let minimum = isDynamicSuccess ? DynamicIslandMetrics.successWidth : DynamicIslandMetrics.restingWidth
+		return min(DynamicIslandMetrics.maxWidth, max(minimum, (words + chrome).rounded(.up)))
+	}
+
+	private static func textWidth(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
+		(text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width.rounded(.up)
+	}
+
+	/// One key for the morph, so a single spring drives size and radius together.
+	private var dynamicLayoutKey: String {
+		"\(isDynamicExpanded)-\(isDynamicSuccess)-\(dynamicTitle ?? "")"
+	}
+
+	/// A capsule honouring Style, the way the ear pill did.
+	@ViewBuilder
+	private var dynamicSilhouette: some View {
+		let shape = Capsule(style: .continuous)
+		switch model.style {
+		case .normal:
+			shape.fill(.black)
+		case .semiLiquidGlass:
+			shape
+				.fill(.black.opacity(glassTint))
+				.background { shape.fill(.ultraThinMaterial) }
+		case .liquidGlass:
+			Color.clear.glassEffect(
+				.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
+				in: shape)
+		}
+	}
+
+	/// The glyph on the leading end: the movement's own symbol while a prompt is up,
+	/// otherwise the lock, opening on success.
+	private var dynamicGlyph: some View {
+		Image(systemName: model.phase.challengeSymbol ?? (isDynamicUnlocked ? "lock.open.fill" : "lock.fill"))
+			.accessibilityHidden(true)
+			.font(.system(size: DynamicIslandMetrics.glyphSize, weight: .semibold))
+			// Green only on success: the rest of the time the glyph is a status mark, and
+			// colour there would spend the confirmation colour before anything is confirmed.
+			.foregroundStyle(isDynamicSuccess ? Theme.faceID : .white)
+			.contentTransition(.symbolEffect(.replace))
+			.frame(width: 20)
+	}
+
+	/// One row for every state: glyph, words when there are any, companion. Nothing is
+	/// swapped out between states — only the words come and go — so the companion's
+	/// renderer is never torn down and rebuilt mid-animation, which is what made the
+	/// morph stutter.
+	private var dynamicBody: some View {
+		HStack(spacing: 10) {
+			dynamicGlyph
+			if (isDynamicExpanded || isDynamicSuccess), let title = dynamicTitle {
+				HStack(spacing: 6) {
+					Text(title)
+						.font(.system(size: 13, weight: .semibold))
+						.foregroundStyle(.white)
+					if let step = dynamicSubtitle {
+						Text(step)
+							.font(.system(size: 12, weight: .medium))
+							.foregroundStyle(.white.opacity(0.55))
+					}
+				}
+				.lineLimit(1)
+				.truncationMode(.tail)
+				// The width cap belongs on the words. Around the capsule it made the black as
+				// wide as the cap even at rest.
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.accessibilityHidden(true)
+				// Opacity only: a scale here was a second, differently timed motion inside
+				// the morph.
+				.transition(.opacity)
+			} else {
+				Spacer(minLength: 0)
+			}
+			GazeFaceMark(phase: model.phase, active: model.isExpanded && !model.phase.isCompact)
+				.frame(width: DynamicIslandMetrics.activeFaceSize, height: DynamicIslandMetrics.activeFaceSize)
+				.scaleEffect(isDynamicExpanded ? 1
+					: DynamicIslandMetrics.restingFaceSize / DynamicIslandMetrics.activeFaceSize)
+		}
+		.padding(.horizontal, DynamicIslandMetrics.edgeInset)
+		.frame(width: dynamicWidth, height: dynamicHeight)
+		.background { dynamicSilhouette }
+		// Words arriving mid-morph stay inside the capsule instead of spilling past it.
+		.clipShape(Capsule(style: .continuous))
+		// Animate the whole island as one layer, so size, radius and contents stay in step.
+		.geometryGroup()
+		.scaleEffect(reduceMotion || !isDynamicSuccess ? 1 : 1.04)
+		.animation(reduceMotion ? nil : DynamicIslandMetrics.successPulse, value: isDynamicSuccess)
+		.animation(reduceMotion ? NotchAnimation.reduced : DynamicIslandMetrics.morph, value: dynamicLayoutKey)
+		// The top edge stays put while the island grows downward and sideways.
+		.padding(.top, notchInset + DynamicIslandMetrics.topGap)
+		.scaleEffect(reduceMotion ? 1 : (expanded ? 1 : 0.6), anchor: .top)
+		.opacity(expanded ? 1 : 0)
+		// No animation on `expanded` here: the outer body already animates it, and a
+		// second spring on the same value fought it over scale and opacity mid-morph.
 	}
 
 	private var flareRadius: CGFloat {
@@ -573,15 +748,18 @@ struct NotchCapsule: View {
 			// Grows downward out of the cutout and retracts back into it. Collapsed, the
 			// shape is exactly the notch's height, so it is completely hidden behind the
 			// physical cutout — nothing appears or disappears, it emerges.
-			// The bar is always drawn, in every mode but minimal, which draws its own
-			// flanking silhouette instead (see minimalBody).
+			// The bar is always drawn in the attached and island modes. The ear flank
+			// draws its own flanking silhouette instead (see earBody), and the
+			// dynamic island draws its own floating capsule (see dynamicBody).
 			//
 			// Island mode used to draw the island *instead* of it, which left the padlock
 			// standing on bare menu bar with nothing behind it — the chip's ground is the
 			// bar, and taking the bar away took the ground with it. The bar is the notch;
 			// the island is a thing the notch hands down. Both, always.
-			if isMinimal {
-				minimalBody
+			if isEarFlank {
+				earBody
+			} else if isDynamicIsland {
+				dynamicBody
 			} else {
 				background
 				// Widened by the flare on each side, not narrowed by it.
@@ -595,7 +773,7 @@ struct NotchCapsule: View {
 				.frame(
 					width: (expanded && usesCompactBar ? compactBarWidth : backgroundWidth) + flareRadius * 2,
 					height: expanded
-						? (isIsland || isOnEar ? restingBarHeight : currentHeight)
+						? (isIsland ? restingBarHeight : currentHeight)
 						: notchInset)
 			}
 
@@ -605,7 +783,7 @@ struct NotchCapsule: View {
 			// already at their final values when it appeared — it popped into place with no
 			// travel at all, while the attached panel got the full spring. Keeping the view
 			// mounted and animating a *value* is what gives both shapes the same timing.
-			if model.shape == .island && !isOnEar {
+			if model.shape == .island {
 				islandBody
 					.frame(width: islandWidth, height: islandHeight)
 					// The mark rides *inside* the island rather than being positioned against
@@ -638,7 +816,7 @@ struct NotchCapsule: View {
 		// The padlock stays closed for the wait: pending shows the waiting words in the
 		// drop and the same padlock shut where it has sat all along. Only the confirmed
 		// unlock opens it.
-			if model.phase.showsLockChip && !isMinimal {
+			if model.phase.showsLockChip && !isEarFlank && !isDynamicIsland {
 				lockChip
 					// Always positioned against the *resting* bar, never the panel.
 					//
@@ -651,15 +829,7 @@ struct NotchCapsule: View {
 					.transition(.opacity)
 			}
 
-			// The mark on the ear, opposite the padlock. Same size, same band, same idea.
-			if isOnEar && !model.phase.isCompact {
-				earMark
-					.frame(width: compactBarWidth, alignment: .trailing)
-					.opacity(expanded ? 1 : 0)
-					.transition(.opacity)
-			}
-
-			if showsDrop && !isIsland && !isMinimal {
+			if showsDrop && !isIsland && !isEarFlank && !isDynamicIsland {
 				VStack(spacing: 7) {
 					content
 						.frame(width: glyphSide, height: glyphSide)
@@ -676,15 +846,6 @@ struct NotchCapsule: View {
 					// is still solid — that overlap is what made the retract look like two
 					// separate events instead of one.
 					.animation(reduceMotion ? nil : NotchAnimation.feedback, value: expanded)
-			}
-			if isOnEar && showsChallengeCaption {
-				challengeCaption
-					.padding(.horizontal, 12)
-					.padding(.vertical, 8)
-					.background(.black, in: Capsule())
-					.padding(.top, restingBarHeight + 8)
-					.opacity(expanded && !hidesReturnCaption && model.showsCaptions ? 1 : 0)
-					.transition(.opacity)
 			}
 		}
 		.frame(width: width, height: height, alignment: .top)
@@ -788,7 +949,7 @@ struct NotchCapsule: View {
 	/// back to a pale grey slab on a dark lock screen.
 	private var background: some View {
 		Group {
-			switch effectiveStyle {
+			switch model.style {
 			case .normal:
 				// Genuinely opaque, and genuinely *un-faded*.
 				//
@@ -918,16 +1079,6 @@ struct NotchCapsule: View {
 		model.phase.isCompact ? restingBarHeight : height
 	}
 
-	/// The Gaze mark in the trailing ear — what the padlock is, on the other side.
-	///
-	/// Same size, same band, same idea. Ruken's suggestion and Sapphire's behaviour: the mark
-	/// belongs beside the housing, not in a panel drawn over the lock screen.
-	private var earMark: some View {
-		GazeFaceMark(phase: model.phase, active: model.isExpanded)
-			.frame(width: 23, height: 23)
-			.frame(width: earWidth, height: restingBarHeight)
-	}
-
 	/// The bar that carries the padlock: the housing's height plus a single point.
 	///
 	/// It looked short once, but that was the bottom fade dissolving its lower third rather
@@ -973,23 +1124,6 @@ struct NotchCapsule: View {
 	/// The part of the panel that actually shows below the cutout.
 	private var visibleHeight: CGFloat { currentHeight - notchInset }
 
-	/// Sized against the visible drop. The mask does not touch the glyph, so it only has
-	/// to fit — it does not have to stay inside the opaque part.
-	/// True when the mark sits on the ear rather than in a panel.
-	private var isOnEar: Bool { model.shape != .minimal && model.glyphPlacement == .ear }
-
-	/// The style actually drawn, which is not always the one that is selected.
-	///
-	/// On the ear the bar is pure black whatever the setting says. It sits *inside* the menu
-	/// bar band, flush against a camera housing that is true black — glass there does not read
-	/// as glass, it reads as the notch being slightly the wrong colour, and a translucent
-	/// panel laid over a black cutout comes out lighter than the hole beside it. Solid is the
-	/// only finish that disappears into the hardware, which is the whole point of a bar that
-	/// never leaves the band.
-	private var effectiveStyle: Preferences.NotchStyle {
-		isOnEar ? .normal : model.style
-	}
-
 	/// Whether the island is currently down out of the notch.
 	private var islandIsOut: Bool { isIsland && expanded }
 
@@ -999,13 +1133,12 @@ struct NotchCapsule: View {
 
 	/// Whether anything drops out of the notch at all.
 	///
-	/// On the ear, nothing does. That is the whole point of the mode: Sapphire puts its mark
-	/// in the strip beside the housing and never covers the lock screen with a panel, and
-	/// Ruken's note was that a large mark in the middle is more than this needs to be.
-	private var showsDrop: Bool { !model.phase.isCompact && !isOnEar }
+	/// The ear flank and the dynamic island carry their captions inline, so neither
+	/// uses the drop.
+	private var showsDrop: Bool { !model.phase.isCompact }
 
 	private var glyphSide: CGFloat {
-		model.shape == .island && !isOnEar
+		model.shape == .island
 			? min(islandWidth, islandHeight) * 0.62
 			: min(width, max(0, visibleHeight - (showsChallengeCaption ? 28 : 0))) * 0.68
 	}

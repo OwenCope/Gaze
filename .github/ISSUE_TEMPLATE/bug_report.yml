@@ -1,0 +1,36 @@
+name: Bug report
+description: Something is not working.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting. For security problems, please use GitHub private vulnerability reporting instead of a public issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did before it happened.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: macOS and Gaze version
+      description: e.g. macOS 26.1, Gaze from Releases or built from source.
+    validations:
+      required: false
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      description: e.g. M2 MacBook Air, Intel iMac.
+    validations:
+      required: false

@@ -1,13 +1,15 @@
 #!/bin/bash
 # Builds Gaze.app. No Xcode project — swiftc plus a hand-assembled bundle,
 # same shape as Pact.
+# GAZE_ARCHS selects the architectures to build (default "arm64 x86_64" for a
+# universal binary); GAZE_ARCHS=arm64 builds just one slice and skips lipo.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-# shellcheck source=toolchain.sh
-. "$ROOT/toolchain.sh"
-. "$ROOT/Tools/MainAppSources.sh"
+# shellcheck source=Tools/Scripts/toolchain.sh
+. "$ROOT/Tools/Scripts/toolchain.sh"
+. "$ROOT/Tools/Scripts/MainAppSources.sh"
 . "$ROOT/Tools/Release/Signing.sh"
 IDENTITIES="$(security find-identity -v -p codesigning 2>/dev/null)" || {
 	echo "Unable to inspect valid signing identities. The existing app was not replaced." >&2
@@ -18,7 +20,7 @@ DEFAULT_OUTPUT="$ROOT/build/Gaze.app"
 SIGNING_FLAGS=(--options runtime)
 if [ "${DIST:-}" = "1" ]; then
 	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || {
-		echo "Release model/asset clearance is incomplete (see Tools/Release/ModelClearance/OWNER-ANSWERS.md); the existing app was not replaced." >&2
+		echo "Release model/asset clearance is incomplete (see NOTICE.md); the existing app was not replaced." >&2
 		exit 1
 	}
 	DEFAULT_OUTPUT="$ROOT/build/release/Gaze.app"
@@ -121,7 +123,7 @@ elif [ -f "$ROOT/Resources/Spoof.mlmodel" ] || [ -d "$ROOT/Resources/Spoof.mlpac
 	xcrun coremlc compile "$SPOOF_SRC" "$STAGE/Contents/Resources" >/dev/null
 	echo "  ✓ Spoof.mlmodelc"
 else
-	echo "  ! no Spoof model — object-detection anti-spoof off"
+	echo "  ! no Spoof model — unlocking is refused when the anti-spoof model is missing"
 fi
 
 # Setup's card art — screenshots of Gaze in use, shot on a real desktop. Copied whole
@@ -181,19 +183,21 @@ else
 	SDK="${SDKROOT:-$(xcrun --show-sdk-path --sdk macosx)}"
 fi
 
-# A release binary runs on whatever Mac downloads it, so it carries both
-# architectures fused with lipo; a local build only ever runs here, so it compiles
-# just the host and skips the second compile. Slices live under STAGE_ROOT, which the
-# EXIT trap removes, and a failed slice compile stops the script before anything is
-# swapped in — the previous output is only replaced at the end.
-if [ "${DIST:-}" = "1" ]; then
-	echo "→ Compiling universal (SDK: $(basename "$SDK"), arm64 + x86_64)"
+# Every build carries every architecture in GAZE_ARCHS fused with lipo; a single
+# entry compiles just that slice and skips the merge. Slices live under STAGE_ROOT,
+# which the EXIT trap removes, and a failed slice compile stops the script before
+# anything is swapped in — the previous output is only replaced at the end.
+GAZE_ARCHS="${GAZE_ARCHS:-arm64 x86_64}"
+case "$GAZE_ARCHS" in
+*" "*)
+	echo "→ Compiling universal (SDK: $(basename "$SDK"), $GAZE_ARCHS)"
 	slices=""
-	for target in $(release_targets); do
-		slice="$STAGE_ROOT/Gaze-${target%%-*}"	xcrun swiftc \
+	for arch in $GAZE_ARCHS; do
+		slice="$STAGE_ROOT/Gaze-$arch"
+		xcrun swiftc \
 		-parse-as-library \
 		-O -wmo \
-		-target "$target" \
+		-target "$arch-apple-macos${MIN_SDK_MAJOR}.0" \
 		-sdk "$SDK" \
 		${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
 		-framework SwiftUI \
@@ -210,12 +214,13 @@ if [ "${DIST:-}" = "1" ]; then
 	done
 	# shellcheck disable=SC2086
 	lipo -create -output "$BIN" $slices
-else
-	echo "→ Compiling (SDK: $(basename "$SDK"), $(host_target))"
+	;;
+*)
+	echo "→ Compiling (SDK: $(basename "$SDK"), $GAZE_ARCHS)"
 	xcrun swiftc \
 		-parse-as-library \
 		-O -wmo \
-		-target "$(host_target)" \
+		-target "$GAZE_ARCHS-apple-macos${MIN_SDK_MAJOR}.0" \
 		-sdk "$SDK" \
 		${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
 		-framework SwiftUI \
@@ -228,7 +233,8 @@ else
 		-framework OpenDirectory \
 		"${GAZE_MAIN_SOURCES[@]}" \
 		-o "$BIN"
-fi
+	;;
+esac
 
 if [ "${DIST:-}" = "1" ]; then
 	echo "→ Signing release with Developer ID"

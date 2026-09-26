@@ -54,7 +54,8 @@ struct SetupCaptureStep: View {
 			title: title,
 			message: caption,
 			figureHeight: ringSide,
-			onBack: onBack
+			onBack: onBack,
+			onClose: onClose
 		) {
 			ZStack {
 				if let model {
@@ -98,7 +99,7 @@ struct SetupCaptureStep: View {
 			if case .failed = camera.state, let onRetry, model?.phase != .complete {
 				SetupButton(title: "Try Again", action: onRetry)
 			} else {
-				Text(model.map { "\(Int($0.progress * 100))%" } ?? "")
+				Text(model.map { "\(Int($0.overallProgress * 100))%" } ?? "")
 					.font(Typography.setupBody.weight(.semibold).monospacedDigit())
 					.foregroundStyle(Theme.setupTertiary)
 					.opacity(showsPercentage ? 1 : 0)
@@ -115,7 +116,7 @@ struct SetupCaptureStep: View {
 		guard isAuthorized else { return "Gaze needs the camera" }
 		if camera.faceMissing {
 			switch camera.absence {
-			case .multipleFaces: return "One face at a time"
+			case .multipleFaces: return "Only one face in view, please"
 			case .analysisFailed: return "Hold still for a moment"
 			case .detectionFailed: return "The camera frame couldn’t be read"
 			default: return "Center your face"
@@ -181,13 +182,21 @@ struct SetupCaptureStep: View {
 		case .denied:
 			// Refused once already: the system will never ask again, so the only way
 			// forward is Settings. Sending them there beats a button that does nothing.
-			if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
-				NSWorkspace.shared.open(url)
-			}
+			openCameraSettings()
 		case .restricted:
-			refresh()
+			// A policy block the app cannot clear itself, but Settings is still where
+			// an administrator allows it — same destination as the denied state.
+			openCameraSettings()
 		@unknown default:
-			refresh()
+			openCameraSettings()
+		}
+	}
+
+	/// System Settings > Privacy & Security > Camera, shared by every state whose
+	/// only way forward is the user (or their administrator) allowing it there.
+	private func openCameraSettings() {
+		if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+			NSWorkspace.shared.open(url)
 		}
 	}
 }
@@ -199,12 +208,17 @@ struct SetupCameraAccessContent: View {
 	var onRequest: () -> Void
 	var onBack: (() -> Void)?
 	var onClose: (() -> Void)?
+	@State private var look: Double = 1
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	static func actionTitle(for status: AVAuthorizationStatus) -> String? {
 		switch status {
 		case .notDetermined: "Allow Camera Access"
 		case .denied: "Open Camera Settings"
-		default: nil
+		// Restricted is set by an administrator or Screen Time and can't be changed in
+		// System Settings, so a button would lead nowhere; authorized needs none.
+		case .restricted, .authorized: nil
+		@unknown default: "Open Camera Settings"
 		}
 	}
 
@@ -213,11 +227,11 @@ struct SetupCameraAccessContent: View {
 			position: position,
 			title: authorization == .restricted ? "Camera access is restricted" : "Let Gaze see you",
 			message: message,
-			figureHeight: 132,
+			figureHeight: 200,
 			onBack: onBack,
 			onClose: onClose
 		) {
-			SetupGlyph(symbol: "camera")
+			cameraFigure
 		} detail: {
 			Label("Recognition happens on this Mac. Nothing is recorded until you enrol.", systemImage: "lock")
 				.font(.system(size: 12))
@@ -229,6 +243,65 @@ struct SetupCameraAccessContent: View {
 					.disabled(isRequesting)
 			}
 		}
+	}
+
+	/// The companion glancing at the camera, on the tour's Pro Black backdrop.
+	private var cameraFigure: some View {
+		ZStack {
+			if let url = Bundle.main.url(forResource: "tour-backdrop", withExtension: "png", subdirectory: "Art"),
+				let nsImage = NSImage(contentsOf: url) {
+				Image(nsImage: nsImage)
+					.resizable()
+					.scaledToFill()
+			} else {
+				Color(white: 0.06)
+			}
+			HStack(spacing: 40) {
+				GazeLookingCompanion(look: authorization == .notDetermined ? look : 1, happy: false)
+					.frame(width: 120, height: 120)
+				cameraSymbol
+			}
+		}
+		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+		.accessibilityHidden(true)
+		.task(id: animates) {
+			guard animates else { return }
+			while !Task.isCancelled {
+				try? await Task.sleep(for: .seconds(2.4))
+				guard !Task.isCancelled else { return }
+				look = look == 1 ? 0 : 1
+			}
+		}
+	}
+
+	/// Gentle motion only while still waiting on the system prompt, and never
+	/// with Reduce Motion on.
+	private var animates: Bool { authorization == .notDetermined && !reduceMotion }
+
+	private var symbolName: String {
+		switch authorization {
+		case .denied: "camera.slash.fill"
+		case .restricted: "lock.fill"
+		case .notDetermined, .authorized: "camera.fill"
+		@unknown default: "camera.fill"
+		}
+	}
+
+	@ViewBuilder
+	private var cameraSymbol: some View {
+		if animates {
+			symbolBase.symbolEffect(.pulse, options: .repeating)
+		} else {
+			symbolBase
+		}
+	}
+
+	private var symbolBase: some View {
+		Image(systemName: symbolName)
+			.font(.system(size: 56, weight: .medium))
+			.foregroundStyle(.white)
+			.symbolRenderingMode(.monochrome)
 	}
 
 	private var message: String {

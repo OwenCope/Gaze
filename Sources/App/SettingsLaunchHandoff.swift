@@ -60,7 +60,7 @@ enum SettingsLaunchHandoff {
 		return name
 	}
 
-	/// If an eligible launch finds the same bundle already running, hand presentation to
+	/// If an eligible launch finds Gaze already running (preferably this same bundle), hand presentation to
 	/// it and report true so the caller exits before starting any services.
 	///
 	/// Returns true only when a matching existing instance was found — including when
@@ -73,13 +73,17 @@ enum SettingsLaunchHandoff {
 		guard let thisExecutable = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return false }
 		let thisBundle = Bundle.main.bundleURL.resolvingSymlinksInPath()
 		let currentPID = ProcessInfo.processInfo.processIdentifier
-		let ordered = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-			.filter {
-				$0.processIdentifier != currentPID
-					&& !$0.isTerminated
-					&& $0.executableURL?.resolvingSymlinksInPath() == thisExecutable
-					&& $0.bundleURL?.resolvingSymlinksInPath() == thisBundle
-			}
+		// This bundle's own running copy first; failing that, any running Gaze. A second
+		// copy opened from Downloads or a disk image used to start its own services
+		// beside the installed one: two agents on the lock screen, and a Keychain
+		// prompt for every item the new, unrecognised copy tried to read.
+		let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+			.filter { $0.processIdentifier != currentPID && !$0.isTerminated }
+		let sameBundle = running.filter {
+			$0.executableURL?.resolvingSymlinksInPath() == thisExecutable
+				&& $0.bundleURL?.resolvingSymlinksInPath() == thisBundle
+		}
+		let ordered = (sameBundle.isEmpty ? running : sameBundle)
 			.sorted {
 				switch ($0.launchDate, $1.launchDate) {
 				case let (first?, second?):

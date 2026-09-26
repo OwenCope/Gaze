@@ -49,7 +49,7 @@ struct GazeApp: App {
 
 	private var store: FaceEnrollmentStore { AppServices.shared.store }
 	private var lockout: LockoutManager { AppServices.shared.lockout }
-	@State private var presentsSettingsAtLaunch: Bool
+	private let presentsSettingsAtLaunch: Bool
 
 	init() {
 		// Same-bundle foreground handoff: a `--settings` (or bare) launch while this
@@ -59,21 +59,12 @@ struct GazeApp: App {
 		// cannot loop on it.
 		if SettingsLaunchHandoff.redirectIfNeeded() { Darwin.exit(0) }
 		let totalStart = StartupTiming.start()
-		// Fail-closed default: until the store has been read, launch as not enrolled,
-		// which presents setup rather than settings. The real read happens below, off
-		// the launch path, on the main actor so the store's published state updates there.
+		// Read synchronously: SwiftUI evaluates `defaultLaunchBehavior` once, at launch, so
+		// a value that arrives later from a Task never reaches the window.
+		let enrolled = StartupTiming.measure(label: "services") { AppServices.shared.store.isEnrolled }
+		if enrolled { OnboardingHistory.markPresented() }
 		presentsSettingsAtLaunch = !AppActivation.isBackgroundLaunch
-			&& !OnboardingHistory.presentsSetup(isEnrolled: false, arguments: CommandLine.arguments)
-		Task { @MainActor in
-			let enrolled = StartupTiming.measure(label: "services") { AppServices.shared.store.isEnrolled }
-			if enrolled {
-				OnboardingHistory.markPresented()
-				// The fail-closed default above assumed not enrolled, which presents
-				// setup. An enrolled store that never presented means settings instead.
-				presentsSettingsAtLaunch = !AppActivation.isBackgroundLaunch
-					&& !OnboardingHistory.presentsSetup(isEnrolled: true, arguments: CommandLine.arguments)
-			}
-		}
+			&& !OnboardingHistory.presentsSetup(isEnrolled: enrolled, arguments: CommandLine.arguments)
 		StartupTiming.finish(label: "gazeapp-init-total", start: totalStart)
 	}
 
@@ -133,7 +124,7 @@ struct GazeApp: App {
 			RecognitionTestView(store: store)
 		}
 		.windowResizability(.contentMinSize)
-		.defaultSize(width: 560, height: 820)
+		.defaultSize(width: 600, height: 700)
 
 		// Behind a launch flag, and deliberately not in any menu. Collecting an
 		// anti-spoof dataset is a job for whoever is building the model, not a
@@ -188,6 +179,9 @@ private struct GazeMovementGuideWindow: View {
 			onClose: { dismissWindow(id: "movement-guide") },
 			movementCount: Preferences.shared.unlockMovementCount.rawValue
 		)
+		// The tour card is dark-only; without this a light system turned the
+		// panel pale while its text stayed white.
+		.preferredColorScheme(.dark)
 		.containerBackground(.clear, for: .window)
 		// Recreated on reopening so the tour starts on page one.
 		.id(tourRevision)

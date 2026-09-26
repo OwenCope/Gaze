@@ -23,25 +23,25 @@ struct GazeWelcomeTour: View {
 
 	private static let pages: [TourPage] = [
 		TourPage(
-			imageName: "Art/tour-general.png",
+			imageName: "Art/tour-backdrop.png",
 			imageBundle: .main,
 			title: "Meet Gaze",
 			description: "Use your Mac’s camera to recognize your face at the lock screen. Face data never leaves this Mac."
 		),
 		TourPage(
-			imageName: "Art/tour-security.png",
+			imageName: "Art/tour-backdrop.png",
 			imageBundle: .main,
 			title: "Stays on your Mac",
 			description: "Face templates stay encrypted on this Mac. It uses a regular camera, not depth sensing."
 		),
 		TourPage(
-			imageName: "Art/tour-how-unlock.png",
+			imageName: "Art/tour-backdrop.png",
 			imageBundle: .main,
 			title: "How unlock works",
 			description: "Look at the camera and follow the movements. Gaze enters your saved login password after checking."
 		),
 		TourPage(
-			imageName: "Art/tour-unlock.png",
+			imageName: "Art/tour-backdrop.png",
 			imageBundle: .main,
 			title: "Unlocking stays your choice",
 			description: "It uses your saved Mac password. Automatic unlocking stays off unless you turn it on."
@@ -56,7 +56,17 @@ struct GazeWelcomeTour: View {
 			continueButtonTitle: "Next",
 			finishButtonTitle: "Start setup",
 			onFinish: onContinue,
-			onClose: onClose
+			onClose: onClose,
+			// Every page plays live on Pro Black: the companion, privacy, unlock and choice.
+			pageMedia: { index in
+				switch index {
+				case 0: AnyView(GazeTourMovementPage())
+				case 1: AnyView(GazeTourPrivacyDemo())
+				case 2: AnyView(GazeTourUnlockDemo())
+				case 3: AnyView(GazeTourChoiceDemo())
+				default: nil
+				}
+			}
 		)
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}

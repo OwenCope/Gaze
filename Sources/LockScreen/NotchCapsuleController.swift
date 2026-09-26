@@ -37,8 +37,7 @@ final class NotchCapsuleController {
 	/// hosting view's root would reset the view's state and animate nothing.
 	private let model = NotchCapsuleModel()
 
-	/// Last build outcome, in the style of `AutofillService.lastOutcome`, so the
-	/// missing-space state is readable from Settings diagnostics rather than the log alone.
+	/// Last build outcome, so the missing-space state is readable from Settings diagnostics rather than the log alone.
 	private(set) static var lastBuildOutcome: (message: String, at: Date)?
 
 	/// Refuses focus, which keeps it out of the lock screen's input path entirely.
@@ -184,25 +183,37 @@ final class NotchCapsuleController {
 		// precisely how you can tell a floating object is really a window. `islandSide` is
 		// capped on width, so the extra height stays empty margin rather than making the
 		// island taller.
-		let isIsland = Preferences.shared.panelShape == .island
-		let isMinimal = Preferences.shared.panelShape == .minimal
 		let hasNotch = NotchMetrics.hasNotch(on: screen)
+		let isIsland = Preferences.shared.panelShape == .island
+		let isDynamicIsland = Preferences.shared.panelShape == .dynamicIsland
+		let isEarFlank =
+			Preferences.shared.panelShape == .attached
+			&& Preferences.shared.glyphPlacement == .ear && hasNotch
 		let cutout = NotchMetrics.width(on: screen) ?? 180
 		// Always reserved, captions or not. Tying this to the captions toggle made the
 		// panel a third shorter for anyone who turned captions off, and the owner's
 		// call is that the panel keeps its size — the toggle hides words, it does not
 		// shrink the thing. Do not make this conditional again.
 		//
-		// Minimal and island carry their captions inline, so neither reserves room below.
-		let challengeRoom: CGFloat = (isIsland || isMinimal) ? 0 : 30
+		// The island, the dynamic island and the ear flank carry their captions inline,
+		// so none reserves room below.
+		let challengeRoom: CGFloat = (isIsland || isDynamicIsland || isEarFlank) ? 0 : 30
+		// The dynamic island's expanded state is up to 340 x 44 below a 6pt gap, plus
+		// shadow room underneath — mirrors DynamicIslandMetrics in NotchCapsule,
+		// which this file cannot see (it is private to the view).
 		let dropHeight =
 			(isIsland ? IslandMetrics.dropHeight(cutoutWidth: cutout)
-				: isMinimal ? (hasNotch ? 12 : 4 + 40 + 16) : 66)
+				: isDynamicIsland ? (6 + 44 + IslandMetrics.shadowRoom)
+				: isEarFlank ? 8 : 66)
 			+ challengeRoom
 			+ Preferences.shared.notchHeightAdjust
-		// Minimal widens inline to fit its caption (up to 320pt), so the window is built
-		// wide enough to hold it at full stretch.
-		let contentWidth = isMinimal ? max(notchWidth, 300) : notchWidth
+		// The ear flank widens its face side to fit a caption (EarFlankMetrics in
+		// NotchCapsule: 54pt flank, 6pt gap, up to 170pt of words, 4pt padding) and
+		// stays centred on the cutout, so the window holds that on both sides. The
+		// dynamic island morphs to a fixed 340pt when open.
+		let contentWidth =
+			isDynamicIsland ? max(notchWidth, 340)
+			: isEarFlank ? max(notchWidth, cutout + 2 * (54 + 6 + 170 + 4)) : notchWidth
 		let panelFrame = NotchMetrics.panelFrame(
 			size: CGSize(width: contentWidth, height: notchHeight + dropHeight),
 			screenFrame: screen.frame,

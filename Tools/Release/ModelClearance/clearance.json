@@ -484,9 +484,9 @@
         ]
       },
       "provenance": {
-        "summary": "scripts/make_icon_mark.swift claims to generate Resources/AppIcon.icon/Assets/gaze-mark.png (header scripts/make_icon_mark.swift:1, output path scripts/make_icon_mark.swift:81-83) as a white-on-transparent keyhole, but byte-equality between script output and these current bytes is unverified: the script was not run here and no output hash is recorded. Resources/AppIcon.icon/icon.json names the layer 'Smoked glass face', which does not match the script's keyhole description. Authorship/scope remains to be recorded. Owner confirms (2026-09-20, release-clearance session) both files are their own first-party work; this confirmation is authoritative. The owner did not claim the bytes came from scripts/make_icon_mark.swift, so the script-output question above stays unverified.",
+        "summary": "Tools/Scripts/make_icon_mark.swift claims to generate Resources/AppIcon.icon/Assets/gaze-mark.png (header Tools/Scripts/make_icon_mark.swift:1, output path Tools/Scripts/make_icon_mark.swift:81-83) as a white-on-transparent keyhole, but byte-equality between script output and these current bytes is unverified: the script was not run here and no output hash is recorded. Resources/AppIcon.icon/icon.json names the layer 'Smoked glass face', which does not match the script's keyhole description. Authorship/scope remains to be recorded. Owner confirms (2026-09-20, release-clearance session) both files are their own first-party work; this confirmation is authoritative. The owner did not claim the bytes came from Tools/Scripts/make_icon_mark.swift, so the script-output question above stays unverified.",
         "evidenceRefs": [
-          "scripts/make_icon_mark.swift:1-24,81-83",
+          "Tools/Scripts/make_icon_mark.swift:1-24,81-83",
           "Resources/AppIcon.icon/icon.json",
           "Owner confirmation, release-clearance session 2026-09-20 (first-party authorship)"
         ],
@@ -507,7 +507,7 @@
         "status": "owner-confirmed-first-party"
       },
       "clearance": "cleared",
-      "notes": "Script-output question (scripts/make_icon_mark.swift white-on-transparent keyhole vs icon.json 'Smoked glass face' layer) remains unverified; the owner's first-party confirmation is authoritative."
+      "notes": "Script-output question (Tools/Scripts/make_icon_mark.swift white-on-transparent keyhole vs icon.json 'Smoked glass face' layer) remains unverified; the owner's first-party confirmation is authoritative."
     }
   ]
 }

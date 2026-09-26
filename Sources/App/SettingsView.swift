@@ -113,7 +113,7 @@ struct SettingsView: View {
 	@State private var lockoutPassword = ""
 	@State private var lockoutError: String?
 	@State private var accessibilityGranted = SetupPermissionStatus.current.isReady
-	@State private var cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+	@State private var cameraGranted = Self.cameraAuthorized
 	@State private var loginItemEnabled = LoginItem.isEnabled
 	@State private var loginItemNeedsApproval = LoginItem.needsApproval
 	@State private var loginItemError: String?
@@ -449,7 +449,7 @@ struct SettingsView: View {
 			// side and the pane opened on a mostly blank box. A status row reads as part of
 			// the settings rather than as a splash screen.
 			HStack(spacing: 14) {
-				Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
+				Image(nsImage: Self.appIcon)
 					.resizable()
 					.interpolation(.high)
 					.frame(width: 42, height: 42)
@@ -571,6 +571,13 @@ struct SettingsView: View {
 				.font(Typography.groupTitle)
 				.foregroundStyle(Theme.secondaryLabel)
 				.padding(.horizontal, 4)
+			if !store.faces.isEmpty, !store.anyEnabled {
+				Text(FaceEnrollmentStore.allFacesOffMessage)
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+					.fixedSize(horizontal: false, vertical: true)
+					.padding(.horizontal, 4)
+			}
 			// Tiles in a row, the way Touch ID & Password lists fingerprints.
 			//
 			// Apple has already answered this exact question — several enrolments of
@@ -592,6 +599,22 @@ struct SettingsView: View {
 					FaceTile(
 						face: face,
 						portrait: store.portrait(for: face.id),
+						isEnabled: Binding(
+							get: { store.faces.first(where: { $0.id == face.id })?.isEnabled ?? face.isEnabled },
+							set: { enabled in
+								Task {
+									// Switching off only narrows who can unlock, so it
+									// needs no check. Switching on widens it again, so
+									// it goes through the same confirmation as removing
+									// a face. The store is untouched when the prompt is
+									// cancelled, and the switch reads back from the
+									// store, so it settles back on its own.
+									if enabled {
+										guard await BiometricGate.authorize(.removeEnrollment) else { return }
+									}
+									store.setEnabled(face.id, enabled)
+								}
+							}),
 						rename: { store.rename(face.id, to: $0) },
 						setPortrait: { store.setPortrait($0, for: face.id) },
 						remove: {
@@ -688,7 +711,7 @@ struct SettingsView: View {
 	/// Re-reads the state this window shows but does not own.
 	private func refreshExternalState() {
 		hasStoredPassword = PasswordVault.hasPassword
-		cameraGranted = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+		cameraGranted = Self.cameraAuthorized
 		accessibilityGranted = SetupPermissionStatus.current.isReady
 		refreshLoginItemState()
 	}
@@ -720,7 +743,7 @@ struct SettingsView: View {
 				portrait: GazeBrand.toolbarIcon(dark: (settings.appTheme.colorScheme ?? colorScheme) == .dark),
 				isOn: Binding(get: { PasswordReplaySafety.isEnabled && settings.unlockBackend == .keystroke },
 					set: { unlockBinding.wrappedValue = $0 ? .keystroke : .none }))
-				.disabled(AppServices.isUIReview)
+				.disabled(AppServices.isUIReview && !ProductCaptureDemo.isOn)
 
 		if settings.unlockBackend == .keystroke {
 			RowDivider()
@@ -949,9 +972,16 @@ struct SettingsView: View {
 				symbol: "accessibility",
 				symbolTint: accessibilityGranted ? nil : Theme.warning
 			) {
-				Button("Review") { openSetup(at: .permission) }
-					.gazeButton()
-					.fixedSize()
+				// Once granted there is nothing to review, so it matches the Camera row.
+				if accessibilityGranted {
+					Button("Open Settings") { openPrivacySettings("Privacy_Accessibility") }
+						.gazeButton()
+						.fixedSize()
+				} else {
+					Button("Review") { openSetup(at: .permission) }
+						.gazeButton()
+						.fixedSize()
+				}
 			}
 		}
 	}
@@ -972,6 +1002,17 @@ struct SettingsView: View {
 	private var securitySection: some View {
 		SettingsSection(title: "Security checks", footer: securityFooter,
 			info: "Choose which checks Gaze requires before unlocking. Movement verification asks for a random action each time. Password and Touch ID remain available on the lock screen.") {
+		if settings.unlockBackend == .keystroke {
+			// Not a choice in this mode: password release pins the enrolled camera,
+			// so a disabled switch forced on would read as broken rather than fixed.
+			SettingRow(
+				title: "Only trust the built-in camera",
+				detail: "Required for password release; the enrolled camera stays pinned",
+				symbol: "camera.fill"
+			) {
+				Text("Always on").foregroundStyle(Theme.secondaryLabel)
+			}
+		} else {
 			SettingToggle(
 				title: "Only trust the built-in camera",
 				detail: "Required for password release; the enrolled camera stays pinned",
@@ -979,13 +1020,8 @@ struct SettingsView: View {
 				isEnabled: settings.unlockBackend != .keystroke,
 				isOn: Binding(get: { settings.unlockBackend == .keystroke || settings.requireBuiltInCamera },
 					set: { settings.requireBuiltInCamera = $0 }))
+		}
 
-			RowDivider()
-			SettingToggle(
-				title: "Reject photos held up to the camera",
-				symbol: "eye.trianglebadge.exclamationmark.fill",
-				isEnabled: SpoofDetector.isAvailable,
-				isOn: bind(\.livenessEnabled))
 
 			RowDivider()
 			SettingRow(
@@ -1041,20 +1077,23 @@ struct SettingsView: View {
 				walkAwayNotice
 			}
 
-		RowDivider()
-		// Titled by what the switch actually gates: `BiometricGate.authorize()`
-		// (remove-enrolment, store/revoke password) honours it; `require()`
-		// (adding a face, trusting an autofill app) always prompts regardless.
-		// No-sensor Macs stay opted out, as the footer below states.
-		SettingToggle(
-			title: "Ask before removing a face or changing the stored password",
-			detail: "Adding a face always asks, even when this is off.",
-			// Pink because Apple's own Touch ID icon is pink, not because a fifth hue
-			// was needed. Every tint in this window now points at a System Settings row
-			// that uses the same one.
-			symbol: "touchid",
-			isEnabled: BiometricGate.isAvailable,
-			isOn: bind(\.touchIDFallback))
+		if BiometricGate.isAvailable {
+			RowDivider()
+			// Titled by what the switch actually gates: `BiometricGate.authorize()`
+			// (remove-enrolment, store/revoke password) honours it; `require()`
+			// (adding a face, trusting an autofill app) always prompts regardless.
+			// No-sensor Macs hide the row outright — a switch that can never fire
+			// is not a setting — with the footer below saying why.
+			SettingToggle(
+				title: "Ask before removing a face or changing the stored password",
+				detail: "Adding a face always asks, even when this is off.",
+				// Pink because Apple's own Touch ID icon is pink, not because a fifth hue
+				// was needed. Every tint in this window now points at a System Settings row
+				// that uses the same one.
+				symbol: "touchid",
+				isEnabled: BiometricGate.isAvailable,
+				isOn: bind(\.touchIDFallback))
+		}
 		}
 	}
 
@@ -1117,7 +1156,7 @@ struct SettingsView: View {
 	/// its leading and its line height, which left an unexplained gap under the group.
 	private var securityFooter: String? {
 		var notes: [String] = []
-		if !SpoofDetector.isAvailable { notes.append("The photo-rejection model is unavailable.") }
+		if !SpoofDetector.isAvailable { notes.append("The anti-spoof model is missing, so Gaze won't unlock this Mac. Reinstall Gaze to restore it.") }
 		if !BiometricGate.isAvailable { notes.append("This Mac has no Touch ID sensor.") }
 		return notes.isEmpty ? nil : notes.joined(separator: " ")
 	}
@@ -1255,7 +1294,7 @@ struct SettingsView: View {
 		switch releases.state {
 		case .idle: return "Check gazeunlock.com for a new build."
 		case .checking: return "Checking gazeunlock.com…"
-		case .upToDate: return "You're on the latest release."
+		case .upToDate: return "Gaze is up to date"
 		case .available(let release):
 			// The tag names the build; the release's own title, when it has one
 			// worth showing, says what changed.
@@ -1361,33 +1400,37 @@ private struct SettingsCreditsPane: View {
 			// They all do the same thing — open a link — so they take the same control, at
 			// the same width, and the row's text says which link it is. The name moves to
 			// the tooltip and the accessibility label, where a control's purpose belongs.
-			// Six people, matching `credits.ts` on the site, which is the list that gets
-			// maintained.
-			//
-			// This pane had three of them, and got one of the three wrong: DanFQ was credited
-			// for *Atoll*, with the line "and for reading this code more carefully than I
-			// did". The site had already caught and fixed that, and its own note says why —
-			// "the app was never built on it, and crediting someone's product for work they
-			// did personally is a nicer-sounding kind of wrong." DanFQ gave ideas and
-			// feedback, as himself. He has a link to his GitHub, not to an app Gaze does not
-			// use.
-			//
-			// The self-deprecation went with it. "More carefully than I did" is not a credit
-			// — it says something about the author in a row that exists to say something
-			// about somebody else — and it is the kind of line that reads as charming once
-			// and as false modesty every time after.
-			//
-			// Three of the six are people rather than apps, so `nautey` has no link at all
-			// rather than a link invented to fill the column.
+			// Kept in step with `credits.ts` on the site, which is the list that gets maintained.
+			// People without a public page (nautey) get no link rather than an invented one.
 			SettingsSection(
 				title: "Who helped",
 				footer: "One borrowed model, one app this one learned its shape from, "
-					+ "and four people who made it better."
+					+ "and six people who made it better."
 			) {
 				creditRow(
-					name: "cshariq",
-					detail: "The recognition model this app matches faces with is theirs",
+					name: "Harsh Vardhan Goswami",
+					detail: "Gave Gaze an API key for OpenAI's GPT-6 Astra, which powered much of its development",
+					symbol: "person.fill",
+					link: "https://github.com/theboringhumane", linkName: "Harsh Vardhan Goswami on GitHub",
+					app: .init(
+						name: "TheBoringNotch", what: "The open-source notch app for Mac.",
+						icon: "app-boringnotch", href: "https://github.com/TheBoredTeam/boring.notch"))
+
+				RowDivider()
+				// The recognition model is InsightFace's ArcFace. It was credited to Sapphire,
+				// which bundles the same model, but the model and its licence are InsightFace's.
+				creditRow(
+					name: "deepinsight",
+					detail: "Made the ArcFace model this app recognises faces with (weights for non-commercial use)",
 					symbol: "brain.head.profile",
+					link: "https://github.com/deepinsight/insightface", linkName: "InsightFace on GitHub",
+					app: nil)
+
+				RowDivider()
+				creditRow(
+					name: "cshariq",
+					detail: "The Core ML build of that model, from Sapphire",
+					symbol: "cpu",
 					link: "https://github.com/cshariq", linkName: "cshariq on GitHub",
 					app: .init(
 						name: "Sapphire", what: "The notch, reimagined.",
@@ -1650,16 +1693,8 @@ private struct SettingsAboutPane: View {
 					symbol: "list.bullet.rectangle",
 					url: "https://gazeunlock.com/releases")
 				RowDivider(inset: 0)
-				// The Discord, not the issue tracker.
-				//
-				// Both candidate repository URLs — the checkout's remote (`OwenCope/FaceID`)
-				// and the one the README gives (`OwenCope/Gaze`) — answer 404 to a signed-out
-				// request, which is what GitHub returns for a private repository *and* for one
-				// that does not exist. Either way, most people clicking this would land on a
-				// 404, and a support link that goes nowhere is worse than no support link.
-				//
-				// The Discord is where the feedback in the credits pane actually came from,
-				// and it is the one destination here that was checked and answers 200.
+				// The Discord, not the issue tracker: the repository is private until launch,
+				// and a support link that lands on a 404 is worse than none.
 				linkRow(
 					title: "Report a problem",
 					detail: "Ask in the Discord",
@@ -1789,6 +1824,9 @@ private struct FaceTile: View {
 	let face: FaceEnrollment
 	/// The picture somebody chose for this person, if they chose one.
 	var portrait: NSImage?
+	/// Whether this face can unlock. Reads through to the store so the switch
+	/// settles back when enabling is cancelled at the confirmation prompt.
+	var isEnabled: Binding<Bool>
 	var rename: (String) -> Void
 	var setPortrait: (NSImage?) -> Void
 	var remove: () -> Void
@@ -1809,12 +1847,14 @@ private struct FaceTile: View {
 	init(
 		face: FaceEnrollment,
 		portrait: NSImage?,
+		isEnabled: Binding<Bool>,
 		rename: @escaping (String) -> Void,
 		setPortrait: @escaping (NSImage?) -> Void,
 		remove: @escaping () -> Void
 	) {
 		self.face = face
 		self.portrait = portrait
+		self.isEnabled = isEnabled
 		self.rename = rename
 		self.setPortrait = setPortrait
 		self.remove = remove
@@ -1919,7 +1959,7 @@ private struct FaceTile: View {
 			TextField("Name", text: $draft)
 				.textFieldStyle(.plain)
 				.font(Typography.detail)
-				.foregroundStyle(Theme.label)
+				.foregroundStyle(face.isEnabled ? Theme.label : Theme.secondaryLabel)
 				.multilineTextAlignment(.center)
 				.lineLimit(1)
 				.frame(minWidth: 84)
@@ -1936,6 +1976,23 @@ private struct FaceTile: View {
 				// reloading — should show here rather than being overwritten by a
 				// draft the user never touched.
 				.onChange(of: face.name) { _, name in if !isEditing { draft = name } }
+
+			if !face.isEnabled {
+				Text("Off, can't unlock")
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+					.multilineTextAlignment(.center)
+					.lineLimit(2)
+					.fixedSize(horizontal: false, vertical: true)
+					.frame(minWidth: 84)
+			}
+
+			Toggle("Use \(face.name) to unlock", isOn: isEnabled)
+				.labelsHidden()
+				.accessibilityLabel("Use \(face.name) to unlock")
+				.toggleStyle(.switch)
+				.controlSize(.small)
+				.tint(Theme.accent)
 		}
 		.contentShape(Rectangle())
 		.contextMenu {

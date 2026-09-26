@@ -86,6 +86,20 @@ final class LockWatcher {
 	/// The pause between a rejection and the next attempt.
 	private static let retryCooldown: TimeInterval = 2.0
 
+	/// Below this overlap a match counts as a different physical subject, even for the
+	/// same enrolled face, and restarts the hold rather than inheriting it.
+	private static let subjectChangeOverlap: CGFloat = 0.2
+
+	/// Intersection over union of two Vision-normalized boxes. Same space on both sides
+	/// is all it needs; the values never leave this comparison.
+	private static func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+		let intersection = a.intersection(b)
+		guard !intersection.isNull, !intersection.isEmpty else { return 0 }
+		let union = a.width * a.height + b.width * b.height - intersection.width * intersection.height
+		guard union > 0 else { return 0 }
+		return (intersection.width * intersection.height) / union
+	}
+
 	init(store: FaceEnrollmentStore, lockout: LockoutManager) {
 		self.store = store
 		self.lockout = lockout
@@ -304,9 +318,9 @@ final class LockWatcher {
 		}
 		guard UnlockGuard.embedderBlocker() == nil, store.isEnrolled, !store.isCorrupted,
 			let lockedSession = LockedConsoleSession.current() else { report(.verificationUnavailable); return }
-		let enrolledFaces = store.faces.map(\.id)
+		// Only switched-on faces may unlock; a face turned off mid-attempt ends the attempt.
+		let enrolledFaces = store.faces.filter(\.isEnabled).map(\.id)
 		guard let pinnedCamera = store.pinnedCameraID, !pinnedCamera.isEmpty else { report(.cameraUnavailable); return }
-		let antiSpoofEnabled = Preferences.shared.livenessEnabled
 		let movementCount = Preferences.shared.unlockMovementCount
 		let entryEmbedder = Embedders.best().identifier
 		var inputGuard = LockScreenInputGuard(initial: inputSnapshot)
@@ -316,10 +330,9 @@ final class LockWatcher {
 				lockout.mayAttempt(), !Preferences.shared.isPaused,
 				UnlockExecutionPolicy.current.permitsScanning(passwordReplayEnabled: PasswordReplaySafety.isEnabled,
 					keystrokeSelected: Preferences.shared.unlockBackend == .keystroke),
-				Preferences.shared.livenessEnabled == antiSpoofEnabled,
 				Preferences.shared.unlockMovementCount == movementCount,
 				Embedders.best().identifier == entryEmbedder,
-				!store.isCorrupted, store.faces.map(\.id) == enrolledFaces,
+				!store.isCorrupted, store.faces.filter(\.isEnabled).map(\.id) == enrolledFaces,
 				store.pinnedCameraID == pinnedCamera else { return false }
 			return true
 		}
@@ -337,10 +350,7 @@ final class LockWatcher {
 			return true
 		}
 		guard requestIsCurrent() else { capsule.hide(); return }
-		let antiSpoof: AntiSpoofGate? = {
-			guard antiSpoofEnabled else { return nil }
-			return AntiSpoofGate(spoof: SpoofDetector.shared)
-		}()
+		let antiSpoof: AntiSpoofGate? = AntiSpoofGate(spoof: SpoofDetector.shared)
 		if let antiSpoof, !antiSpoof.isActive {
 			report(.verificationUnavailable)
 			Self.logger.error("Anti-spoof protection was requested but its model is unavailable. Refusing password submission.")
@@ -348,9 +358,18 @@ final class LockWatcher {
 			return
 		}
 		guard requestIsCurrent() else { capsule.hide(); return }
+		// The first recognition used to load both models mid-scan, stalling the loop for
+		// over a second right after the first frame, which the stall check read as a dead
+		// camera. They load here instead, while the camera is still starting.
+		let embedder = store.embedder
+		let warmUp = Task.detached(priority: .userInitiated) {
+			embedder.warmUp()
+			SpoofDetector.shared?.warmUp()
+		}
 		let camera = CameraController(accessScope: .lockScreen)
 		let cameraRequestedAt = ContinuousClock.now
 		await camera.start(pinnedDeviceID: pinnedCamera)
+		await warmUp.value
 		defer { camera.stop() }
 
 		guard camera.state == .running, camera.boundDeviceID == pinnedCamera, requestIsCurrent() else {
@@ -358,9 +377,12 @@ final class LockWatcher {
 			Self.logger.error("Camera unavailable: \(String(describing: camera.state))")
 			return
 		}
+		// The panel drops as soon as the camera is on, not when its first frame arrives,
+		// so it never lags a second or more behind the camera light.
+		capsule.update(phase: .scanning)
 		var freshFrames = RecognitionFrameGate()
 		var evaluatedContinuity: UInt64?
-		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces, antiSpoof: antiSpoof)
+		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces.filter(\.isEnabled), antiSpoof: antiSpoof)
 		let challenge: LivenessChallenge? = LivenessChallenge()
 		var challengeGate = UnlockChallengeGate(requiredActions: movementCount.rawValue)
 		// Opt-in render timing (GAZE_RENDER_DIAGNOSTICS=1). Measurement and logging only:
@@ -404,6 +426,10 @@ final class LockWatcher {
 		var lastFaceAt = Date()
 		/// Set after a rejection, so the next try starts from a clean slate.
 		var cooldownUntil: Date?
+		/// Box of the last matched face. The next frame's candidates are tried in
+		/// overlap order so the tracked subject is re-found without embedding the
+		/// other faces when it is still there.
+		var trackedBox: CGRect?
 
 		// Counters, so "nobody in front of the camera" can say what it actually saw.
 		//
@@ -458,12 +484,14 @@ final class LockWatcher {
 			let tickGapMs = renderDiagnostics ? renderPreviousTick.map { renderMs($0, tickStart) } ?? 0 : 0
 			if renderDiagnostics { renderPreviousTick = tickStart }
 			defer {
-				guard renderDiagnostics else { return }
-				let tickStartMs = renderMs(renderClockStart, tickStart)
-				if let window = renderTiming.record(tick: ticks, frameID: camera.frameID,
-					phase: renderPhase, tickStartMs: tickStartMs, capsuleUpdateMs: tickCapsuleMs,
-					callbackGapMs: tickGapMs, drawableWaitMs: 0, inferenceMs: tickInferenceMs) {
-					Self.renderTimingLogger.notice("\(window, privacy: .public)")
+				// `defer` cannot `return`, so the opt-in check wraps the body instead of guarding it.
+				if renderDiagnostics {
+					let tickStartMs = renderMs(renderClockStart, tickStart)
+					if let window = renderTiming.record(tick: ticks, frameID: camera.frameID,
+						phase: renderPhase, tickStartMs: tickStartMs, capsuleUpdateMs: tickCapsuleMs,
+						callbackGapMs: tickGapMs, drawableWaitMs: 0, inferenceMs: tickInferenceMs) {
+						Self.renderTimingLogger.notice("\(window, privacy: .public)")
+					}
 				}
 			}
 			tickCapsuleMs = 0
@@ -498,6 +526,7 @@ final class LockWatcher {
 				if !continuous {
 					matchingHold.reset()
 					rejectionHold.reset()
+					trackedBox = nil
 					resetMovementGuidance(reason: "frame gap")
 				}
 			}
@@ -517,11 +546,12 @@ final class LockWatcher {
 			}
 
 			ticks += 1
-			guard !camera.faceMissing, let sample = camera.sample else {
+			guard !camera.faceMissing, var sample = camera.sample else {
 				lastAbsence = camera.absence?.summary ?? "no sample"
 				// Face left the frame — both runs are broken and start again from zero.
 				matchingHold.reset()
 				rejectionHold.reset()
+				trackedBox = nil
 				resetMovementGuidance(reason: "face unavailable")
 				if Date().timeIntervalSince(lastFaceAt) >= searchWindow { break }
 				continue
@@ -539,17 +569,29 @@ final class LockWatcher {
 			}
 
 			framesWithFace += 1
-			largestFace = max(largestFace, sample.boundingBox.height)
-			bestQuality = max(bestQuality, sample.quality)
-			if let rejection = FrameQuality.rejection(sample) {
+			// Every face in the frame is a candidate, largest first, with the tracked
+			// subject reordered to the front: overlap re-finds it without embedding
+			// the other faces when it is still there.
+			var candidates = [sample] + sample.bystanders
+			if let trackedBox {
+				candidates.sort {
+					Self.overlap($0.boundingBox, trackedBox) > Self.overlap($1.boundingBox, trackedBox)
+				}
+			}
+			for candidate in candidates {
+				largestFace = max(largestFace, candidate.boundingBox.height)
+				bestQuality = max(bestQuality, candidate.quality)
+			}
+			let usable = candidates.filter { FrameQuality.rejection($0) == nil }
+			guard !usable.isEmpty else {
 				matchingHold.reset()
 				rejectionHold.reset()
 				resetMovementGuidance(reason: "frame quality")
 				qualityRejects += 1
-				switch rejection {
-				case .invalidMeasurements: break
+				switch FrameQuality.rejection(sample) {
 				case .tooSmall: tooSmall += 1
 				case .tooBlurred: tooBlurred += 1
+				default: break
 				}
 				continue
 			}
@@ -559,12 +601,34 @@ final class LockWatcher {
 			if evaluatedContinuity != sampleContinuity {
 				matchingHold.reset()
 				rejectionHold.reset()
+				trackedBox = nil
 				resetMovementGuidance(reason: "camera continuity")
 				evaluatedContinuity = sampleContinuity
 			}
 			guard let sampleCapturedAt = camera.lastFrameCapturedAt else { continue }
 			let inferenceStarted = ContinuousClock.now
-			let result = await evaluator.evaluate(sample)
+			var result = await evaluator.evaluate(usable[0])
+			var frameBest = result.score
+			var matchedSample: FaceSample? = result.matched ? usable[0] : nil
+			// The tracked subject is tried first and the rest are skipped when it
+			// matches, so a held look costs one embedding a frame. Otherwise every
+			// usable face is tried until one matches; only a frame where none match
+			// counts as a miss, so a stranger beside the owner never fails the frame.
+			// Every later check (anti-spoof, movement) runs on the matched face.
+			if matchedSample == nil {
+				for candidate in usable.dropFirst() {
+					let next = await evaluator.evaluate(candidate)
+					frameBest = max(frameBest, next.score)
+					if next.matched {
+						result = next
+						matchedSample = candidate
+						break
+					}
+				}
+			}
+			// Candidates come from the same camera frame, so sampleFrameID captured
+			// above is still correct after the swap.
+			if let matchedSample { sample = matchedSample }
 			if renderDiagnostics { tickInferenceMs = renderMs(inferenceStarted, ContinuousClock.now) }
 			guard requestIsCurrent(), camera.state == .running,
 				camera.boundDeviceID == pinnedCamera else { return }
@@ -579,10 +643,11 @@ final class LockWatcher {
 				}
 				matchingHold.reset()
 				rejectionHold.reset()
+				trackedBox = nil
 				resetMovementGuidance(reason: "stale inference")
 				continue
 			}
-			bestScore = max(bestScore, result.score)
+			bestScore = max(bestScore, frameBest)
 			guard result.matched, let face = result.face else {
 				matchingHold.reset()
 				if challengeGate.isPresented, let challenge {
@@ -641,11 +706,12 @@ final class LockWatcher {
 					challengeGate.reset()
 					matchingHold.reset()
 					rejectionHold.reset()
+					await evaluator.resetSpoofCues()
 					cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
 					continue
 				}
 			}
-			guard result.permitsMatchHold(requiresAntiSpoof: antiSpoofEnabled) else {
+			guard result.permitsMatchHold(requiresAntiSpoof: true) else {
 				report(.verificationUnavailable)
 				matchingHold.reset()
 				challenge?.reset()
@@ -655,7 +721,14 @@ final class LockWatcher {
 			}
 			if matchingHold.faceID != face.id {
 				resetMovementGuidance(reason: "identity changed")
+			} else if let trackedBox,
+				Self.overlap(sample.boundingBox, trackedBox) < Self.subjectChangeOverlap
+			{
+				// Same enrolled face, different physical subject: it must not inherit the hold.
+				matchingHold.reset()
+				resetMovementGuidance(reason: "subject changed")
 			}
+			trackedBox = sample.boundingBox
 			let heldMatch = matchingHold.consume(faceID: face.id, now: sampleCapturedAt,
 				required: .seconds(Self.requiredMatchDuration))
 			if !challengeGate.isPresented && !challengeGate.isVerified {

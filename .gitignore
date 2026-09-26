@@ -1,6 +1,11 @@
 # Build output
 build/
 *.dSYM/
+*.dmg
+
+# Xcode noise
+xcuserdata/
+DerivedData/
 
 # Compiled Core ML models — regenerated from the .mlpackage by build.sh
 *.mlmodelc/
@@ -10,6 +15,9 @@ Plugin/build/
 
 # macOS noise
 .DS_Store
+
+# Local environment
+.env*
 
 # Python tool caches
 __pycache__/
@@ -52,3 +60,12 @@ Tools/*Paperwork.md
 # Raw face-embedding package: provenance unresolved, not for publication.
 # build.sh prefers the local prebuilt .mlmodelc; see NOTICE.md.
 Resources/FaceEmbedding.mlpackage/
+
+# Local tooling and data kept out of the repository.
+.DS_Store
+.agents/
+.claude/
+.codex/
+.commandcode/
+AGENTS.md
+Data/

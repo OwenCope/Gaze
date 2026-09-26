@@ -1,0 +1,101 @@
+# 0.1
+
+First release. It unlocks your Mac by recognising your face with the built-in camera.
+
+## Setting up
+
+Enrol once. You turn your head slowly while it captures you from a range of angles, the way
+you'd set up Gaze on a phone. After that, lock your screen and it looks for you.
+
+## Two modes
+
+**Just recognise me** runs the whole recognition path and unlocks nothing. No password is
+asked for or stored. It's the honest way to try it.
+
+**Unlock my Mac** types your account password for you when it recognises you. Touch ID keeps
+working alongside it.
+
+## On the lock screen
+
+Choose one or two movement challenges in Settings under “Movements to unlock this
+Mac.” Two is the default. Follow each prompt and return to your starting position;
+onboarding shows how. The normal return animation keeps its text caption hidden,
+while Reduce Motion retains the written cue. A “Show captions” switch in Settings
+under “Expressions” hides the movement guidance and status words with their symbols
+and leaves the mark itself in place. The panel still opens and the mark still shows
+each movement, and what Gaze checks and when it unlocks stay the same. With captions
+off there are no written cues at all, so the written return cue goes away too.
+
+A panel in the notch: a padlock while it's resting, the Gaze mark while it's looking, a
+green tick when it's you, a shake when it isn't. Three styles and size sliders, because
+notches and taste both vary. The “Show captions” switch in Settings under “Expressions”
+turns those words off and leaves the mark on its own.
+
+The match has to hold for two seconds before anything happens, so a deliberate look unlocks
+your Mac and someone walking past the camera doesn't.
+
+## What this isn't
+
+It isn't Apple's Face ID. Apple's uses a TrueDepth camera that measures the shape of your face
+with infrared dots. No Mac has that sensor. This reads an ordinary flat image, so it can't tell
+you from a good photograph of you the way an iPhone can. Treat it as a convenience, not as a
+lock.
+
+## Your face and your password
+
+Faceprints are numbers derived from your face, not pictures. No images are kept.
+
+Everything stored is encrypted with a key generated inside the Secure Enclave, which never
+leaves it — so copying the files to another Mac gets you nothing. If you choose the mode that
+types your password, that password is stored in a form the app can decrypt. It has to be, in
+order to type it, and there's no way around that.
+
+`SECURITY.md` documents the whole path and, more usefully, what it doesn't protect against.
+Worth reading before you pick the second mode.
+
+## Requirements
+
+- macOS 26
+- A Mac with a Secure Enclave. Without one, nothing is stored at all rather than being stored
+  more weakly.
+- Camera access. Accessibility permission too, but only for the mode that types.
+
+## Also in this release
+
+- Only the built-in camera is trusted, and only the one you enrolled on. Virtual cameras are
+  refused.
+- Gaze switches off after six failed attempts until you enter your account password.
+- Follows your system appearance.
+- Optional Touch ID confirmation before changing anything in Settings.
+
+## Known limitations
+
+- Photo rejection is always on: Gaze refuses to unlock when the anti-spoof model
+  is missing (fail closed). It looks for a held phone, screen or print in the
+  frame, and it blocks the unlock when it finds one or when a frame cannot be
+  judged. A photo or video may still fool it; the movement challenges are an
+  additional check.
+- The authorization-plugin route was removed. It can leave you unable to log in at all, which
+  is not a risk worth a nicer lock screen.
+- If you run another notch app, its bar and this one cover the same strip of screen. The
+  resting state is sized to hide underneath rather than fight it, but the panel that drops out
+  while scanning will still draw over whatever is there.
+- Recognition is a similarity threshold, not proof of identity. Someone who looks a great deal
+  like you may get in.
+
+## Thanks
+
+deepinsight, for [InsightFace's ArcFace](https://github.com/deepinsight/insightface) —
+the recognition model this app matches faces with (first obtained via Sapphire,
+which bundles the same model).
+
+Aviorrok, for [DynamicLake](https://dynamiclake.com) — the notch panel and the settings window
+both follow its lead.
+
+DanFQ, for [Atoll](https://getatoll.app), and for reading this code more carefully than I did.
+
+Everyone in the Discord who looked at early screenshots and said what was wrong with them. A
+good deal of this release is other people's feedback.
+
+Most of this was vibecoded, which is not a disclaimer so much as the reason it exists at all.
+Bug reports and pull requests both welcome.

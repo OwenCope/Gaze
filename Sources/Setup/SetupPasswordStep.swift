@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Takes the account password, which is what makes the unlock an unlock.
@@ -18,6 +19,7 @@ struct SetupPasswordStep: View {
 	var onSaved: () -> Void
 	var onSkip: () -> Void
 	var onBack: (() -> Void)?
+	var onClose: (() -> Void)? = nil
 
 	@State private var password = ""
 	@State private var isChecking = false
@@ -33,10 +35,11 @@ struct SetupPasswordStep: View {
 			title: "Your login password",
 			message:
 				"Enter the password you type at login on this Mac.\nmacOS checks it before Gaze saves an encrypted copy in the keychain.\nIf you change your Mac password later, save the new one in Gaze Settings.",
-			figureHeight: 132,
-			onBack: onBack
+			figureHeight: 200,
+			onBack: onBack,
+			onClose: onClose
 		) {
-			SetupGlyph(symbol: "key.fill")
+			SetupPasswordFigure()
 		} detail: {
 			VStack(spacing: 0) {
 				GlassField(
@@ -106,6 +109,43 @@ struct SetupPasswordStep: View {
 					password = ""
 				}
 			}
+		}
+	}
+}
+
+/// The password step has no saved state of its own — a successful save calls
+/// `onSaved` and leaves the step — so the companion stays neutral and the key
+/// stays put. Kept as its own view so the figure reads as one piece.
+private struct SetupPasswordFigure: View {
+	var body: some View {
+		ZStack {
+			SetupTourBackdrop()
+			HStack(spacing: 40) {
+				GazeLookingCompanion(look: 1, happy: false)
+					.frame(width: 110, height: 110)
+				Image(systemName: "key.fill")
+					.font(.system(size: 52, weight: .medium))
+					.foregroundStyle(.white)
+					.symbolRenderingMode(.monochrome)
+			}
+		}
+		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+		.accessibilityHidden(true)
+	}
+}
+
+/// The tour backdrop behind a setup figure, or a dark fill when it is missing.
+private struct SetupTourBackdrop: View {
+	var body: some View {
+		if let url = Bundle.main.url(forResource: "tour-backdrop", withExtension: "png", subdirectory: "Art"),
+			let image = NSImage(contentsOf: url)
+		{
+			Image(nsImage: image)
+				.resizable()
+				.scaledToFill()
+		} else {
+			Color(white: 0.06)
 		}
 	}
 }

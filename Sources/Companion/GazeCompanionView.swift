@@ -37,7 +37,7 @@ struct GazeCompanionView: View {
 		let renderContext = "\(presentation == .notch ? "notch" : "standard").\(motion)"
 		Group {
 			if renderError != nil {
-				TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !canAnimate || settled)) { context in
+				TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !canAnimate || settled)) { context in
 					let pose = sample(context.date.timeIntervalSinceReferenceDate)
 					GeometryReader { geometry in
 						let side = min(geometry.size.width, geometry.size.height)
@@ -55,6 +55,7 @@ struct GazeCompanionView: View {
 						renderError = $0
 						Self.logger.error("Metal companion failed in \(renderContext, privacy: .public); fell back to 2D drawing: \($0, privacy: .public)")
 					})
+			}
 		}
 		.accessibilityHidden(true)
 		.onAppear { visible = true }

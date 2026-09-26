@@ -54,16 +54,16 @@ enum Theme {
 	/// because a hairline was drawn round it to say where the edge was. Tone has to carry
 	/// that on its own now, the way System Settings does it, so the step up from the ground
 	/// is a step you can actually see.
-	/// Pro Black: graphite-over-black in both appearances (dark-first), so a group reads
-	/// by tone alone against `background`.
-	static let surface = dynamic(light: .white.opacity(0.12), dark: .white.opacity(0.12))
-	static let surfaceRaised = dynamic(light: .white.opacity(0.18), dark: .white.opacity(0.18))
+	/// Dark: graphite over black. Light: a faint grey wash over the pale ground, the way
+	/// System Settings groups read in a light appearance.
+	static let surface = dynamic(light: .black.opacity(0.05), dark: .white.opacity(0.12))
+	static let surfaceRaised = dynamic(light: .black.opacity(0.08), dark: .white.opacity(0.18))
 	/// Settings groups only: a calmer, more solid neutral fill so rows stay readable over
-	/// wallpaper. Graphite in both appearances (dark-first).
-	static let settingsGroupFill = dynamic(light: Color(white: 0.14).opacity(0.86), dark: Color(white: 0.14).opacity(0.86))
+	/// wallpaper. Graphite in dark, near-white in light.
+	static let settingsGroupFill = dynamic(light: Color(white: 1).opacity(0.86), dark: Color(white: 0.14).opacity(0.86))
 	/// Keep the original group tint over the Semi Liquid Glass backdrop.
 	static let settingsGlassGroupFill = surface
-	static let separator = dynamic(light: .white.opacity(0.09), dark: .white.opacity(0.09))
+	static let separator = dynamic(light: .black.opacity(0.1), dark: .white.opacity(0.09))
 
 	static let setupGround = dynamic(light: Color(white: 0.96), dark: .black)
 	/// The muted line under a title — same level as `secondaryLabel` resolves to in dark.
@@ -156,11 +156,11 @@ enum Theme {
 
 	/// Label opacities are set against the *worst* case, not the average one.
 	///
-	/// Pro Black: white primary text in both appearances (dark-first), holding WCAG AA
-	/// against the near-black ground. Values match the dark-appearance ramps.
-	static let label = dynamic(light: .white, dark: .white)
-	static let secondaryLabel = dynamic(light: .white.opacity(0.68), dark: .white.opacity(0.68))
-	static let tertiaryLabel = dynamic(light: .white.opacity(0.52), dark: .white.opacity(0.52))
+	/// White text on the dark ground, near-black on the light one; both ramps hold WCAG AA.
+	/// Light used to be the dark values too, so choosing the Light theme changed nothing.
+	static let label = dynamic(light: Color(white: 0.11), dark: .white)
+	static let secondaryLabel = dynamic(light: .black.opacity(0.62), dark: .white.opacity(0.68))
+	static let tertiaryLabel = dynamic(light: .black.opacity(0.48), dark: .white.opacity(0.52))
 
 	/// Controls are neutral.
 	///
@@ -175,9 +175,9 @@ enum Theme {
 	/// What a filled control's label is knocked out in: the opposite of `accent`.
 	static let onAccent = dynamic(light: .white.opacity(0.95), dark: .black.opacity(0.88))
 
-	/// Selected and hovered rows: white washes for the dark-first ground, in both appearances.
-	static let selection = dynamic(light: .white.opacity(0.16), dark: .white.opacity(0.16))
-	static let hoverFill = dynamic(light: .white.opacity(0.07), dark: .white.opacity(0.07))
+	/// Selected and hovered rows: a white wash on dark, a grey wash on light.
+	static let selection = dynamic(light: .black.opacity(0.08), dark: .white.opacity(0.16))
+	static let hoverFill = dynamic(light: .black.opacity(0.05), dark: .white.opacity(0.07))
 
 	/// Apple's system green. Gaze identity only, never chrome.
 	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
@@ -222,13 +222,12 @@ struct WindowGlass: View {
 		extraTranslucent ? .black.opacity(opacity) : Theme.scrim(opacity)
 	}
 
-	/// A plain solid ground, graphite in both appearances (Pro Black dark-first), so the
-	/// window never renders as a white slab. `VibrantBackground` stays underneath purely
+	/// A plain solid ground: graphite in dark, pale grey in light. `VibrantBackground` stays underneath purely
 	/// for its title-bar handling; the opaque colour on top of it is what you actually see.
 	/// Semi Liquid Glass (`extraTranslucent`) still gets the real material for anyone who
 	/// wants it.
 	private static let solidGround = Theme.dynamic(
-		light: Color(white: 0.145),
+		light: Color(white: 0.95),
 		dark: Color(white: 0.145))
 
 	var body: some View {

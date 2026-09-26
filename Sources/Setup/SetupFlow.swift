@@ -85,10 +85,12 @@ struct SetupFlow: View {
 					position: position(of: .how),
 					onContinue: advance,
 					onBack: back,
+					onClose: onFinish,
 					movementCount: Preferences.shared.unlockMovementCount.rawValue
 				)
 			case .meetGaze:
 				SetupMeetGazeStep(position: position(of: .meetGaze), onContinue: advance, onBack: back,
+					onClose: onFinish,
 					movementCount: Preferences.shared.unlockMovementCount.rawValue)
 			case .capture:
 				SetupCaptureStep(
@@ -97,7 +99,8 @@ struct SetupFlow: View {
 					model: model,
 					onAuthorized: startCamera,
 					onBack: purpose == .addFace ? nil : back,
-					onClose: purpose == .addFace ? onFinish : nil,
+					// Always closable: a scan that isn't going well needs a way out.
+					onClose: onFinish,
 					onRetry: retry
 				)
 				.id(captureSession)
@@ -106,14 +109,16 @@ struct SetupFlow: View {
 					position: position(of: .password),
 					onSaved: advance,
 					onSkip: advance,
-					onBack: backDestination(from: .password) != nil ? back : nil
+					onBack: backDestination(from: .password) != nil ? back : nil,
+					onClose: onFinish
 				)
 			case .permission:
 				SetupPermissionStep(
 					position: position(of: .permission),
 					onContinue: advance,
 					onSkip: advance,
-					onBack: backDestination(from: .permission) != nil ? back : nil
+					onBack: backDestination(from: .permission) != nil ? back : nil,
+					onClose: onFinish
 				)
 			case .done:
 				SetupDoneStep(
@@ -167,7 +172,9 @@ struct SetupFlow: View {
 					.clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 			}
 		}
-		.preferredColorScheme(Preferences.shared.appTheme.colorScheme)
+		// Setup is designed dark only. Following a light system turned its text black
+		// on its own black ground.
+		.preferredColorScheme(.dark)
 		// Back to the beginning every time the window is shown.
 		//
 		// A SwiftUI `Window` scene keeps its state when it is closed and reopened,
@@ -190,7 +197,13 @@ struct SetupFlow: View {
 		// consecutive poses are normal and must still advance the state machine.
 		.onChange(of: camera.frameID) { _, _ in
 			guard step == .capture else { return }
-			model?.consume(camera.faceMissing ? nil : camera.sample)
+			// A second face pauses capture without counting as no face: progress is
+			// held and the message names whose face to move.
+			let crowded = switch camera.absence {
+			case .multipleFaces: true
+			default: false
+			}
+			model?.consume(camera.faceMissing ? nil : camera.sample, multipleFaces: crowded)
 		}
 		.onChange(of: model?.phase) { _, phase in
 			switch phase {

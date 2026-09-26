@@ -14,11 +14,11 @@ enum PasswordVault {
 	}
 
 	static var hasPassword: Bool {
-		Keychain.read(account) != nil
+		(try? Keychain.exists(account)) ?? false
 	}
 
 	static func containsPassword() throws -> Bool {
-		try Keychain.load(account) != nil
+		try Keychain.exists(account)
 	}
 
 	/// Checks the password against the local directory before storing it, so a typo

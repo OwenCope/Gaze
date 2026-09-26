@@ -131,7 +131,9 @@ struct GazeCompanionRenderer: NSViewRepresentable {
 		view.clearColor = MTLClearColorMake(0, 0, 0, 0)
 		view.enableSetNeedsDisplay = true
 		view.isPaused = true
-		view.preferredFramesPerSecond = 30
+		// The display's own rate, up to 120 on ProMotion. At 30 the face visibly stepped
+		// next to everything else on screen animating at 60 or 120.
+		view.preferredFramesPerSecond = min(120, max(60, NSScreen.main?.maximumFramesPerSecond ?? 60))
 		view.setAccessibilityElement(false)
 		do {
 			context.coordinator.gpu = try SoftFaceGPU.shared()

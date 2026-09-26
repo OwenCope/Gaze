@@ -35,6 +35,24 @@ enum Keychain {
 		return data
 	}
 
+	/// Whether an item exists, without reading its data. Attribute-only queries never
+	/// trigger the "wants to use your confidential information" prompt, so status checks
+	/// that SwiftUI re-evaluates freely can call this as often as they like.
+	static func exists(_ account: String) throws -> Bool {
+		let query: [String: Any] = [
+			kSecClass as String: kSecClassGenericPassword,
+			kSecAttrService as String: service,
+			kSecAttrAccount as String: account,
+			kSecReturnAttributes as String: true,
+			kSecMatchLimit as String: kSecMatchLimitOne,
+		]
+		var item: CFTypeRef?
+		let status = SecItemCopyMatching(query as CFDictionary, &item)
+		if status == errSecItemNotFound { return false }
+		guard status == errSecSuccess else { throw ReadError.status(status) }
+		return true
+	}
+
 	@discardableResult
 	static func write(_ data: Data, to account: String) -> Bool {
 		let query: [String: Any] = [

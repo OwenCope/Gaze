@@ -44,7 +44,7 @@ final class GazeBrowserApproval {
 		defer { busy = false; session.invalidate() }
 		lockout.recordFailure()
 		guard !lockout.isLockedOut else { throw BrowserBridgeError.unavailable }
-		let faceIDs = store.faces.map(\.id)
+		let faceIDs = store.faces.filter(\.isEnabled).map(\.id)
 		let requestLease = BrowserRequestLease(request)
 		let camera = CameraController()
 		let panel = BrowserGuidancePanel(origin: request.origin)
@@ -52,14 +52,14 @@ final class GazeBrowserApproval {
 		defer { session.onInvalidation = nil; camera.stop(); panel.close() }
 		func current() -> Bool {
 			!Task.isCancelled && policyPermitsApproval && !Preferences.shared.isPaused && !captureWindowIsOpen && session.isValid && requestLease.permits(request)
-				&& !store.isCorrupted && store.faces.map(\.id) == faceIDs && store.pinnedCameraID == pinnedCamera
+				&& !store.isCorrupted && store.faces.filter(\.isEnabled).map(\.id) == faceIDs && store.pinnedCameraID == pinnedCamera
 				&& !lockout.isLockedOut
 		}
 		guard current() else { throw BrowserBridgeError.cancelled }
 		panel.show()
 		await camera.start(pinnedDeviceID: pinnedCamera)
 		guard current(), camera.state == .running, camera.boundDeviceID == pinnedCamera else { throw BrowserBridgeError.unavailable }
-		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces, antiSpoof: detector)
+		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces.filter(\.isEnabled), antiSpoof: detector)
 		let challenge = LivenessChallenge()
 		var gate = UnlockChallengeGate()
 		var frames = RecognitionFrameGate()
@@ -179,11 +179,12 @@ private final class BrowserGuidancePanel: ObservableObject {
 
 private struct BrowserGuidanceView: View {
 	@ObservedObject var model: BrowserGuidancePanel
+	@Environment(\.colorScheme) private var colorScheme
 	var body: some View {
 		VStack(spacing: 12) {
 			Text("Approve with Gaze").font(.headline)
 			Text(model.origin.value).font(.caption).lineLimit(2).textSelection(.enabled)
-			GazeLessonAnimation(motion: model.motion, paused: false, material: .charcoal).frame(width: 108, height: 108)
+			GazeLessonAnimation(motion: model.motion, paused: false, material: colorScheme == .dark ? .ink : .charcoal).frame(width: 108, height: 108)
 			Text(model.motion == .scanning ? "Look at Gaze" : "Follow this movement").font(.callout).foregroundStyle(.secondary)
 			Button("Cancel") { model.cancelled = true }.gazeButton().keyboardShortcut(.cancelAction)
 		}.padding(20).frame(width: 330, height: 250).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28))

@@ -1,5 +1,12 @@
 # Security
 
+## Reporting a vulnerability
+
+Do not open a public issue for a security problem. Please report it through
+GitHub private vulnerability reporting on the OwenCope/Gaze repository
+(Security tab > Report a vulnerability), so it stays private until a fix is
+ready. Findings about this document are as welcome as findings about the code.
+
 How the app handles your account password and your faceprint, and what it does not defend
 against. Everything here is checkable against the files named at the bottom.
 
@@ -7,10 +14,10 @@ against. Everything here is checkable against the files named at the bottom.
 
 **Gaze no longer provides app autofill in the new build.** Its Autofill pane, activation
 preference, global shortcut, watcher and saved-app-store initialization are removed.
-`Tools/MainAppSources.sh` excludes the retired autofill sources and UI from the main
+`Tools/Scripts/MainAppSources.sh` excludes the retired autofill sources and UI from the main
 executable. Gaze retains Mac unlocking, enrollment and the security controls described below.
 The retired autofill sources remain in the tree but are excluded from the build by
-`Tools/MainAppSources.sh`; they are not wired into the product.
+`Tools/Scripts/MainAppSources.sh`; they are not wired into the product.
 
 Existing saved-app vault records are **not read, copied, migrated or deleted** by this
 separation. The Mac account password used by Gaze's lock-screen backend remains separate.
@@ -40,7 +47,7 @@ Verification at separation time: product-source separation, sandbox/build policy
 privacy/session events and launch-confirmation handling were checked without launching
 other apps or touching secrets, and the runs passed. Those harnesses are not published
 in this repository, so the results cannot be re-run or re-verified from what is here.
-What the reader can check directly is the exclusion itself: `Tools/MainAppSources.sh`
+What the reader can check directly is the exclusion itself: `Tools/Scripts/MainAppSources.sh`
 lists the retired sources it keeps out of the main executable. Successful compilation,
 rendering and simulated event tests do not validate actual Touch ID, camera capture,
 system login or a real credential provider.
@@ -72,8 +79,9 @@ Behavior changes in this source checkout:
   launch instance, signing requirement, record revision and secure focused field are checked
   again before release. All writes remain targeted Accessibility writes, with no fallback.
 - Password-based Mac unlocking now always requires the enrolled built-in camera and a random
-  movement challenge, regardless of the older opt-out preferences. When optional object-based
-  anti-spoof protection is enabled, a missing model or failed/invalid inference denies unlock.
+  movement challenge, regardless of the older opt-out preferences. Anti-spoof photo
+  rejection is always on: a missing model or failed/invalid inference denies unlock
+  (fail closed).
   Recognition and anti-spoof score thresholds are unchanged.
 - Camera start/stop work is serialized. Capture generations invalidate late callbacks;
   sample-age checks reject delayed processing. Repeated frames cannot advance recognition.
@@ -225,8 +233,9 @@ This is a convenience choice for hands-free credential replay, not a requirement
 autofill secrets. A separate, opt-in authentication-protected autofill vault is pending review.
 
 **Not TrueDepth.** Apple's Face ID measures face geometry with a structured-light projector. No
-Mac in this design uses one. This app reads a flat camera image. Its optional anti-spoof model
-and now-mandatory lock-screen movement challenge are not equivalent to depth sensing.
+Mac in this design uses one. This app reads a flat camera image. Its always-on anti-spoof
+photo rejection and mandatory lock-screen movement challenge are not equivalent to depth
+sensing, and a photo or video may still fool it.
 Autofill instead requires fresh macOS owner approval in addition to its face check. A photograph bypass has not
 been established by this review; resistance to photographs and video needs physical testing.
 
@@ -347,5 +356,7 @@ which is the API `dscl` wraps.
 
 ## Reporting
 
-Open an issue. Findings about this document are as welcome as findings
+For general security questions, open an issue. For a suspected vulnerability,
+use GitHub private vulnerability reporting instead (see above) — not a public
+issue. Findings about this document are as welcome as findings
 about the code.

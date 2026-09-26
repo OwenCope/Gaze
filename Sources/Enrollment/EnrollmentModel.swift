@@ -39,17 +39,41 @@ final class EnrollmentModel {
 	private(set) var captureStatus: CaptureStatus = .noFace
 
 	enum CaptureStatus: Equatable {
-		case noFace, tooSmall, lowQuality, invalidMeasurements, embeddingUnavailable, steady, turning
+		case noFace, tooSmall, lowQuality, invalidMeasurements, embeddingUnavailable, multipleFaces, steady, turning
 	}
 
+	/// The gap to aim at: the nearest uncovered segment to where the head is, held until
+	/// it fills. It used to be the first uncovered segment around the ring, which leapt
+	/// across the circle each time a gap closed.
 	var targetSegment: Int? {
 		guard case .capturing = phase, progress > 0.25 else { return nil }
-		return covered.firstIndex(of: false)
+		if let heldTarget, !covered[heldTarget] { return heldTarget }
+		return nearestUncovered(to: segmentIndex(for: currentAngle))
+	}
+
+	private var heldTarget: Int?
+
+	private func nearestUncovered(to index: Int) -> Int? {
+		let count = Self.segmentCount
+		for distance in 0...(count / 2) {
+			for candidate in [(index + distance) % count, (index - distance + count) % count] where !covered[candidate] {
+				return candidate
+			}
+		}
+		return nil
+	}
+
+	/// Both passes as one figure: the first fills 0–50%, the second 50–100%. Shown per
+	/// pass, the number fell from the high 90s back to zero with no explanation.
+	var overallProgress: Double {
+		if phase == .complete { return 1 }
+		return (Double(pass - 1) + progress) / 2
 	}
 
 	var captureTitle: String {
 		switch captureStatus {
 		case .noFace: return "Bring your face back into view"
+		case .multipleFaces: return "Only one face in view, please"
 		case .tooSmall: return "Move a little closer"
 		case .lowQuality: return "Pause in brighter light"
 		case .invalidMeasurements, .embeddingUnavailable: return "Hold your face toward the camera"
@@ -70,6 +94,7 @@ final class EnrollmentModel {
 		if phase != .complete {
 			switch captureStatus {
 			case .noFace: return "No usable face is coming through. Your captured progress is kept."
+			case .multipleFaces: return "More than one face is in view. Only the person being enrolled should be in frame. Your captured progress is kept."
 			case .tooSmall: return "Your face is visible, but needs to fill more of the camera view."
 			case .lowQuality: return "Your face is visible, but this frame isn’t clear enough to save. Face a light and pause briefly."
 			case .invalidMeasurements: return "Your face measurements aren’t usable yet. Look straight ahead for a moment."
@@ -104,10 +129,21 @@ final class EnrollmentModel {
 	}
 
 	/// Feed every camera frame here. Nil means no single usable face was found.
-	func consume(_ sample: FaceSample?) {
+	func consume(_ sample: FaceSample?, multipleFaces: Bool = false) {
 		switch phase {
 		case .complete, .failed: return
 		default: break
+		}
+
+		// A second face pauses capture without enrolling either one and without
+		// discarding progress, like a dropped frame with its own message.
+		if multipleFaces {
+			captureStatus = .multipleFaces
+			framesWithFace = 0
+			isEngaged = false
+			if case .capturing = phase { return }  // Don't reset mid-pass on a dropped frame.
+			phase = .positioning
+			return
 		}
 
 		let rejection: CaptureStatus? = {
@@ -149,6 +185,13 @@ final class EnrollmentModel {
 			phase = .capturing(pass: pass)
 		}
 
+		// An unavailable pose axis is NaN, and `min(1, NaN)` in `offCentre` reads as fully
+		// turned, so without this a frame with no angle counted as a turn and then crashed
+		// converting its NaN ring angle to a segment. No angle, no ring progress.
+		guard sample.pose.yaw.isFinite, sample.pose.pitch.isFinite, sample.pose.roll.isFinite else {
+			isEngaged = false
+			return
+		}
 		currentAngle = sample.pose.ringAngle
 		isEngaged = sample.pose.offCentre >= Self.engagementThreshold
 
@@ -175,6 +218,7 @@ final class EnrollmentModel {
 			prints.append(faceprint)
 		}
 		for index in neighbours { covered[index] = true }
+		if heldTarget == nil || covered[heldTarget!] { heldTarget = targetSegment }
 
 		guard progress >= 1 else { return }
 		advancePass()
@@ -184,6 +228,7 @@ final class EnrollmentModel {
 		if pass == 1 {
 			pass = 2
 			covered = [Bool](repeating: false, count: Self.segmentCount)
+			heldTarget = nil
 			phase = .capturing(pass: 2)
 		} else {
 			phase = prints.count >= 8
@@ -203,6 +248,7 @@ final class EnrollmentModel {
 		covered = [Bool](repeating: false, count: Self.segmentCount)
 		prints = []
 		pass = 1
+		heldTarget = nil
 		framesWithFace = 0
 		isEngaged = false
 		currentAngle = 0

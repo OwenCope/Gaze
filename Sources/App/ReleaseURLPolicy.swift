@@ -26,7 +26,7 @@ enum ReleaseURLPolicy {
 		configuration.httpCookieStorage = nil
 		configuration.urlCredentialStorage = nil
 		configuration.urlCache = nil
-		configuration.timeoutIntervalForRequest = 12
+		configuration.timeoutIntervalForRequest = 15
 		configuration.timeoutIntervalForResource = 20
 		return configuration
 	}

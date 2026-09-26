@@ -64,14 +64,6 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			section: "securitySection"
 		),
 		SettingsSearchItem(
-			id: "photo-rejection",
-			title: "Reject photos held up to the camera",
-			subtitle: "Anti-spoof check before unlocking",
-			keywords: ["photo", "photos", "picture", "spoof", "spoofing", "anti-spoof", "reject"],
-			pane: "face",
-			section: "securitySection"
-		),
-		SettingsSearchItem(
 			id: "movements",
 			title: "Movements to unlock this Mac",
 			subtitle: "How many completed responses unlocking requires",
@@ -147,7 +139,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			id: "notch",
 			title: "Notch panel",
 			subtitle: "How the panel under the notch looks",
-			keywords: ["notch", "panel", "style", "island", "minimal", "dynamic", "caption", "captions", "instructions"],
+			keywords: ["notch", "panel", "style", "dynamic island", "island", "capsule", "caption", "captions", "instructions"],
 			pane: "notch",
 			section: "NotchSettingsSection"
 		),

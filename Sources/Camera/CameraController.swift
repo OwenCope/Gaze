@@ -38,6 +38,9 @@ struct FaceSample: @unchecked Sendable {
 	/// Vision's own view of whether this frame is good enough to identify from.
 	let quality: Float
 	let pixelBuffer: CVPixelBuffer
+	/// Other faces in the same frame, largest first, when bystanders are allowed. Each is
+	/// matched on its own; the one that matches an enrolled face is the one used.
+	var bystanders: [FaceSample] = []
 }
 
 /// Owns the capture session and turns frames into `FaceSample`s.
@@ -86,8 +89,12 @@ final class CameraController {
 	private var observers: [NSObjectProtocol] = []
 	private let sessionGate: CameraSessionGate
 
-	init(accessScope: CameraSessionGate.Scope = .foreground) {
+	/// `allowsBystanders`: when several faces are in view, analyse up to three of them and
+	/// let recognition pick the enrolled one, instead of refusing the frame. On by default at the lock screen only; setup
+	/// keeps the strict one-face rule so a bystander can never be enrolled.
+	init(accessScope: CameraSessionGate.Scope = .foreground, allowsBystanders: Bool? = nil) {
 		sessionGate = CameraSessionGate(scope: accessScope)
+		capture.allowsBystanders = allowsBystanders ?? (accessScope == .lockScreen)
 		for name in [AVCaptureSession.runtimeErrorNotification, AVCaptureSession.wasInterruptedNotification] {
 			observers.append(NotificationCenter.default.addObserver(forName: name, object: capture.session, queue: .main) { [weak self] _ in
 				MainActor.assumeIsolated {
@@ -225,6 +232,7 @@ private final class CameraCaptureDriver: @unchecked Sendable {
 	private let sessionQueue = DispatchQueue(label: "com.gazeunlock.Gaze.session", qos: .userInitiated)
 	private let frameQueue = DispatchQueue(label: "com.gazeunlock.Gaze.capture", qos: .userInitiated)
 	private var proxy: SampleProxy?
+	var allowsBystanders = false
 
 	func start(with device: AVCaptureDevice,
 		onSample: @escaping @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void) async throws -> Bool {
@@ -263,7 +271,7 @@ private final class CameraCaptureDriver: @unchecked Sendable {
 		}
 		session.addInput(input)
 
-		let proxy = SampleProxy(onSample: onSample)
+		let proxy = SampleProxy(onSample: onSample, allowsBystanders: allowsBystanders)
 		self.proxy = proxy
 
 		output.videoSettings = [
@@ -292,9 +300,12 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 	private let rectanglesRequest = VNDetectFaceRectanglesRequest()
 	private let landmarksRequest = VNDetectFaceLandmarksRequest()
 	private let qualityRequest = VNDetectFaceCaptureQualityRequest()
+	private let allowsBystanders: Bool
 
-	init(onSample: @escaping @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void) {
+	init(onSample: @escaping @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void,
+		allowsBystanders: Bool = false) {
 		self.onSample = onSample
+		self.allowsBystanders = allowsBystanders
 
 		// Pose comes from the *rectangles* request, not the landmarks one, and only from
 		// revision 3 onwards. Running landmarks alone returns observations whose yaw and
@@ -304,6 +315,18 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 		{
 			rectanglesRequest.revision = VNDetectFaceRectanglesRequestRevision3
 		}
+	}
+
+	/// Faces analysed per frame when bystanders are allowed. Recognition runs on each, so
+	/// this bounds the per-frame cost.
+	static let maximumCandidates = 3
+
+	/// The faces to analyse, largest first: the only one, or with bystanders allowed up to
+	/// `maximumCandidates`. Recognition then decides which one, if any, is enrolled.
+	static func candidateFaces(in faces: [VNFaceObservation], allowsBystanders: Bool) -> [VNFaceObservation] {
+		if faces.count == 1 { return faces }
+		guard allowsBystanders, faces.count > 1 else { return [] }
+		return Array(faces.sorted { $0.boundingBox.area > $1.boundingBox.area }.prefix(maximumCandidates))
 	}
 
 	func captureOutput(
@@ -325,8 +348,10 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 			return
 		}
 
-		// Exactly one face, or we decline to guess which one is the user. Two faces in
-		// frame is also the shoulder-surfing case, so refusing is the safe default.
+		// Exactly one face during enrolment, or we decline to guess which one is the
+		// user. Two faces in frame is also the shoulder-surfing case, so refusing is
+		// the safe default there. The lock screen and Test Recognition (allowsBystanders)
+		// analyse up to three faces and use the one that matches.
 		// Exactly one, and the count is worth reporting rather than flattening.
 		//
 		// "No face" was shown for both an empty room and a room with two faces in it, which
@@ -334,25 +359,26 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 		// background is being read as a person. Anybody debugging the second one from the
 		// first one's wording is going to conclude the camera is broken.
 		let detected = rectanglesRequest.results ?? []
-		guard detected.count == 1, let face = detected.first else {
+		let candidates = Self.candidateFaces(in: detected, allowsBystanders: allowsBystanders)
+		guard !candidates.isEmpty else {
 			onSample(nil, detected.isEmpty ? .noFace : .multipleFaces(detected.count), capturedAt)
 			return
 		}
+		let samples = candidates.compactMap { analyse($0, handler: handler, buffer: buffer) }
+		guard var primary = samples.first else {
+			onSample(nil, .analysisFailed, capturedAt)
+			return
+		}
+		primary.bystanders = Array(samples.dropFirst())
+		onSample(primary, nil, capturedAt)
+	}
 
+	/// Landmarks, capture quality and pose for one detected face.
+	private func analyse(_ face: VNFaceObservation, handler: VNImageRequestHandler, buffer: CVPixelBuffer) -> FaceSample? {
 		landmarksRequest.inputFaceObservations = [face]
 		qualityRequest.inputFaceObservations = [face]
-		do {
-			try handler.perform([landmarksRequest, qualityRequest])
-		} catch {
-			onSample(nil, .analysisFailed, capturedAt)
-			return
-		}
-
-		guard let landmarks = landmarksRequest.results?.first?.landmarks else {
-			onSample(nil, .analysisFailed, capturedAt)
-			return
-		}
-
+		do { try handler.perform([landmarksRequest, qualityRequest]) } catch { return nil }
+		guard let landmarks = landmarksRequest.results?.first?.landmarks else { return nil }
 		let quality = qualityRequest.results?.first?.faceCaptureQuality ?? 0
 
 		// Vision's own estimate when it gives one, geometry when it doesn't, per-axis
@@ -365,15 +391,12 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 			visionPitch: face.pitch?.doubleValue,
 			visionRoll: face.roll?.doubleValue,
 			estimate: FacePose.estimate(from: landmarks))
-
-		onSample(
-			FaceSample(
-				landmarks: landmarks,
-				boundingBox: face.boundingBox,
-				pose: pose,
-				quality: quality,
-				pixelBuffer: buffer),
-			nil, capturedAt)
+		return FaceSample(landmarks: landmarks, boundingBox: face.boundingBox, pose: pose,
+			quality: quality, pixelBuffer: buffer)
 	}
 
+}
+
+private extension CGRect {
+	var area: CGFloat { width * height }
 }

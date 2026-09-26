@@ -17,6 +17,7 @@ struct SetupHowStep: View {
 	var position: SetupPosition?
 	var onContinue: () -> Void
 	var onBack: (() -> Void)?
+	var onClose: (() -> Void)? = nil
 	var movementCount = 2
 
 	var body: some View {
@@ -25,7 +26,8 @@ struct SetupHowStep: View {
 			title: "How Gaze unlocks your Mac",
 			message: "Look at the camera, then follow \(movementCount == 1 ? "one small movement" : "two small movements").\nGaze enters your saved login password after verification.",
 			figureHeight: 0,
-			onBack: onBack
+			onBack: onBack,
+			onClose: onClose
 		) {
 			EmptyView()
 		} detail: {
@@ -164,13 +166,13 @@ struct SetupFactArt: View {
 		return Bundle.main.url(forResource: name, withExtension: "mp4", subdirectory: "Art")
 	}
 
-	/// Empty means "compose it" — nothing is named that way now, but the fallback stays
-	/// so a checkout without the images still runs.
+	/// Empty means "compose it". The old `how-*` recordings showed an earlier Settings
+	/// layout, a beige wallpaper and a real account name, so unlock uses the current Pro
+	/// Black tour art and the other two draw their subject live from the app's own parts.
 	private var screenshotName: String {
 		switch kind {
-		case .unlock: return "how-unlock"
-		case .keychain: return "how-keychain"
-		case .onDevice: return "how-ondevice"
+		case .unlock: return "tour-how-unlock"
+		case .keychain, .onDevice: return ""
 		}
 	}
 

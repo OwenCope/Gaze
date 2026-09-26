@@ -46,8 +46,9 @@ final class Preferences {
 		case attached
 		/// A separate rounded island, detached from the notch and floating under it.
 		case island
-		/// Flanks the housing on both sides, never covering it — the Dynamic Island look.
-		case minimal
+		/// A floating capsule under the notch, like iPhone. Stored as "minimal" so
+		/// existing saved preferences still decode.
+		case dynamicIsland = "minimal"
 
 		/// A matched pair, which "Attached" and "Island" were not: one described a
 		/// relationship, the other described an object, so the two never read as two answers
@@ -56,7 +57,7 @@ final class Preferences {
 			switch self {
 			case .attached: return "Connected"
 			case .island: return "Floating"
-			case .minimal: return "Minimal"
+			case .dynamicIsland: return "Dynamic Island"
 			}
 		}
 
@@ -66,8 +67,8 @@ final class Preferences {
 				return "Grows out of the notch, the way the Dynamic Island expands"
 			case .island:
 				return "A separate rounded panel that floats below the notch"
-			case .minimal:
-				return "Keeps to the notch's width, like the Dynamic Island"
+			case .dynamicIsland:
+				return "A floating capsule under the notch, like iPhone"
 			}
 		}
 	}
@@ -159,7 +160,6 @@ final class Preferences {
 		static let showNotchCaptions = "showNotchCaptions"
 		static let notchHeightAdjust = "notchHeightAdjust"
 		static let notchWidthAdjust = "notchWidthAdjust"
-		static let liveness = "livenessEnabled"
 		static let touchIDFallback = "touchIDFallback"
 		static let tamperProtection = "tamperProtection"
 		static let requireBuiltInCamera = "requireBuiltInCamera"
@@ -167,7 +167,6 @@ final class Preferences {
 		static let unlockBackend = "unlockBackend"
 		static let pausedUntil = "pausedUntil"
 		static let walkAwayLock = "walkAwayLock"
-		static let autofillOnActivation = "autofillOnActivation"
 	}
 
 	private let defaults: UserDefaults
@@ -212,13 +211,6 @@ final class Preferences {
 		didSet { defaults.set(walkAwayLock, forKey: Key.walkAwayLock) }
 	}
 
-	/// Fill automatically when a saved app comes forward showing a password box.
-	///
-	/// Off by default. Filling types into another app unprompted, so it stays opt-in.
-	var autofillOnActivation: Bool {
-		didSet { defaults.set(autofillOnActivation, forKey: Key.autofillOnActivation) }
-	}
-
 	/// When a temporary pause runs out, or nil when Gaze is armed.
 	///
 	/// Persisted rather than held in memory, so quitting and relaunching does not silently
@@ -248,13 +240,15 @@ final class Preferences {
 		pausedUntil = Date().addingTimeInterval(duration)
 	}
 
-	/// Anti-spoof checking on captured frames.
+	/// Anti-spoof checking on captured frames: always on.
 	///
-	/// Off by default: it costs latency on every unlock, it needs a model that isn't
-	/// bundled, and it does not defend against the attack that actually matters here
-	/// (frame injection — see `CameraDevice`).
+	/// It used to be a switch, off by default. Turning off the check that stops a photo
+	/// from unlocking the Mac is not a preference anyone should be offered, and the
+	/// model now ships with the app. Kept as a property so callers and the unlock
+	/// readiness check read one place; setting it does nothing.
 	var livenessEnabled: Bool {
-		didSet { defaults.set(livenessEnabled, forKey: Key.liveness) }
+		get { true }
+		set {}
 	}
 
 	/// Use Touch ID to authorise changes inside the app — un-enrolling, storing a
@@ -334,8 +328,6 @@ final class Preferences {
 		self.defaults = defaults
 		pausedUntil = defaults.object(forKey: Key.pausedUntil) as? Date
 		walkAwayLock = defaults.bool(forKey: Key.walkAwayLock)
-		autofillOnActivation = defaults.bool(forKey: Key.autofillOnActivation)
-		livenessEnabled = defaults.bool(forKey: Key.liveness)
 		touchIDFallback = defaults.object(forKey: Key.touchIDFallback) as? Bool ?? true
 		tamperProtection = defaults.bool(forKey: Key.tamperProtection)
 		requireBuiltInCamera = defaults.object(forKey: Key.requireBuiltInCamera) as? Bool ?? true

@@ -1,8 +1,0 @@
-{
-  "src/components/settings-panel.tsx": "6513ce7d8cc94697238ae310bba753a70255fefae9f8cb4f7d317ada6eb42473",
-  "src/components/testers-manager.tsx": "fc3cb7a34330a20768abddcc894a4b1e5b0d7358cb34fa15ffa5bd288ecd0959",
-  "src/components/roles-manager.tsx": "1a0a578bc64bae0138215f428ef5a31a994a5df93f899131ac990d80d95a7955",
-  "src/app/api/settings/route.ts": "b233371af9490e6097bb9dee9553f88e36499fb75ee8ae031251cda85a32c603",
-  "src/app/api/testers/route.ts": "0f170400282d69f732ec2fa3b4f22002340162050c406bcc6e740b927ede1083",
-  "src/app/api/roles/route.ts": "5e164258f1f1b15a5afe216910e25ee661bd8e9a1d91f65648f440462a31b308"
-}

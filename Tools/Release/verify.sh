@@ -45,4 +45,4 @@ echo "PASS: bundle, signed identifier, models, signature, timestamp, entitlement
 echo "Team: $TEAM"
 echo "Architecture: $(lipo -archs "$APP/Contents/MacOS/$EXECUTABLE")"
 echo "Executable SHA-256: $(shasum -a 256 "$APP/Contents/MacOS/$EXECUTABLE" | awk '{print $1}')"
-echo "This is artifact validation, NOT proof of safe recognition, working lock-screen unlock, redistribution rights or clean-install compatibility. Complete Tools/Release/READINESS.md before distributing."
+echo "This is artifact validation, NOT proof of safe recognition, working lock-screen unlock, redistribution rights or clean-install compatibility."

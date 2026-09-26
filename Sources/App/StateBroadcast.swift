@@ -21,7 +21,7 @@ public enum GazeState: String, Sendable {
 	case detecting
 	/// Recognised. The unlock, if one was configured, is happening now.
 	case succeeded
-	/// Not recognised within the search window, or rejected by the liveness check.
+	/// Not recognised within the search window, or rejected by the anti-spoof check or the movement prompt.
 	case failed
 	/// Too many failures. Gaze is disabled until an account password is entered.
 	case lockedOut

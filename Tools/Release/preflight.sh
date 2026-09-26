@@ -85,7 +85,7 @@ for candidate in "$ROOT/build/release/Gaze.app" "$ROOT/build/Gaze.app"; do
 done
 
 if [ "$TOOLS_ONLY" = 0 ]; then
-	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || missing "model/asset clearance evidence is incomplete (see Tools/Release/ModelClearance/OWNER-ANSWERS.md)"
+	python3 "$ROOT/Tools/Release/ModelClearance/validate.py" || missing "model/asset clearance evidence is incomplete (see NOTICE.md)"
 else
 	note 'Build-tools-only check: model/asset clearance is NOT checked; this is not permission to distribute.'
 fi
@@ -93,6 +93,6 @@ if [ "$MISSING" = 0 ]; then
 	echo "PREFLIGHT PASS: checked prerequisites present (build-tools-only=$TOOLS_ONLY); a signed/notarized artifact and live acceptance are still required."
 else
 	echo "PREFLIGHT FAIL: $MISSING missing distribution prerequisite(s); local Apple Development builds are unaffected" >&2
-	echo "Next steps for the owner: provision a Developer ID Application certificate, run DIST=1 GAZE_SIGNING_IDENTITY=\"Developer ID Application: ...\" bash build.sh, notarize and staple the release bundle, then validate it with bash Tools/Release/verify.sh build/release/Gaze.app. Do not upload until model redistribution rights are recorded (Tools/Release/READINESS.md)." >&2
+	echo "Next steps for the owner: provision a Developer ID Application certificate, run DIST=1 GAZE_SIGNING_IDENTITY=\"Developer ID Application: ...\" bash build.sh, notarize and staple the release bundle, then validate it with bash Tools/Release/verify.sh build/release/Gaze.app. Do not upload until model redistribution rights are recorded." >&2
 	exit 1
 fi

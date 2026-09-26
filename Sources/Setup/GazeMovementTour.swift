@@ -31,12 +31,16 @@ struct GazeMovementTour: View {
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 
+	/// Pro Black behind the animated face on every page. The face is drawn live by
+	/// `GazeTourMovementPage`, so the page image is only ever the backdrop.
+	private static let backdrop = "Art/tour-backdrop.png"
+
 	private static let lessons: [GazeExpressionLesson] = [.turnLeft, .turnRight, .nod, .blink, .openMouth]
 
 	private static func pages(movementCount: Int) -> [TourPage] {
 		var pages = [
 			TourPage(
-				imageName: "Art/onboarding-recognition.png",
+				imageName: Self.backdrop,
 				imageBundle: .main,
 				title: "Practice the movements",
 				description: LocalizedStringKey(
@@ -44,16 +48,9 @@ struct GazeMovementTour: View {
 				)
 			)
 		]
-		let movements: [(GazeExpressionLesson, String)] = [
-			(.turnLeft, "Art/movement-left.png"),
-			(.turnRight, "Art/movement-right.png"),
-			(.nod, "Art/movement-nod.png"),
-			(.blink, "Art/movement-blink.png"),
-			(.openMouth, "Art/movement-mouth.png"),
-		]
-		pages += movements.map { lesson, imageName in
+		pages += lessons.map { lesson in
 			TourPage(
-				imageName: imageName,
+				imageName: Self.backdrop,
 				imageBundle: .main,
 				title: LocalizedStringKey(stringLiteral: lesson.title),
 				description: LocalizedStringKey(stringLiteral: lesson.explanation(movementCount: movementCount))
