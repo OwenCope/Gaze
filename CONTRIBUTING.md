@@ -1,177 +1,79 @@
-# Working on this
+# Contributing to Gaze
 
-## Before you start
+Thanks for helping. Small, focused pull requests are the easiest to review.
 
-Two things this repository does not contain. The recognition model is unpublished — its redistribution rights are unresolved (see `NOTICE.md`) — so a fresh clone builds and runs on a landmark-geometry fallback that is materially weaker and not approved for unlocking a Mac. Supply your own `Resources/FaceEmbedding.mlpackage` to get the real one.
+## Build
 
-The regression suites are unpublished too. Where `SECURITY.md` quotes check results, those runs were private and cannot be repeated from this repository. The replacement is measurement on real hardware: enrol, use Test Recognition, and distrust any threshold you have not measured yourself.
-
-## First run on your machine
+You need Xcode 26 or later and a code-signing identity. A free Apple ID works: in Xcode,
+open Settings, then Accounts, add your Apple ID, then Manage Certificates and add an
+Apple Development certificate. Check it with `security find-identity -v -p codesigning`.
 
 ```sh
 git clone https://github.com/OwenCope/Gaze.git
 cd Gaze
-./build.sh && open "build/Gaze.app"
+./build.sh
+open build/Gaze.app
 ```
 
-**You need a code-signing identity.** `build.sh` looks for an *Apple Development* or
-*Developer ID Application* certificate in your login keychain. It refuses to build
-with no valid stable identity rather than silently replacing the installed app
-with an ad-hoc identity. `GAZE_SIGNING_IDENTITY` can select an exact certificate
-name or fingerprint from the valid identity list.
+`build.sh` builds a universal app by default. `GAZE_ARCHS=arm64 ./build.sh` builds one
+architecture. If Xcode is somewhere unusual, set `DEVELOPER_DIR`.
 
-A free Apple ID is enough: open Xcode → Settings → Accounts → add your Apple ID → Manage
-Certificates → **+** → Apple Development. No paid membership required. Verify with:
+Sign with a real identity rather than ad hoc. The Keychain protects Gaze's vault key by
+the app's signature, and an ad-hoc signature changes every build, so macOS would ask for
+your keychain password each time.
 
-```sh
-security find-identity -v -p codesigning
-```
+## The recognition model
 
-**Then, in order:**
+The ArcFace model Gaze ships is not in this repository; see [NOTICE.md](NOTICE.md). Without
+it, a clone builds with a weaker landmark fallback that Gaze refuses to use for unlocking.
+Put your own compiled model at `Resources/FaceEmbedding.mlmodelc` to use the real one.
 
-1. **Camera** — macOS prompts on first launch. Approve it, or nothing works.
-2. **Enrol your face** — the app opens setup automatically when nothing is enrolled.
-   Turn your head slowly until the ring fills; it does two passes.
-3. **Test Recognition** (menu bar) — confirm your score sits well clear of the threshold
-   before trusting it. Get someone else to sit in front of it too; that number matters
-   more than yours.
-4. **Choose what happens when you're recognised**, in Settings. *Password replay* needs your account password
-   stored and Accessibility permission (System Settings → Privacy & Security →
-   Accessibility). *Don't unlock* is the safe way to try recognition without wiring it to
-   anything.
-5. **Open at login**, in Settings, once you're happy — it only watches for the lock while
-   running.
+Changing the model invalidates existing enrolments, by design.
 
-**Nothing transfers between machines.** Faceprints are sealed with a Secure Enclave key
-that never leaves the Mac that made them, so you enrol fresh. Same for the stored password.
-There is no account, no sync, and nothing leaves the device.
+## Try it
 
-**If recognition seems broken**, check `Test Recognition` first — a low score means the
-model or the lighting, not the unlock path. The unlock path logs everything:
+1. Allow the camera when asked.
+2. Enrol your face in the setup window.
+3. Open **Test Recognition** from the menu bar. Check your score sits well above the
+   threshold, and that someone else's sits well below it.
+4. In Settings, store your password and allow Accessibility to let Gaze unlock the Mac.
+
+Nothing moves between Macs: face data is sealed by a Secure Enclave key that never leaves
+the Mac that made it.
+
+To follow what Gaze is doing:
 
 ```sh
 log stream --predicate 'subsystem == "com.gazeunlock.Gaze"'
 ```
 
-## Build and run
+## Tests
+
+Each folder in [Tests](Tests) is a self-contained suite:
 
 ```sh
-./build.sh && open "build/Gaze.app"
+bash Tests/UnlockFlow/run.sh
 ```
 
-### What you need
+None of them opens the camera or reads real credentials. Run the suites that cover your
+change before opening a pull request.
 
-**Xcode 26 or newer.** The app targets macOS 26 and uses APIs from it, and the recognition
-model is compiled with `coremlc`, which ships only with the full Xcode — Command Line Tools
-on its own will not do.
+## Project layout
 
-You don't have to configure anything. `toolchain.sh` looks for a suitable install: an
-explicit `DEVELOPER_DIR` first, then whatever `xcode-select` points at, then any
-`/Applications/Xcode*.app`. It skips ones that are too old or that lack `coremlc`, and if
-nothing qualifies it says so instead of failing halfway through a compile. Release and beta
-Xcode are both fine.
+- `Sources/`: the app.
+- `Plugin/`: the lock-screen authorization plugin. Read [Plugin/README.md](Plugin/README.md)
+  and [SECURITY.md](SECURITY.md) before changing it.
+- `Resources/`: art, credits and models.
+- `ThirdParty/`: vendored code, with its licences.
+- `Tests/`: test suites.
+- `Tools/`: build scripts, packaging and release tools.
 
-If you keep Xcode somewhere unusual:
+## Before you open a pull request
 
-```sh
-DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer ./build.sh
-```
+- Keep it to one change.
+- Run `./build.sh` and the relevant tests.
+- Don't change recognition thresholds without measured scores from real hardware.
+- Don't include secrets, face images or personal data.
+- If you change anything in `Resources/` or `ThirdParty/`, check its licence.
 
-The build targets the architecture of the machine running it, so Apple silicon and Intel
-both work.
-
-Local signing requires a valid Apple Development or Developer ID Application identity.
-`DIST=1` requires Developer ID Application and a secure timestamp; release output
-defaults to `build/release/Gaze.app`, separate from the local app. Distribution additionally
-needs a Developer ID signature with a secure timestamp and recorded model and
-asset clearance; the signing helper is `Tools/Release/Signing.sh` and the
-clearance inventory is `Tools/Release/ModelClearance/`.
-
-**Sign with a real identity, not ad-hoc.** The Keychain ACL protecting the vault key is
-bound to the app's code identity, and an ad-hoc signature is regenerated every build — so
-the app becomes a *different* application each time and macOS challenges it for the
-keychain password on every rebuild.
-
-## Licensing — read before pushing anywhere public
-
-The historical source/model license descriptions conflict. Before publishing source
-or distributing an app, record the applicable licenses or permissions for the exact
-models and third-party assets included. A source repository license is not itself
-evidence of the weights' provenance or a grant covering every asset. Record this
-review in `Tools/Release/ModelClearance/clearance.json`; do not assume owner-reported permission has
-already been verified for a specific distribution.
-
-Changing the model invalidates existing enrolments — the identifier is versioned on
-purpose, so prints from different feature spaces are never compared.
-
-## Testing recognition
-
-Menu bar → **Test Recognition**. Watch `low` for the enrolled user and `high` for anyone
-else. Thresholds mean nothing in the abstract; they are only valid relative to a measured
-distribution on real hardware. Current numbers on the author's Mac: enrolled user 0.85+
-across head angles, a different adult 0.23, threshold 0.45.
-
-Lock-screen scores run lower than in-app ones — the display is dark, so the face is lit
-less. Measure there too before trusting a threshold.
-
-## Things that cost a day, so you don't repeat them
-
-- **Log your success path, not just your failures.** Code that runs silently is
-  indistinguishable from code that never ran, and that ambiguity can burn a day.
-- **`sudo` changes identity, not just permission.** Code signing needs the invoking user's
-  login keychain; `launchctl bootstrap gui/<uid>` needs their session. Both fail as root.
-- **`PlistBuddy -c "Set :key 'value'"` strips embedded quotes.** Use `plutil -replace`.
-- **Landmark geometry cannot do face recognition.** Cosine similarity on raw coordinates
-  scored a stranger at 1.000 — the shared face template dominates the vector. Pose
-  invariance has to be learned, not computed.
-- **Never pair launchd `KeepAlive` with `NSApp.activate()`.** That combination produced a
-  process that stole focus every few seconds and could not be quit.
-- **A test that cannot fail the way production fails proves very little.** When the
-  difference between the test environment and the real one is the very thing under test,
-  passing is a rehearsal, not evidence.
-
-## The unlock animation we want
-
-The reference is a Lottie file, `Apple Gaze.json` (LottieFiles), 60fps and
-167 frames. Reading its keyframes gives the real timing:
-
-| Frame | Time  | What happens                                  |
-| ----- | ----- | --------------------------------------------- |
-| 0–27  | 0.45s | The face **slides down** into place            |
-| 27–66 | 1.1s  | Five circle layers crossfade — the shimmer     |
-| 72    | 1.2s  | A **small** tick appears                       |
-| 94    | 1.57s | A **larger** tick replaces it — so it pops     |
-| 118+  | 2.0s  | Everything fades                               |
-
-Two details that are easy to miss from watching it: the entrance is a downward
-slide rather than a fade, and the tick scales up rather than drawing on.
-
-The sequence, four beats:
-
-1. Green Gaze glyph, glowing, on black.
-2. The glyph collapses inward and **rotates in 3D** — it reads as a ring seen
-   edge-on, tilting toward the viewer as it spins.
-3. It settles flat into a green **ring** — an outline, not a filled disc. The
-   panel shows through the middle.
-4. A tick draws itself inside the ring, also as a stroke.
-
-Nothing in the sequence is ever filled. It is stroked green throughout, with the
-background visible through the centre.
-
-Everything stays green throughout; there is no white stage. The whole point is
-beat 2: the spin is what makes it read as one object transforming, rather than
-two icons swapping places, which is what `.symbolEffect(.replace)` gives you and
-why the current version feels flat by comparison.
-
-**How it is built.** `FaceBracketMorph` is a `Shape` with an animatable
-`progress`. The insight that makes it simple: the Gaze brackets already *are*
-corner segments of a rounded square. Grow the corner radius until it reaches half
-the side, and extend each segment until it meets its neighbours, and the very
-same path becomes a circle.
-
-So there is no second shape and no crossfade — one set of strokes converges. The
-features (eyes, nose, mouth) fade first so the brackets close on an empty middle,
-then the tick draws inside the closed ring.
-
-Current implementation is in `Sources/LockScreen/NotchCapsule.swift`, and
-`--preview-capsule` shows it without locking the screen.
+By contributing you agree to follow the [code of conduct](CODE_OF_CONDUCT.md).
