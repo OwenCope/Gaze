@@ -1,0 +1,34 @@
+# Homebrew cask for Gaze. Lives in a tap repository named `homebrew-gaze`
+# (github.com/OwenCope/homebrew-gaze, file Casks/gaze.rb), so people install with:
+#
+#     brew install --cask owencope/gaze/gaze
+#
+# Gaze is not notarized, so macOS would block the first launch. The postflight
+# clears the quarantine flag on install and on every upgrade, which is what the
+# manual `xattr` step in the README does. Homebrew's official cask repository
+# only accepts notarized apps, which is why this is a separate tap.
+cask "gaze" do
+  version "0.1"
+  sha256 :no_check
+
+  url "https://gazeunlock.com/dl/Gaze.dmg"
+  name "Gaze"
+  desc "Face ID-style face unlock for your Mac"
+  homepage "https://gazeunlock.com/"
+
+  depends_on macos: ">= :tahoe"
+
+  app "Gaze.app"
+
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Gaze.app"]
+  end
+
+  uninstall quit: "com.gazeunlock.Gaze"
+
+  zap trash: [
+    "~/Library/Application Support/Gaze",
+    "~/Library/Preferences/com.gazeunlock.Gaze.plist",
+  ]
+end
