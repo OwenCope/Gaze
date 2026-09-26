@@ -2,7 +2,7 @@ import Foundation
 
 actor UnlockFrameEvaluator {
 	enum Failure: String, Sendable {
-		case cancelled, invalidConfiguration, embeddingUnavailable, invalidSimilarity, noEnrollment
+		case cancelled, invalidConfiguration, embeddingUnavailable, invalidSimilarity, noEnrollment, unusableFrame
 	}
 
 	struct Result: Sendable {
@@ -33,11 +33,13 @@ actor UnlockFrameEvaluator {
 	/// reset per unlock attempt (fresh evaluator) or on an explicit `resetSpoofCues`.
 	private var bezelCue = DeviceBezelGate()
 	private var glareCue = GlareCue()
+	private let matcher: FaceTemplateMatcher
 
 	init(embedder: any FaceEmbedder, faces: [FaceEnrollment], antiSpoof: AntiSpoofGate?) {
 		self.embedder = embedder
 		self.faces = faces
 		self.antiSpoof = antiSpoof
+		self.matcher = FaceTemplateMatcher(templates: faces.map(\.prints), embedder: embedder)
 	}
 
 	/// Clears the deny cues' per-scan counts, so the next look after a spoof
@@ -49,23 +51,22 @@ actor UnlockFrameEvaluator {
 
 	func evaluate(_ sample: FaceSample) -> Result {
 		guard !Task.isCancelled else { return .rejected(.cancelled) }
+		guard !faces.isEmpty else { return .rejected(.noEnrollment) }
+		guard FrameQuality.isUsable(sample) else { return .rejected(.unusableFrame) }
 		guard embedder.matchThreshold.isFinite,
 			(0...1).contains(embedder.matchThreshold), embedder.matchThreshold > 0 else {
 			return .rejected(.invalidConfiguration)
 		}
 		guard let candidate = embedder.embed(sample) else { return .rejected(.embeddingUnavailable) }
-		var best: (Float, FaceEnrollment)?
-		for face in faces {
-			let score = face.bestSimilarity(to: candidate, using: embedder)
-			guard score.isFinite, (-1...1.000001).contains(score) else { return .rejected(.invalidSimilarity) }
-			if score > (best?.0 ?? -1) { best = (score, face) }
-		}
+		let best: FaceTemplateMatcher.Match?
+		do { best = try matcher.bestMatch(to: candidate) }
+		catch { return .rejected(.invalidSimilarity) }
 		guard !Task.isCancelled else { return .rejected(.cancelled) }
 		guard let best else { return .rejected(.noEnrollment) }
-		let matched = best.0 >= embedder.matchThreshold
+		let matched = best.score >= embedder.matchThreshold
 		let decision = matched ? denyChecked(sample) : nil
 		guard !Task.isCancelled else { return .rejected(.cancelled) }
-		return Result(matched: matched, score: best.0, face: matched ? best.1 : nil, spoofDecision: decision)
+		return Result(matched: matched, score: best.score, face: matched ? faces[best.index] : nil, spoofDecision: decision)
 	}
 
 	/// The classifier verdict plus the passive deny cues. The cues run only on frames

@@ -1,4 +1,11 @@
+import CoreGraphics
 import Foundation
+
+struct FaceSample {
+	var boundingBox = CGRect(x: 0.2, y: 0.2, width: 0.5, height: 0.5)
+	var quality: Float = 0.8
+	var hasQualityMeasurement = true
+}
 
 @main
 @MainActor
@@ -87,6 +94,31 @@ enum FrameGateTests {
 		check(!discontinuous.consume(capturedAt: start, required: .seconds(4)), "out-of-order mismatch starts a new hold")
 		check(!discontinuous.consume(capturedAt: start, required: .seconds(4)), "duplicate mismatch does not advance a hold")
 		check(!discontinuous.consume(capturedAt: start, required: .zero), "invalid rejection duration does not immediately reject")
-		print("PASS: \(checks) frame-startup, stall and rejection-timing checks; synthetic timestamps only.")
+		let next = start.advanced(by: .milliseconds(100))
+		var evidence = CameraEvidenceContinuity()
+		var sample = FaceSample()
+		check(evidence.record(usable: FrameQuality.isUsable(sample), capturedAt: start), "Usable frame recorded")
+		let revision = evidence.revision
+		check(evidence.permits(revision, at: next), "Fresh evidence permitted")
+		sample.quality = 0
+		check(evidence.record(usable: FrameQuality.isUsable(sample), capturedAt: next), "Bad-quality frame recorded")
+		check(!evidence.permits(revision, at: next), "Measured zero invalidates prior evidence")
+		sample.hasQualityMeasurement = false
+		let recovery = next.advanced(by: .milliseconds(100))
+		check(evidence.record(usable: FrameQuality.isUsable(sample), capturedAt: recovery), "Unavailable quality permits fresh capture")
+		check(evidence.permits(evidence.revision, at: recovery), "Recovered evidence permitted")
+		check(!evidence.record(usable: true, capturedAt: start), "Old capture refused")
+		check(!evidence.permits(evidence.revision, at: recovery), "Old capture invalidates proof")
+		evidence.invalidate()
+		check(!evidence.permits(evidence.revision, at: recovery), "Stopped camera invalidates proof")
+
+		var hold = RecognitionMatchHold()
+		let owner = UUID()
+		check(!hold.consume(faceID: owner, now: start, required: .milliseconds(300)), "First match starts hold")
+		check(hold.consume(faceID: owner, now: recovery.advanced(by: .milliseconds(100)), required: .milliseconds(300)), "Same face completes hold")
+		check(!hold.consume(faceID: UUID(), now: recovery, required: .milliseconds(300)), "Different face resets hold")
+		hold.reset()
+		check(hold.faceID == nil, "Reset clears identity")
+		print("PASS: \(checks) frame-startup, stall, rejection-timing and quality-continuity checks; synthetic timestamps only.")
 	}
 }

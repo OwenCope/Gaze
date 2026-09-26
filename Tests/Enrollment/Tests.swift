@@ -1,23 +1,42 @@
 import Foundation
 
-typealias Faceprint = [Float]
+struct Faceprint: Equatable {
+	var values: [Float]
+	var source: String
+	static func normalized(_ values: [Float], source: String) -> Faceprint? {
+		let norm = sqrt(values.reduce(Float(0)) { $0 + $1 * $1 })
+		guard !source.isEmpty, norm.isFinite, norm > 0 else { return nil }
+		return Faceprint(values: values.map { $0 / norm }, source: source)
+	}
+}
 
 struct FaceSample {
 	var boundingBox = CGRect(x: 0.2, y: 0.2, width: 0.4, height: 0.4)
 	var quality: Float = 0.8
+	var hasQualityMeasurement = true
 	var pose = FacePose.zero
 }
 
 protocol FaceEmbedder {
+	var identifier: String { get }
+	var usesCosineSimilarity: Bool { get }
+	var matchThreshold: Float { get }
 	func embed(_ sample: FaceSample) -> Faceprint?
+	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float
 }
 
 final class FixtureEmbedder: FaceEmbedder {
+	let identifier = "fixture-embedder"
+	let usesCosineSimilarity = true
+	let matchThreshold: Float = 0.5
 	var available = true
 	var calls = 0
 	func embed(_ sample: FaceSample) -> Faceprint? {
 		calls += 1
-		return available ? [1, 0] : nil
+		return available ? Faceprint(values: [1, 0], source: identifier) : nil
+	}
+	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float {
+		zip(a.values, b.values).reduce(0) { $0 + $1.0 * $1.1 }
 	}
 }
 

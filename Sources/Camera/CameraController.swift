@@ -37,6 +37,8 @@ struct FaceSample: @unchecked Sendable {
 	let pose: FacePose
 	/// Vision's own view of whether this frame is good enough to identify from.
 	let quality: Float
+	/// A reported zero means unusable; missing quality is a separate state.
+	var hasQualityMeasurement: Bool = true
 	let pixelBuffer: CVPixelBuffer
 	/// Other faces in the same frame, largest first, when bystanders are allowed. Each is
 	/// matched on its own; the one that matches an enrolled face is the one used.
@@ -379,7 +381,8 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 		qualityRequest.inputFaceObservations = [face]
 		do { try handler.perform([landmarksRequest, qualityRequest]) } catch { return nil }
 		guard let landmarks = landmarksRequest.results?.first?.landmarks else { return nil }
-		let quality = qualityRequest.results?.first?.faceCaptureQuality ?? 0
+		// A reported zero means unusable; a missing measurement is a separate state.
+		let quality = qualityRequest.results?.first?.faceCaptureQuality
 
 		// Vision's own estimate when it gives one, geometry when it doesn't, per-axis
 		// provenance always. Some revisions populate yaw but leave pitch nil, so the
@@ -392,7 +395,7 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 			visionRoll: face.roll?.doubleValue,
 			estimate: FacePose.estimate(from: landmarks))
 		return FaceSample(landmarks: landmarks, boundingBox: face.boundingBox, pose: pose,
-			quality: quality, pixelBuffer: buffer)
+			quality: quality ?? 0, hasQualityMeasurement: quality != nil, pixelBuffer: buffer)
 	}
 
 }

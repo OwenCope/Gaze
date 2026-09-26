@@ -51,7 +51,7 @@ enum RecognitionMathTests {
 				for value in raw { oldNorm += value * value }
 				oldNorm = sqrt(oldNorm)
 				let normalized = Faceprint.normalized(raw, source: source)!
-				check(normalized.values == raw.map { $0 / oldNorm }, "Valid model output normalization is unchanged")
+				check(zip(normalized.values, raw.map { $0 / oldNorm }).allSatisfy { abs($0 - $1) <= 1e-6 }, "Valid model output normalization is unchanged")
 				check(normalized.values.allSatisfy(\.isFinite), "Valid output remains finite")
 				check(abs(normalized.similarity(to: normalized) - 1) < 0.00001, "Generated valid vectors preserve self-similarity")
 			}

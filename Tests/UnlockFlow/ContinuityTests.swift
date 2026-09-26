@@ -8,6 +8,7 @@ struct FaceSample {
 	}
 	var boundingBox = CGRect(x: 0.2, y: 0.2, width: 0.3, height: 0.3)
 	var quality: Float = 0.7
+	var hasQualityMeasurement = true
 	var pose = Pose()
 }
 
@@ -95,7 +96,10 @@ enum ContinuityTests {
 		}
 		var sample = FaceSample()
 		sample.quality = 0
-		check(FrameQuality.rejection(sample) == nil, "Existing missing-quality sentinel preserved")
+		check(FrameQuality.rejection(sample) == .tooBlurred, "A measured zero quality is unusable")
+		sample.hasQualityMeasurement = false
+		check(FrameQuality.rejection(sample) == nil, "A missing quality measurement is not a rejection")
+		sample.hasQualityMeasurement = true
 		sample.quality = 0.09
 		check(FrameQuality.rejection(sample) == .tooBlurred, "Quality floor unchanged")
 		sample.quality = 0.7

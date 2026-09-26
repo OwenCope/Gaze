@@ -22,8 +22,10 @@ enum FaceAligner {
 	/// weren't located.
 	static func alignedCrop(_ sample: FaceSample, side: Int) -> CVPixelBuffer? {
 		guard
+			(16...1024).contains(side),
 			let leftEye = sample.landmarks.leftPupil?.normalizedPoints.first,
-			let rightEye = sample.landmarks.rightPupil?.normalizedPoints.first
+			let rightEye = sample.landmarks.rightPupil?.normalizedPoints.first,
+			[leftEye.x, leftEye.y, rightEye.x, rightEye.y].allSatisfy({ $0.isFinite && (0...1).contains($0) })
 		else { return nil }
 
 		let image = CIImage(cvPixelBuffer: sample.pixelBuffer)
@@ -52,7 +54,7 @@ enum FaceAligner {
 		let srcVector = CGVector(dx: srcRight.x - srcLeft.x, dy: srcRight.y - srcLeft.y)
 		let dstVector = CGVector(dx: dstRight.x - dstLeft.x, dy: dstRight.y - dstLeft.y)
 		let srcLength = hypot(srcVector.dx, srcVector.dy)
-		guard srcLength > 1 else { return nil }
+		guard srcLength.isFinite, srcLength > 1 else { return nil }
 
 		let scale = hypot(dstVector.dx, dstVector.dy) / srcLength
 		let rotation = atan2(dstVector.dy, dstVector.dx) - atan2(srcVector.dy, srcVector.dx)
@@ -100,6 +102,7 @@ enum FaceAligner {
 	/// No rotation either. A held phone is often slightly tilted, and that tilt is
 	/// evidence — straightening it throws the evidence away.
 	static func contextCrop(_ sample: FaceSample, side: Int, margin: CGFloat = 2.7) -> CVPixelBuffer? {
+		guard (16...1024).contains(side), margin.isFinite, margin > 0 else { return nil }
 		let image = CIImage(cvPixelBuffer: sample.pixelBuffer)
 		guard let (crop, _) = contextWindow(sample, margin: margin) else { return nil }
 
@@ -141,11 +144,12 @@ enum FaceAligner {
 			y: box.minY * extent.height + extent.minY,
 			width: box.width * extent.width,
 			height: box.height * extent.height)
-		guard faceRect.width > 1, faceRect.height > 1 else { return nil }
+		guard [faceRect.minX, faceRect.minY, faceRect.width, faceRect.height].allSatisfy(\.isFinite),
+			faceRect.width > 1, faceRect.height > 1 else { return nil }
 
 		// Square, so the model never sees the aspect ratio stretched — a stretched
 		// pixel grid is itself a moiré-like artefact and would be learned as one.
-		let wanted = max(faceRect.width, faceRect.height) * margin
+		let wanted = min(max(faceRect.width, faceRect.height) * margin, min(extent.width, extent.height))
 		var crop = CGRect(
 			x: faceRect.midX - wanted / 2,
 			y: faceRect.midY - wanted / 2,

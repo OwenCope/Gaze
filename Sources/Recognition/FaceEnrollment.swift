@@ -10,8 +10,8 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 	/// What to call it in settings. Never shown on the lock screen.
 	var name: String
 	/// Several prints, not one. A single frontal print fails the moment the user tilts
-	/// their head or the light changes; matching against the best of a spread is what
-	/// makes recognition hold up in normal use.
+	/// their head or the light changes. Matching requires two supporting prints from
+	/// this spread, so an isolated outlier cannot decide identity.
 	var prints: [Faceprint]
 	/// Which embedder produced these. Changing models invalidates the enrolment.
 	var embedder: String
@@ -72,10 +72,6 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 		return "Face \(ordinal)"
 	}
 
-	/// The best similarity between `candidate` and any print of this face.
-	func bestSimilarity(to candidate: Faceprint, using embedder: FaceEmbedder) -> Float {
-		prints.reduce(0) { max($0, embedder.similarity($1, candidate)) }
-	}
 }
 
 /// The vault payload in either of its historical shapes.
@@ -120,7 +116,10 @@ final class FaceEnrollmentStore {
 	/// list that can grow without bound is a list nobody audits.
 	static let maximumFaces = 5
 
-	private(set) var faces: [FaceEnrollment] = []
+	private(set) var faces: [FaceEnrollment] = [] {
+		didSet { cachedMatcher = nil }
+	}
+	@ObservationIgnored private var cachedMatcher: FaceTemplateMatcher?
 
 	#if PRODUCT_CAPTURE
 	/// Capture tool only: shows one enrolled face without touching the vault or the
@@ -241,7 +240,9 @@ final class FaceEnrollmentStore {
 		}
 		try Task.checkCancellation()
 		guard canAddFace else { throw EnrollmentError.full }
-		guard !prints.isEmpty, !cameraID.isEmpty else { throw EnrollmentError.invalidCapture }
+		guard let first = prints.first, !cameraID.isEmpty,
+			(try? FaceTemplateMatcher(templates: [prints], embedder: embedder).bestMatch(to: first)) != nil
+		else { throw EnrollmentError.invalidCapture }
 		let record = FaceEnrollment(
 			name: name ?? FaceEnrollment.defaultName(ordinal: faces.count + 1),
 			prints: prints,
@@ -340,19 +341,17 @@ final class FaceEnrollmentStore {
 		guard !enabled.isEmpty else {
 			return (false, 0, nil, faces.isEmpty ? nil : Self.allFacesOffMessage)
 		}
-		guard let candidate = embedder.embed(sample) else {
+		guard FrameQuality.isUsable(sample), let candidate = embedder.embed(sample) else {
 			return (false, 0, nil, nil)
 		}
 
-		var best: (score: Float, face: FaceEnrollment)?
-		for face in enabled {
-			let score = face.bestSimilarity(to: candidate, using: embedder)
-			if score > (best?.score ?? -1) { best = (score, face) }
+		// Rebuilt whenever `faces` changes, which includes switching a face on or off.
+		if cachedMatcher == nil {
+			cachedMatcher = FaceTemplateMatcher(templates: enabled.map(\.prints), embedder: embedder)
 		}
-
-		guard let best else { return (false, 0, nil, nil) }
+		guard let best = try? cachedMatcher?.bestMatch(to: candidate) else { return (false, 0, nil, nil) }
 		let matched = best.score >= embedder.matchThreshold
-		return (matched, best.score, matched ? best.face : nil, nil)
+		return (matched, best.score, matched ? enabled[best.index] : nil, nil)
 	}
 }
 

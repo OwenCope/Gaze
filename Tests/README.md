@@ -1,6 +1,6 @@
 # Tests
 
-Each folder is a self-contained suite. Run one with `bash Tests/<Name>/run.sh`; none of them opens the camera, reads real credentials or touches the Keychain.
+Each folder is a self-contained suite. Run one with `bash Tests/<Name>/run.sh`. None of them opens the camera, reads real credentials or touches the Keychain, except `MultiFace`, which downloads two synthetic faces to check recognition on photos with several people.
 
 - `AppReadiness`
 - `Enrollment`
@@ -15,6 +15,7 @@ Each folder is a self-contained suite. Run one with `bash Tests/<Name>/run.sh`; 
 - `Presence`
 - `PresenceLifecycle`
 - `ProductBoundary`
+- `Recognition`
 - `RecognitionMath`
 - `Release`
 - `SettingsInteraction`
@@ -25,3 +26,5 @@ Each folder is a self-contained suite. Run one with `bash Tests/<Name>/run.sh`; 
 - `Toolbar`
 - `UnlockFlow`
 - `UpdateLifecycle`
+
+`Support/` holds helpers shared by several suites.
