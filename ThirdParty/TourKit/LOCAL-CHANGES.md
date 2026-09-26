@@ -72,6 +72,7 @@ unconditionally, never keyed off hover. The controls sit in one
 insets, and invisible first-page Back slot preserved. Card, artwork,
 typography, page transitions, and all actions/labels/shortcuts are unchanged.
 
-The bottom panel no longer draws a frosted block. The page picture runs behind the
-text, with a blur and a darkening that fade in from 90pt above the panel, and the
-title and description carry a soft shadow for legibility.
+The bottom panel no longer draws a frosted block or a top border. The page picture
+runs behind the text under a plain fade to 40% black that starts 90pt above the
+panel, and the title and description carry a soft shadow for legibility. The tour
+window opens at the modal-panel level so it is always above other windows.

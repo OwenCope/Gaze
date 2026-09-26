@@ -222,16 +222,10 @@ public struct TourSlideshowView: View {
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
-            // The picture runs behind the text: a blur and a darkening that both fade in
-            // from nothing, starting above the panel, so there is no edge where it begins.
-            ZStack {
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.55)],
-                        startPoint: .top, endPoint: .bottom))
-                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.55), location: 1)],
-                    startPoint: .top, endPoint: .bottom)
-            }
+            // The picture runs behind the text, only a little darker: a plain fade from
+            // nothing, no blur and no edge, so it reads as one image.
+            LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.4), location: 1)],
+                startPoint: .top, endPoint: .bottom)
             .padding(.top, -90)
             .allowsHitTesting(false)
         }
@@ -478,7 +472,8 @@ public final class TourKitWindowController {
         onClose: (() -> Void)? = nil
     ) -> NSWindow {
         if let existing = window {
-            existing.makeKeyAndOrderFront(nil)
+            existing.orderFrontRegardless()
+            existing.makeKey()
             NSApp.activate(ignoringOtherApps: true)
             return existing
         }
@@ -540,8 +535,9 @@ public final class TourKitWindowController {
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.level = .floating
-        window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenAuxiliary]
+        // Above every app's windows, Settings included, so the tour is never opened behind them.
+        window.level = .modalPanel
+        window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenAuxiliary, .moveToActiveSpace]
         window.contentView = hosting
         window.center()
 
@@ -552,7 +548,8 @@ public final class TourKitWindowController {
         window.delegate = delegate
         self.windowDelegate = delegate
 
-        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        window.makeKey()
         NSApp.activate(ignoringOtherApps: true)
 
         self.window = window
