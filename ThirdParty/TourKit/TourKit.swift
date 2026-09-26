@@ -109,8 +109,7 @@ public struct TourSlideshowView: View {
                     imageSection
                     bottomPanel
                 }
-                // The page's picture fills the whole card, and the text panel is frosted
-                // glass over it, rather than the picture fading into a flat grey panel.
+                // The page's picture fills the whole card; the text panel fades in over it.
                 .background {
                     ZStack {
                         Color(white: 0.06)
@@ -204,12 +203,14 @@ public struct TourSlideshowView: View {
                 .font(.system(size: 28, weight: .bold))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 1)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(currentPage.description, tableName: currentPage.tableName, bundle: currentPage.resolvedStringsBundle)
                 .font(.body)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color.white.opacity(0.70))
+                .foregroundStyle(Color.white.opacity(0.78))
+                .shadow(color: .black.opacity(0.35), radius: 6, y: 1)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
 
@@ -221,14 +222,18 @@ public struct TourSlideshowView: View {
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
-            // See-through frosted glass: the picture stays visible, softened, behind the text.
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .opacity(0.75)
-                .background(.black.opacity(0.12))
-                .overlay(alignment: .top) {
-                    Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
-                }
+            // The picture runs behind the text: a blur and a darkening that both fade in
+            // from nothing, starting above the panel, so there is no edge where it begins.
+            ZStack {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.55)],
+                        startPoint: .top, endPoint: .bottom))
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black.opacity(0.55), location: 1)],
+                    startPoint: .top, endPoint: .bottom)
+            }
+            .padding(.top, -90)
+            .allowsHitTesting(false)
         }
         // Per-slide identity so title, description, and button cross-fade
         // as one unit alongside the image above.

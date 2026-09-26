@@ -71,3 +71,7 @@ unconditionally, never keyed off hover. The controls sit in one
 `GlassEffectContainer(spacing: 8)` with the existing HStack 12pt spacing,
 insets, and invisible first-page Back slot preserved. Card, artwork,
 typography, page transitions, and all actions/labels/shortcuts are unchanged.
+
+The bottom panel no longer draws a frosted block. The page picture runs behind the
+text, with a blur and a darkening that fade in from 90pt above the panel, and the
+title and description carry a soft shadow for legibility.
