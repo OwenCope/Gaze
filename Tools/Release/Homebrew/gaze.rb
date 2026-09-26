@@ -9,9 +9,9 @@
 # only accepts notarized apps, which is why this is a separate tap.
 cask "gaze" do
   version "0.1"
-  sha256 :no_check
+  sha256 "e69eab318fef6fab14960327aacb86ba1445b669604821df068d96518708d5fe"
 
-  url "https://gazeunlock.com/dl/Gaze.dmg"
+  url "https://github.com/OwenCope/Gaze/releases/download/v#{version}/Gaze.dmg"
   name "Gaze"
   desc "Face ID-style face unlock"
   homepage "https://gazeunlock.com/"
