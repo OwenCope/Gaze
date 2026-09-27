@@ -24,17 +24,39 @@ struct SetupPermissionStep: View {
 	var onClose: (() -> Void)? = nil
 	@State private var status = SetupPermissionStatus(accessibility: false, keyboardEvents: false)
 	@State private var settingsError: String?
+	@State private var settingsOpened = false
+	@State private var showRelaunch = false
+
+	static var isOutsideApplications: Bool {
+		let path = Bundle.main.bundleURL.path
+		if path.contains("/build/") { return false }
+		if path.contains("/AppTranslocation/") { return true }
+		if path.hasPrefix("/Volumes/") { return true }
+		if path.hasPrefix("/Applications/") { return false }
+		let homeApps = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Applications").path
+		if path == homeApps || path.hasPrefix(homeApps + "/") { return false }
+		return true
+	}
 
 	var body: some View {
 		SetupPermissionContent(
 			position: position, status: status, settingsError: settingsError,
+			showRelaunch: showRelaunch,
 			onContinue: onContinue, onSkip: onSkip, onBack: onBack, onClose: onClose,
 			onOpenSettings: openSettings,
-			onRevealApp: { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) }
+			onRevealApp: { NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL]) },
+			onRelaunch: relaunchForPermission
 		)
 		.onAppear { refresh() }
 		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
 			refresh()
+			guard settingsOpened else { return }
+			settingsOpened = false
+			showRelaunch = false
+			Task { @MainActor in
+				try? await Task.sleep(for: .seconds(4))
+				if !SetupPermissionStatus.current.isReady { showRelaunch = true }
+			}
 		}
 		.task {
 			var delaySeconds = 1.0
@@ -51,9 +73,12 @@ struct SetupPermissionStep: View {
 	private func refresh() {
 		guard !CommandLine.arguments.contains("--preview-ungranted") else { return }
 		status = .current
+		if status.isReady { showRelaunch = false }
 	}
 
 	private func openSettings() {
+		settingsOpened = true
+		showRelaunch = false
 		let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
 		_ = AXIsProcessTrustedWithOptions(options)
 		guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else {
@@ -63,18 +88,34 @@ struct SetupPermissionStep: View {
 		settingsError = NSWorkspace.shared.open(url) ? nil : "Open System Settings → Privacy & Security → Accessibility."
 		refresh()
 	}
+
+	private func relaunchForPermission() {
+		let bundlePath = Bundle.main.bundleURL.path
+		let inner = "sleep 0.6; /usr/bin/open -n \(Self.shQuote(bundlePath)) --args --setup-step=permission"
+		let process = Process()
+		process.executableURL = URL(fileURLWithPath: "/bin/bash")
+		process.arguments = ["-c", "nohup /bin/bash -c \(Self.shQuote(inner)) >/dev/null 2>&1 &"]
+		try? process.run()
+		NSApp.terminate(nil)
+	}
+
+	private static func shQuote(_ value: String) -> String {
+		"'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+	}
 }
 
 struct SetupPermissionContent: View {
 	var position: SetupPosition?
 	let status: SetupPermissionStatus
 	var settingsError: String?
+	var showRelaunch = false
 	var onContinue: () -> Void
 	var onSkip: () -> Void
 	var onBack: (() -> Void)?
 	var onClose: (() -> Void)? = nil
 	var onOpenSettings: () -> Void
 	var onRevealApp: () -> Void
+	var onRelaunch: () -> Void = {}
 
 	private var page: TourPage {
 		TourPage(
@@ -93,8 +134,18 @@ struct SetupPermissionContent: View {
 
 	private var statusBlock: some View {
 		VStack(spacing: 6) {
+			if !status.isReady, SetupPermissionStep.isOutsideApplications {
+				StatusLine(kind: .warning,
+					message: "Gaze is running from outside Applications. Move it to Applications, then open it from there.")
+			}
 			if !status.isReady {
-				Button("Already on, or not listed? Show Gaze in Finder", action: onRevealApp)
+				Button(SetupPermissionStep.isOutsideApplications
+					? "Show Gaze in Finder"
+					: "Already on, or not listed? Show Gaze in Finder", action: onRevealApp)
+					.buttonStyle(.link).font(.system(size: 12))
+			}
+			if showRelaunch, !status.isReady {
+				Button("Set Up Later", action: onSkip)
 					.buttonStyle(.link).font(.system(size: 12))
 			}
 			if let settingsError {
@@ -116,8 +167,8 @@ struct SetupPermissionContent: View {
 			onClose: onClose ?? onSkip,
 			pageMedia: { _ in AnyView(SetupAccessibilityDemo(isReady: status.isReady)) },
 			pageAccessory: { _ in AnyView(statusBlock) },
-			secondaryButtonTitle: status.isReady ? nil : "Set Up Later",
-			onSecondary: status.isReady ? nil : onSkip,
+			secondaryButtonTitle: status.isReady ? nil : (showRelaunch ? "Quit and Reopen" : "Set Up Later"),
+			onSecondary: status.isReady ? nil : (showRelaunch ? onRelaunch : onSkip),
 			footer: position.map { AnyView(SetupProgress(position: $0)) },
 			onBack: onBack
 		)
