@@ -60,6 +60,22 @@ enum CueDenyTests {
 		precondition(!bezel.record(frame: spoof, faceRect: face), "second cue frame must not fire")
 		precondition(bezel.record(frame: spoof, faceRect: face), "bezel cue must fire on the third frame")
 		checks += 4
+		// The outline of the owner's own head: a face-sized rectangle around the face.
+		var outlineBezel = DeviceBezelGate()
+		let outline = denyBuffer(width: 224, height: 224, grey: 0.5)
+		denyPaintRect(outline, CGRect(x: 64, y: 64, width: 96, height: 96), grey: 1)
+		for _ in 0..<4 {
+			precondition(!outlineBezel.record(frame: outline, faceRect: face), "a head-sized outline must not fire the bezel cue")
+		}
+
+		// A door frame or window behind the owner runs off the edge of the view.
+		var backgroundBezel = DeviceBezelGate()
+		let background = denyBuffer(width: 224, height: 224, grey: 0.5)
+		denyPaintRect(background, CGRect(x: 0, y: 30, width: 190, height: 194), grey: 1)
+		for _ in 0..<4 {
+			precondition(!backgroundBezel.record(frame: background, faceRect: face), "a rectangle running off the view must not fire the bezel cue")
+		}
+
 		// A rectangle beside the face (a second person, a door frame) that clips a
 		// corner of the face box never counts, however many frames it stays.
 		var besideBezel = DeviceBezelGate()

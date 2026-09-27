@@ -36,7 +36,7 @@ struct SetupPasswordStep: View {
 			imageName: "Art/tour-backdrop.png",
 			imageBundle: .main,
 			title: "Your login password",
-			description: "Enter the password you type at login on this Mac. macOS checks it before Gaze saves an encrypted copy in the keychain."
+			description: "Gaze types it for you after it recognises you. macOS checks it first."
 		)
 	}
 
@@ -52,22 +52,16 @@ struct SetupPasswordStep: View {
 				// merely unfinished, and the only place a nudge is warranted.
 				.modifier(ShakeEffect(travel: shake, isEnabled: !reduceMotion))
 
-			// Reserved whether or not it is filled, so the buttons below do not jump
-			// up the screen the first time a password is wrong.
-			Text(error ?? " ")
-				.font(.caption)
-				.foregroundStyle(error == nil ? .clear : Theme.danger)
-				.multilineTextAlignment(.center)
-				.fixedSize(horizontal: false, vertical: true)
-				.frame(height: 22, alignment: .top)
-				.padding(.horizontal, 30)
-				.padding(.top, 9)
-			Text("If you skip this, Gaze recognises you without unlocking until you add your password in Settings.")
-				.font(.caption)
-				.foregroundStyle(Color.white.opacity(0.6))
-				.multilineTextAlignment(.center)
-				.fixedSize(horizontal: false, vertical: true)
-				.padding(.horizontal, 30)
+		// Reserved whether or not it is filled, so the buttons below do not jump
+		// up the screen the first time a password is wrong.
+		Text(error ?? " ")
+			.font(.caption)
+			.foregroundStyle(error == nil ? .clear : Theme.danger)
+			.multilineTextAlignment(.center)
+			.fixedSize(horizontal: false, vertical: true)
+			.frame(height: 18, alignment: .top)
+			.padding(.horizontal, 30)
+			.padding(.top, 9)
 		}
 	}
 
@@ -79,8 +73,8 @@ struct SetupPasswordStep: View {
 			finishButtonTitle: "\(buttonTitle)",
 			onFinish: submit,
 			onClose: onClose ?? onSkip,
-			pageMedia: { _ in AnyView(SetupPasswordFigure()) },
-			mediaHeight: 250,
+		pageMedia: { _ in AnyView(SetupShot(source: .image("setup-password"), aspectRatio: 953.0 / 189.0, cornerRadius: 12)) },
+		mediaHeight: 330,
 			pageAccessory: { _ in AnyView(fieldBlock) },
 			primaryEnabled: canSubmit,
 			secondaryButtonTitle: "Set Up Later",
@@ -123,26 +117,6 @@ struct SetupPasswordStep: View {
 				}
 			}
 		}
-	}
-}
-
-/// The password step has no saved state of its own — a successful save calls
-/// `onSaved` and leaves the step — so the companion stays neutral and the key
-/// stays put. Kept as its own view so the figure reads as one piece.
-private struct SetupPasswordFigure: View {
-	var body: some View {
-		ZStack {
-			HStack(spacing: 40) {
-				GazeLookingCompanion(look: 1, happy: false)
-					.frame(width: 110, height: 110)
-				Image(systemName: "key.fill")
-					.font(.system(size: 52, weight: .medium))
-					.foregroundStyle(.white)
-					.symbolRenderingMode(.monochrome)
-			}
-		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.accessibilityHidden(true)
 	}
 }
 

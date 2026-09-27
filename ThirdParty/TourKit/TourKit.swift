@@ -70,6 +70,9 @@ public struct TourSlideshowView: View {
     let pageAccessory: ((Int) -> AnyView?)?
     let primaryEnabled: Bool
     let showsPrimaryButton: Bool
+    /// An SF Symbol the primary label blurs into on hover, like the website's buttons.
+    let primaryHoverSymbol: String?
+    @State private var isPrimaryHovered = false
     let secondaryButtonTitle: LocalizedStringKey?
     let onSecondary: (() -> Void)?
     let footer: AnyView?
@@ -93,6 +96,7 @@ public struct TourSlideshowView: View {
         pageAccessory: ((Int) -> AnyView?)? = nil,
         primaryEnabled: Bool = true,
         showsPrimaryButton: Bool = true,
+        primaryHoverSymbol: String? = nil,
         secondaryButtonTitle: LocalizedStringKey? = nil,
         onSecondary: (() -> Void)? = nil,
         footer: AnyView? = nil,
@@ -111,6 +115,7 @@ public struct TourSlideshowView: View {
         self.pageAccessory = pageAccessory
         self.primaryEnabled = primaryEnabled
         self.showsPrimaryButton = showsPrimaryButton
+        self.primaryHoverSymbol = primaryHoverSymbol
         self.secondaryButtonTitle = secondaryButtonTitle
         self.onSecondary = onSecondary
         self.footer = footer
@@ -203,8 +208,13 @@ public struct TourSlideshowView: View {
                 .id(currentIndex)
                 .transition(.opacity)
 
-            // No indicator for a single page: one dot says nothing.
-            if pages.count > 1 {
+            // A caller's step counter takes the page dots' place, at the foot of the picture.
+            if let footer {
+                footer
+                    .padding(.bottom, 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .allowsHitTesting(false)
+            } else if pages.count > 1 {
                 PageIndicator(totalPages: pages.count, currentIndex: currentIndex)
                     .padding(.bottom, 14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -293,11 +303,6 @@ public struct TourSlideshowView: View {
 
             Spacer()
 
-            // The step counter sits between the controls, above the page.
-            if let footer {
-                footer
-                Spacer()
-            }
 
             iconButton(systemName: "xmark", action: performClose)
                 .accessibilityLabel("Close tour")
@@ -347,31 +352,34 @@ public struct TourSlideshowView: View {
     /// in this borderless window, and came out grey.
     private var primaryActionButton: some View {
         Button(action: advance) {
-            Text(
-                isLastPage ? finishButtonTitle : continueButtonTitle,
-                tableName: buttonTableName,
-                bundle: buttonBundle
-            )
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 200, height: 40)
-                .background {
-                    ZStack {
-                        Capsule(style: .continuous)
-                            .fill(Color(red: 0.04, green: 0.52, blue: 1.0))
-                        Capsule(style: .continuous)
-                            .fill(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0)],
-                                startPoint: .top, endPoint: .center))
-                        Capsule(style: .continuous)
-                            .strokeBorder(LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0), .white.opacity(0.3)],
-                                startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
-                    }
-                    .opacity(primaryEnabled ? 1 : 0.5)
+            ZStack {
+                let morphed = isPrimaryHovered && primaryHoverSymbol != nil && !reduceMotion
+                Text(
+                    isLastPage ? finishButtonTitle : continueButtonTitle,
+                    tableName: buttonTableName,
+                    bundle: buttonBundle
+                )
+                    .font(.system(size: 15, weight: .semibold))
+                    .opacity(morphed ? 0 : 1)
+                    .blur(radius: morphed ? 8 : 0)
+                if let primaryHoverSymbol {
+                    Image(systemName: primaryHoverSymbol)
+                        .font(.system(size: 17, weight: .semibold))
+                        .opacity(morphed ? 1 : 0)
+                        .blur(radius: morphed ? 0 : 8)
+                        .accessibilityHidden(true)
                 }
-                .shadow(color: Color(red: 0, green: 0.12, blue: 0.27).opacity(0.3), radius: 8, y: 2)
-                .contentShape(Capsule(style: .continuous))
+            }
+            .frame(width: 176, height: 28)
+            .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34), value: isPrimaryHovered)
         }
-        .buttonStyle(TourPressStyle())
+        .onHover { isPrimaryHovered = $0 }
+        // The system's blue Liquid Glass button. It rendered grey only while the host
+        // window could not become key; the setup and tour windows can now.
+        .buttonStyle(.glassProminent)
+        .tint(.blue)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
         .keyboardShortcut(.defaultAction)
         .disabled(!primaryEnabled)
     }
@@ -727,12 +735,3 @@ public struct PageIndicator: View {
     }
 }
 
-/// A small press-down, like the website button's active state.
-private struct TourPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .brightness(configuration.isPressed ? -0.05 : 0)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}

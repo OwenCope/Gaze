@@ -270,7 +270,7 @@ struct OnboardingTests {
 		SetupRequest.begin()
 		precondition(SetupRequest.presentation.purpose == .addFace)
 		precondition(SetupRequest.consumePendingStep() == .capture)
-		precondition(SetupRequest.consumePendingStep() == nil)
+		precondition(SetupRequest.consumePendingStep() == .capture, "the request lasts for the whole opening")
 		SetupRequest.beginOnboarding()
 		precondition(SetupRequest.presentation.purpose == .onboarding)
 		precondition(SetupRequest.consumePendingStep() == .welcome)

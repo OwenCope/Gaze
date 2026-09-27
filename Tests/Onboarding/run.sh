@@ -27,6 +27,8 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(host_target)" \
 	"$ROOT/Sources/Setup/GazePeekingCompanion.swift" \
 	"$ROOT/Sources/Setup/SetupBackdrop.swift" \
 	"$ROOT/Sources/Setup/SetupScaffold.swift" \
+"$ROOT/Sources/Setup/SetupAccessibilityDemo.swift" \
+"$ROOT/Sources/Setup/SetupShot.swift" \
 	"$ROOT/Sources/Setup/SetupControls.swift" \
 	"$ROOT/Sources/Setup/SetupMark.swift" \
 	"$ROOT/Sources/Setup/SetupWelcomeStep.swift" \

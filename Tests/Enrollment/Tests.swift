@@ -125,20 +125,20 @@ enum EnrollmentTests {
 		let base = Date()
 		guidance.now = { base }
 		for _ in 0..<9 { guidance.consume(frontal) }
-		check(guidance.captureStatus == .steady && guidance.instruction.contains("detected"), "Centered face is detected, not misreported as absent")
-		for segment in 0..<48 where !(10...28).contains(segment) {
+		check(guidance.captureStatus == .steady && guidance.instruction.contains("Gently turn"), "Centered face is detected, not misreported as absent")
+		for segment in 0..<48 where !(10...19).contains(segment) {
 			let angle = (Double(segment) + 0.5) * 2 * .pi / 48
 			var pose = frontal
 			pose.pose.yaw = -sin(angle) * 0.3
 			pose.pose.pitch = -cos(angle) * 0.3
 			guidance.consume(pose)
 		}
-		check(guidance.phase == .capturing(pass: 1) && guidance.progress > 0.6 && guidance.progress < 0.75, "Near-complete fixture retains a real gap below early completion")
+		check(guidance.phase == .capturing(pass: 1) && guidance.progress > 0.75 && guidance.progress < 0.85, "Near-complete fixture retains a real gap below a full ring")
 		check(guidance.targetSegment != nil && guidance.instruction.contains("fill the circle"), "Remaining gap has actionable guidance")
 		let gapProgress = guidance.progress
 		let gapPrints = guidance.prints
 		guidance.consume(blurred)
-		check(guidance.captureStatus == .lowQuality && guidance.instruction.contains("is visible"), "Quality rejection explains detected face")
+		check(guidance.captureStatus == .lowQuality && guidance.instruction.contains("Face a light"), "Quality rejection explains detected face")
 		check(!guidance.instruction.contains("toward the gap"), "Quality rejection cannot hide behind stall guidance")
 		guidance.consume(nil)
 		check(guidance.captureStatus == .noFace, "Absence has distinct feedback")
@@ -171,7 +171,7 @@ enum EnrollmentTests {
 			pose.pose.pitch = -cos(angle) * 0.3
 			guidance.consume(pose)
 		}
-		check(guidance.phase == .capturing(pass: 1) && guidance.progress < 0.75, "A partial gap does not finish early below three-quarter coverage")
+		check(guidance.phase == .capturing(pass: 1) && guidance.progress < 1, "A remaining gap does not finish before the stall rule")
 		guidance.now = { base.addingTimeInterval(10) }
 		var repeatPose = frontal
 		repeatPose.pose.yaw = -sin(0.5) * 0.3
@@ -179,6 +179,7 @@ enum EnrollmentTests {
 		guidance.consume(repeatPose)
 		check(guidance.phase == .complete, "Six-second stall with minimums met completes")
 		check(guidance.targetSegment == nil, "Completion clears gap guidance")
+		check(guidance.covered.allSatisfy { $0 }, "A finished scan shows a full ring")
 		print("PASS: \(checks) enrollment checks; generated poses and dummy vectors only, no camera, store, credentials or system authentication.")
 		await SetupLifecycleTests.run()
 	}

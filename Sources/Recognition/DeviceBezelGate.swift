@@ -1,7 +1,6 @@
 // Adapted from Glance by Jonathan Zhou (MIT License), https://github.com/jonnyoo/glance
 // Catches a phone or tablet held up to the camera via its rectangular bezel enclosing
-// the face. False-reject risk: a rectangle directly behind and around the face (a
-// picture frame or window framing the head).
+// the face. Only rectangles that frame the face inside the view count; see looksLikeDevice.
 
 import CoreVideo
 import Foundation
@@ -77,13 +76,14 @@ struct DeviceBezelGate: Sendable {
 		// the face's centre. Coverage is the intersection over the face box, so an
 		// enclosing bezel reads 1.
 		let centre = CGPoint(x: faceRect.midX, y: faceRect.midY)
+		let cropBounds = CGRect(x: 0, y: 0, width: width, height: height)
 		var bestCoverage: CGFloat = 0
 		for observation in observations {
 			let box = observation.boundingBox
 			let rect = CGRect(
 				x: box.minX * width, y: box.minY * height,
 				width: box.width * width, height: box.height * height)
-			guard rect.contains(centre) else { continue }
+			guard rect.contains(centre), Self.looksLikeDevice(rect, face: faceRect, crop: cropBounds) else { continue }
 			let intersection = rect.intersection(faceRect)
 			guard !intersection.isNull, !intersection.isEmpty else { continue }
 			bestCoverage = max(bestCoverage, (intersection.width * intersection.height) / faceArea)
@@ -91,4 +91,24 @@ struct DeviceBezelGate: Sendable {
 		guard bestCoverage.isFinite else { return 0 }
 		return Float(min(max(bestCoverage, 0), 1))
 	}
+
+	/// A screen showing a face frames it: noticeably larger than the face, with a margin
+	/// on every side, and inside the camera's view. Real owners were rejected by
+	/// rectangles that were neither: the outline of their own head (face-sized, covering
+	/// the face completely) and door frames or windows behind them, which run off the
+	/// edge of the view.
+	static func looksLikeDevice(_ rect: CGRect, face: CGRect, crop: CGRect) -> Bool {
+		guard rect.width * rect.height >= face.width * face.height * minimumAreaRatio else { return false }
+		let margin = face.width * minimumFaceMargin
+		guard rect.insetBy(dx: margin, dy: margin).contains(face) else { return false }
+		let edge = min(crop.width, crop.height) * minimumCropMargin
+		return crop.insetBy(dx: edge, dy: edge).contains(rect)
+	}
+
+	/// How much larger than the face box a device rectangle must be.
+	static let minimumAreaRatio: CGFloat = 1.8
+	/// Clear space between the face and the rectangle, as a fraction of face width.
+	static let minimumFaceMargin: CGFloat = 0.08
+	/// Clear space between the rectangle and the edge of the crop, as a fraction of its side.
+	static let minimumCropMargin: CGFloat = 0.02
 }

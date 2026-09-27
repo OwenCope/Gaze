@@ -123,22 +123,10 @@ struct SetupProgress: View {
 		if position.count > 1 { counter }
 	}
 
+	/// TourKit's own page dots, so setup reads as the same card as the tour.
 	private var counter: some View {
-		VStack(spacing: 7) {
-			Text("Step \(position.index + 1) of \(position.count)")
-				.font(.system(size: 12, weight: .medium))
-				.monospacedDigit()
-				.foregroundStyle(Theme.setupSecondary)
-			HStack(spacing: 5) {
-				ForEach(0..<position.count, id: \.self) { index in
-					Capsule()
-						.fill(.primary.opacity(index <= position.index ? 0.85 : 0.2))
-						.frame(width: 18, height: 3)
-				}
-			}
-			.accessibilityHidden(true)
-		}
-		.accessibilityElement(children: .combine)
-		.accessibilityLabel("Step \(position.index + 1) of \(position.count)")
+		PageIndicator(totalPages: position.count, currentIndex: position.index)
+			.accessibilityElement(children: .ignore)
+			.accessibilityLabel("Step \(position.index + 1) of \(position.count)")
 	}
 }

@@ -226,8 +226,6 @@ struct SetupCameraAccessContent: View {
 	var onRequest: () -> Void
 	var onBack: (() -> Void)?
 	var onClose: (() -> Void)?
-	@State private var look: Double = 1
-	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	static func actionTitle(for status: AVAuthorizationStatus) -> String? {
 		switch status {
@@ -249,12 +247,6 @@ struct SetupCameraAccessContent: View {
 		)
 	}
 
-	private var lockNote: some View {
-		Label("Recognition happens on this Mac. Nothing is recorded until you enrol.", systemImage: "lock")
-			.font(.system(size: 12))
-			.foregroundStyle(Theme.setupSecondary)
-	}
-
 	var body: some View {
 		let actionTitle = Self.actionTitle(for: authorization)
 		let primaryTitle = actionTitle.map { isRequesting ? "Waiting for Permission…" : $0 } ?? "Close"
@@ -265,9 +257,7 @@ struct SetupCameraAccessContent: View {
 			finishButtonTitle: "\(primaryTitle)",
 			onFinish: actionTitle != nil ? onRequest : onClose,
 			onClose: onClose,
-			pageMedia: { _ in AnyView(cameraFigure) },
-			mediaHeight: 250,
-			pageAccessory: { _ in AnyView(lockNote) },
+			pageMedia: { _ in AnyView(SetupShot(source: .image("setup-camera-prompt"), aspectRatio: 516.0 / 562.0, cornerRadius: 26)) },
 			primaryEnabled: actionTitle != nil ? !isRequesting : true,
 			showsPrimaryButton: actionTitle != nil,
 			footer: position.map { AnyView(SetupProgress(position: $0)) },
@@ -276,64 +266,14 @@ struct SetupCameraAccessContent: View {
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 
-	/// The companion glancing at the camera, on the tour's Pro Black backdrop.
-	private var cameraFigure: some View {
-		ZStack {
-			HStack(spacing: 40) {
-				GazeLookingCompanion(look: authorization == .notDetermined ? look : 1, happy: false)
-					.frame(width: 120, height: 120)
-				cameraSymbol
-			}
-		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.accessibilityHidden(true)
-		.task(id: animates) {
-			guard animates else { return }
-			while !Task.isCancelled {
-				try? await Task.sleep(for: .seconds(2.4))
-				guard !Task.isCancelled else { return }
-				look = look == 1 ? 0 : 1
-			}
-		}
-	}
-
-	/// Gentle motion only while still waiting on the system prompt, and never
-	/// with Reduce Motion on.
-	private var animates: Bool { authorization == .notDetermined && !reduceMotion }
-
-	private var symbolName: String {
-		switch authorization {
-		case .denied: "camera.slash.fill"
-		case .restricted: "lock.fill"
-		case .notDetermined, .authorized: "camera.fill"
-		@unknown default: "camera.fill"
-		}
-	}
-
-	@ViewBuilder
-	private var cameraSymbol: some View {
-		if animates {
-			symbolBase.symbolEffect(.pulse, options: .repeating)
-		} else {
-			symbolBase
-		}
-	}
-
-	private var symbolBase: some View {
-		Image(systemName: symbolName)
-			.font(.system(size: 56, weight: .medium))
-			.foregroundStyle(.white)
-			.symbolRenderingMode(.monochrome)
-	}
-
 	private var message: String {
 		switch authorization {
 		case .notDetermined:
-			"Gaze uses your built-in camera to recognise your face.\nYour camera stays off until you choose Allow.\nChoose Allow when macOS asks for camera access."
+			"Gaze uses your camera to recognise you. Nothing is recorded."
 		case .denied:
 			"Camera access is off. Enable Gaze in Privacy & Security → Camera, then return here to continue."
 		case .restricted:
-			"A system policy is blocking the camera. Ask your Mac’s administrator to allow access before continuing."
+			"A system policy is blocking the camera."
 		default:
 			"Camera access is unavailable. Close setup and try again."
 		}

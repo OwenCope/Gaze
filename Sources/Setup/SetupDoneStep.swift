@@ -147,7 +147,8 @@ struct SetupDoneStep: View {
 			finishButtonTitle: "\(primaryTitle)",
 			onFinish: primaryAction,
 			onClose: onDone,
-			pageMedia: { _ in AnyView(SetupDoneArt(failed: didFail)) }
+			pageMedia: { _ in AnyView(SetupDoneArt(failed: didFail)) },
+			primaryHoverSymbol: showsSettingsAction && !didFail ? "gearshape.fill" : nil
 		)
 		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}

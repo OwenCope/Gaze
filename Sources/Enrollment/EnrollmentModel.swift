@@ -19,12 +19,12 @@ final class EnrollmentModel {
 	/// user is effectively looking straight ahead and every segment would fill at once.
 	private static let engagementThreshold = 0.22
 
-	/// Finishing early takes three quarters of the ring, not every tick: the last gaps
-	/// sit at the largest pitch angles, where Vision's pitch estimate is worst and
-	/// real scans stall.
-	private static let earlyCompletionCoverage = 0.75
+	/// A scan finishes when the whole ring is filled, as people expect from Face ID.
+	/// Pitch-led segments take a gentler nod (see engagement below) so the top and
+	/// bottom fill without extreme angles.
+	private static let earlyCompletionCoverage = 1.0
 	/// Stall escape hatch: past this coverage the set already spans the needed angles.
-	private static let stallCompletionCoverage = 0.60
+	private static let stallCompletionCoverage = 0.85
 	/// A print counts as clearly turned at this yaw (radians, about 14 degrees).
 	private static let clearTurnYaw = 0.25
 	/// Seconds without a newly covered segment before guidance names the gap.
@@ -93,6 +93,7 @@ final class EnrollmentModel {
 	}
 
 	var captureTitle: String {
+		if phase == .complete { return "Scan complete" }
 		switch captureStatus {
 		case .noFace: return "Bring your face back into view"
 		case .multipleFaces: return "Only one face in view, please"
@@ -116,13 +117,13 @@ final class EnrollmentModel {
 		if case .failed(let message) = phase { return message }
 		if phase != .complete {
 			switch captureStatus {
-			case .noFace: return "No usable face is coming through. Your captured progress is kept."
-			case .multipleFaces: return "More than one face is in view. Only the person being enrolled should be in frame. Your captured progress is kept."
-			case .tooSmall: return "Your face is visible, but needs to fill more of the camera view."
-			case .lowQuality: return "Your face is visible, but this frame isn’t clear enough to save. Face a light and pause briefly."
-			case .invalidMeasurements: return "Your face measurements aren’t usable yet. Look straight ahead for a moment."
-			case .embeddingUnavailable: return "Gaze sees your face but couldn’t create a faceprint. No new progress was saved."
-			case .inconsistentFace: return "This capture doesn’t agree with your starting face. Look toward the camera in steady light, then turn slowly."
+			case .noFace: return "Bring your face back into the circle. Your progress is kept."
+			case .multipleFaces: return "Only the person being added should be in view."
+			case .tooSmall: return "Move a little closer to the camera."
+			case .lowQuality: return "Face a light and hold still for a moment."
+			case .invalidMeasurements: return "Look straight ahead for a moment."
+			case .embeddingUnavailable: return "Gaze can see you but couldn’t save this angle. Hold still in even light."
+			case .inconsistentFace: return "Look straight at the camera, then turn slowly."
 			case .steady, .turning: break
 			}
 		}
@@ -131,10 +132,10 @@ final class EnrollmentModel {
 			return "Position your face in the circle"
 		case .capturing:
 			if stalledForGuidance, targetSegment != nil { return "Tilt your head a little toward the gap" }
-			if captureStatus == .steady { return "Your face is detected. Gently turn your head to capture the unfilled angles." }
+			if captureStatus == .steady { return "Gently turn your head to fill the circle." }
 			return "Move your head slowly to fill the circle"
 		case .complete:
-			return "Gaze is set up"
+			return "Confirm with Touch ID or your password to save this face."
 		case .failed(let message):
 			return message
 		}
@@ -162,6 +163,8 @@ final class EnrollmentModel {
 			progress >= Self.stallCompletionCoverage, hasAngleDiversity,
 			prints.count >= Self.minimumPrints {
 			phase = .complete
+			// A finished scan reads as a full ring, even when the stall rule filled the last gap.
+			covered = Array(repeating: true, count: Self.segmentCount)
 			return
 		}
 
@@ -272,6 +275,8 @@ final class EnrollmentModel {
 		if progress >= Self.earlyCompletionCoverage, hasAngleDiversity,
 			prints.count >= Self.minimumPrints {
 			phase = .complete
+			// A finished scan reads as a full ring, even when the stall rule filled the last gap.
+			covered = Array(repeating: true, count: Self.segmentCount)
 			return
 		}
 		guard progress >= 1 else { return }

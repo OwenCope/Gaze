@@ -34,10 +34,13 @@ enum SetupRequest {
 		presentation.revision += 1
 	}
 
-	/// The requested screen, once. Cleared on read so it applies to this opening only.
+	/// The requested screen for this opening.
+	///
+	/// Read, not cleared: the setup window resets both when the request arrives and when it
+	/// appears, and clearing on the first read sent the second reset back to the tour. Every
+	/// way into setup sets a new request, so a stale one is never reused.
 	static func consumePendingStep() -> SetupStep? {
-		defer { pendingStep = nil }
-		return pendingStep
+		pendingStep
 	}
 
 	static var isDeliberateOpen: Bool { hasDeliberateRequest }

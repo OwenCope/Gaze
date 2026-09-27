@@ -273,6 +273,21 @@
             "sha256": "731e56683721068ab5bca6bc1e80a3bda7716303db287b5493974828b895190b"
           },
           {
+            "path": "Resources/Art/setup-accessibility.png",
+            "bytes": 134337,
+            "sha256": "75ef8741654748947ae02f9d4171f6a60fc8ac0060edacbd6795b3dfc1fc599b"
+          },
+          {
+            "path": "Resources/Art/setup-camera-prompt.png",
+            "bytes": 114937,
+            "sha256": "bdc8ef8fc6ddb1285f9ed21adfa324e478a83cbaef0fbbba68d400726f2eb056"
+          },
+          {
+            "path": "Resources/Art/setup-password.png",
+            "bytes": 76729,
+            "sha256": "ac28024feb941fe1d845ffc40cff432c8813ead4c7583592ce56cc69ac769968"
+          },
+          {
             "path": "Resources/Art/tour-backdrop.png",
             "bytes": 364274,
             "sha256": "28533475edd797ac805190f3158ab0bccc6bc6393bd9a830fce058b25cf01a15"
@@ -345,7 +360,7 @@
         ]
       },
       "provenance": {
-        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files — tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png — as screenshots/renders of their own machine and app with no third-party content; owner confirms (2026-09-21, release-clearance session) they created 28 of the 30 files themselves, screenshots and renders of their own machine and app with no third-party content. The two exceptions are NOT first-party and NOT cleared: Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are a widely-used wallpaper the owner did not create, of unestablished provenance; the owner knowingly accepts the risk of redistributing them, including in a public repository, carried in the owner's name. Owner decision (2026-09-27, 0.1.1 release): tour images re-encoded at smaller sizes and re-recorded by bytes; Resources/Art/tour-backdrop.png, the backdrop behind the setup and tour cards, is recorded like backdrop.png as a wallpaper the owner did not create, of unestablished provenance, shipped as a known accepted risk carried in the owner's name.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files — tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png — as screenshots/renders of their own machine and app with no third-party content; owner confirms (2026-09-21, release-clearance session) they created 28 of the 30 files themselves, screenshots and renders of their own machine and app with no third-party content. The two exceptions are NOT first-party and NOT cleared: Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are a widely-used wallpaper the owner did not create, of unestablished provenance; the owner knowingly accepts the risk of redistributing them, including in a public repository, carried in the owner's name. Owner decision (2026-09-27, 0.1.1 release): tour images re-encoded at smaller sizes and re-recorded by bytes; Resources/Art/tour-backdrop.png, the backdrop behind the setup and tour cards, is recorded like backdrop.png as a wallpaper the owner did not create, of unestablished provenance, shipped as a known accepted risk carried in the owner's name. Resources/Art/setup-camera-prompt.png (2026-09-27) is a screenshot taken by the owner on their own Mac of macOS's camera permission prompt for Gaze, shown in setup so the page matches what the user will see. Resources/Art/setup-accessibility.png (2026-09-27) is the owner's own screenshot of System Settings on their Mac, with the list of other apps removed. Resources/Art/setup-password.png (2026-09-27) is the owner's screenshot of Gaze's own Settings Unlocking section.",
         "evidenceRefs": [
           "build.sh:131-134",
           "Tools/OnboardingArt/manifest.json",

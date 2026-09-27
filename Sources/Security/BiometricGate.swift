@@ -13,12 +13,13 @@ import LocalAuthentication
 /// `LAContext` inside a running app.
 enum BiometricGate {
 
+	/// macOS shows these after "Gaze is trying to", so each is a plain lowercase action.
 	enum Reason: String {
-		case removeEnrollment = "remove your enrolled face"
+		case removeEnrollment = "remove a face"
 		case changeSettings = "change Gaze settings"
 		case disableTamperProtection = "turn off tamper protection"
-		case storePassword = "store your account password"
-		case addEnrollment = "enroll a face"
+		case storePassword = "save your Mac password"
+		case addEnrollment = "add a face"
 		case replaceAutofillIdentity = "trust the selected application with a saved autofill password"
 	}
 
@@ -73,7 +74,7 @@ enum BiometricGate {
 			do {
 				let approved = try await context.evaluatePolicy(
 					.deviceOwnerAuthentication,
-					localizedReason: "Gaze needs to confirm it's you to \(reason.rawValue).")
+					localizedReason: "\(reason.rawValue)")
 				return approved && session.isValid && !Task.isCancelled
 			} catch { return false }
 		} onCancel: {

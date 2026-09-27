@@ -55,6 +55,13 @@ struct SetupFlow: View {
 	@State private var tourRevision = 0
 	@State private var failure: String?
 	@State private var isPresented = false
+	/// Hidden until `restart()` has chosen the screen. The window keeps its last state
+	/// between openings, so its first frame showed the previous screen, usually the tour,
+	/// before jumping to the one Settings asked for.
+	@State private var isReady = false
+	/// A single screen opened from Settings (the password or the permission): it closes
+	/// when done instead of walking on through setup, and has no way back into the tour.
+	@State private var isSinglePage = false
 	@State private var purpose = SetupPurpose.onboarding
 	@State private var captureSession = 0
 	@State private var work = SetupSessionWork()
@@ -166,6 +173,7 @@ struct SetupFlow: View {
 		// Setup is designed dark only. Following a light system turned its text black
 		// on its own black ground.
 		.preferredColorScheme(.dark)
+		.opacity(isReady ? 1 : 0)
 		// Back to the beginning every time the window is shown.
 		//
 		// A SwiftUI `Window` scene keeps its state when it is closed and reopened,
@@ -176,9 +184,11 @@ struct SetupFlow: View {
 		.onAppear {
 			isPresented = true
 			restart()
+			isReady = true
 		}
 		.onDisappear {
 			isPresented = false
+			isReady = false
 			cancelCaptureWork()
 		}
 		.onChange(of: SetupRequest.presentation.revision) { _, _ in
@@ -219,6 +229,8 @@ struct SetupFlow: View {
 		let requested = SetupRequest.consumePendingStep() ?? Self.consumeLaunchStep()
 		purpose = SetupRequest.presentation.purpose
 		plan = makePlan(including: requested)
+		isSinglePage = purpose == .onboarding && store.isEnrolled
+			&& (requested == .password || requested == .permission)
 		step = requested ?? (purpose == .addFace ? .capture : .welcome)
 		if step == .capture && purpose == .onboarding { OnboardingHistory.markPresented() }
 	}
@@ -281,7 +293,7 @@ struct SetupFlow: View {
 
 	/// Where a step sits in the progress row, or nil for the two ends of the flow.
 	private func position(of step: SetupStep) -> SetupPosition? {
-		guard purpose == .onboarding else { return nil }
+		guard purpose == .onboarding, !isSinglePage else { return nil }
 		guard let index = plan.steps.firstIndex(of: step) else { return nil }
 		return SetupPosition(index: index, count: plan.steps.count)
 	}
@@ -299,6 +311,10 @@ struct SetupFlow: View {
 	}
 
 	private func advance() {
+		if isSinglePage {
+			onFinish()
+			return
+		}
 		guard let next = nextStep(after: step) else { return }
 		isReturning = false
 		withAnimation(stepAnimation) { step = next }
@@ -329,6 +345,7 @@ struct SetupFlow: View {
 	/// saved by then, so stepping back into it would re-run enrolment over finished work.
 	/// Back jumps over it to the nearest earlier shown step instead of disappearing.
 	private func backDestination(from step: SetupStep) -> SetupStep? {
+		guard !isSinglePage else { return nil }
 		guard let previous = plan.previous(before: step) else { return nil }
 		if previous == .capture, model?.phase == .complete { return plan.previous(before: .capture) }
 		return previous

@@ -82,8 +82,8 @@ struct SetupPermissionContent: View {
 			imageBundle: .main,
 			title: status.isReady ? "Gaze has permission" : "Allow Gaze to enter your password",
 			description: status.isReady
-				? "macOS has confirmed Accessibility access.\nYou can continue with setup."
-				: "Accessibility lets Gaze type your saved password at the lock screen, only after it recognises you. In System Settings, open Privacy & Security, then Accessibility, and turn on Gaze."
+				? "macOS has confirmed access. You can continue."
+				: "Lets Gaze type your password at the lock screen, only after it recognises you."
 		)
 	}
 
@@ -92,32 +92,15 @@ struct SetupPermissionContent: View {
 	private var primaryAction: () -> Void { status.isReady ? onContinue : onOpenSettings }
 
 	private var statusBlock: some View {
-		VStack(alignment: .leading, spacing: 10) {
-			HStack(spacing: 12) {
-				Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
-					.resizable().frame(width: 32, height: 32)
-					.accessibilityHidden(true)
-				VStack(alignment: .leading, spacing: 3) {
-					Text("Gaze").font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
-					Text(status.isReady ? "Access enabled" : status.accessibility ? "Waiting for macOS to confirm" : "Access not enabled")
-						.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
-				}
-				Spacer()
-				InfoButton(title: "About Accessibility access") {
-					Text("Gaze checks your face and movement before entering your saved login password. Accessibility enables keyboard events; it does not approve a face or replace macOS authentication. A Keychain password prompt is separate from this permission.")
-				}
-			}
-			.padding(14)
-			.background(.primary.opacity(0.06), in: .rect(cornerRadius: 12))
-
+		VStack(spacing: 6) {
 			if !status.isReady {
 				Button("Already on, or not listed? Show Gaze in Finder", action: onRevealApp)
 					.buttonStyle(.link).font(.system(size: 12))
-				if let settingsError {
-					Text(settingsError)
-						.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
-						.fixedSize(horizontal: false, vertical: true)
-				}
+			}
+			if let settingsError {
+				Text(settingsError)
+					.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
+					.fixedSize(horizontal: false, vertical: true)
 			}
 		}
 		.frame(maxWidth: 400)
@@ -131,8 +114,7 @@ struct SetupPermissionContent: View {
 			finishButtonTitle: "\(primaryTitle)",
 			onFinish: primaryAction,
 			onClose: onClose ?? onSkip,
-			pageMedia: { _ in AnyView(SetupPermissionFigure(isReady: status.isReady)) },
-			mediaHeight: 250,
+			pageMedia: { _ in AnyView(SetupAccessibilityDemo(isReady: status.isReady)) },
 			pageAccessory: { _ in AnyView(statusBlock) },
 			secondaryButtonTitle: status.isReady ? nil : "Set Up Later",
 			onSecondary: status.isReady ? nil : onSkip,
@@ -143,25 +125,3 @@ struct SetupPermissionContent: View {
 	}
 }
 
-/// The companion beside the Accessibility glyph on the tour backdrop, brightening
-/// and ticking once macOS confirms access.
-private struct SetupPermissionFigure: View {
-	var isReady: Bool
-	@Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-	var body: some View {
-		ZStack {
-			HStack(spacing: 40) {
-				GazeLookingCompanion(look: 1, happy: isReady)
-					.frame(width: 110, height: 110)
-				Image(systemName: isReady ? "checkmark.circle.fill" : "accessibility")
-					.font(.system(size: 52, weight: .medium))
-					.foregroundStyle(.white)
-					.symbolRenderingMode(.monochrome)
-					.contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
-			}
-		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.accessibilityHidden(true)
-	}
-}
