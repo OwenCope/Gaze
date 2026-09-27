@@ -8,8 +8,8 @@
 # manual `xattr` step in the README does. Homebrew's official cask repository
 # only accepts notarized apps, which is why this is a separate tap.
 cask "gaze" do
-  version "0.1.6"
-  sha256 "7921eb66195b83e1adfa56898ff5e88e64412fdac8d6cb47e1f03efe14496150"
+  version "0.1.7"
+  sha256 "7e8c43cc4c6b83a6374af72752ea914b5a7ea5be422a04c383ba6d75c88cf080"
 
   url "https://github.com/OwenCope/Gaze/releases/download/v#{version}/Gaze.dmg"
   name "Gaze"

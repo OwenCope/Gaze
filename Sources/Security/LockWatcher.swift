@@ -154,6 +154,12 @@ final class LockWatcher {
 				})
 		}
 
+		observers.append(
+			workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) {
+				[weak self] _ in
+				MainActor.assumeIsolated { self?.displaysSlept() }
+			})
+
 		Self.logger.notice("Watching for screen lock and wake.")
 	}
 
@@ -183,7 +189,32 @@ final class LockWatcher {
 	private func screenLocked() {
 		guard Self.screenIsLocked() else { return }
 		isLocked = true
+		// An idle Mac usually locks as its display turns off. Scanning then found the
+		// person sitting there and asked for a movement on a black screen, which timed out
+		// and counted as a miss again and again. The display waking starts the scan instead.
+		guard !Self.displaysAreAsleep() else {
+			Self.logger.notice("Screen locked with the display off; waiting for it to wake.")
+			return
+		}
 		beginAttempt(trigger: "Screen locked")
+	}
+
+	/// The display went dark mid-scan. Nobody can see the panel or answer it, so stop
+	/// without counting anything; waking the display starts again.
+	private func displaysSlept() {
+		lastWakeTrigger = nil
+		pointerRetry?.cancel()
+		pointerRetry = nil
+		guard attempt != nil else { return }
+		Self.logger.notice("Display turned off during a scan; stopping until it wakes.")
+		attempt?.cancel()
+		attempt = nil
+		attemptID = nil
+		capsule.hide()
+	}
+
+	private static func displaysAreAsleep() -> Bool {
+		CGDisplayIsAsleep(CGMainDisplayID()) != 0
 	}
 
 	/// The Mac woke up. If it woke to a locked screen, look for a face.
@@ -199,6 +230,8 @@ final class LockWatcher {
 		// window server rather than assuming, for the same reason the replay path does:
 		// the failure to avoid is typing a password at a screen that is already open.
 		guard Self.screenIsLocked() else { return }
+		// The machine can wake before its display does; the display's own wake follows.
+		guard !Self.displaysAreAsleep() else { return }
 
 		// Waking posts more than one notification — the system wakes, then the displays
 		// do — and both mean the same thing here. Without this, the second one cancels
@@ -256,7 +289,6 @@ final class LockWatcher {
 		StateBroadcast.reset()
 		StateBroadcast.post(.locked)
 
-		let inputSnapshot = LockScreenInputSnapshot.current()
 		let identifier = UUID()
 		attemptID = identifier
 		diagnosticID = identifier
@@ -273,6 +305,9 @@ final class LockWatcher {
 				try? await Task.sleep(for: settle)
 				guard !Task.isCancelled else { return }
 			}
+			// Taken after the settle, so the key press or Escape that woke the Mac, or
+			// came with opening the lid, does not read as someone typing a password.
+			let inputSnapshot = LockScreenInputSnapshot.current()
 			// A camera that fails right after a wake usually works a second later, so it
 			// gets one restart. The input snapshot is kept, so a click during the first try
 			// still stops the second.
