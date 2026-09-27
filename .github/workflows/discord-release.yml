@@ -42,9 +42,9 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             TAG="$DISPATCH_TAG"
             gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --json tagName,name,body,url,isDraft,isPrerelease > /tmp/release.json
+              --json tagName,name,body,url,isDraft,isPrerelease,publishedAt > /tmp/release.json
           else
-            jq '{tagName: .release.tag_name, name: .release.name, body: (.release.body // ""), url: .release.html_url, isDraft: .release.draft, isPrerelease: .release.prerelease}' \
+            jq '{tagName: .release.tag_name, name: .release.name, body: (.release.body // ""), url: .release.html_url, isDraft: .release.draft, isPrerelease: .release.prerelease, publishedAt: .release.published_at}' \
               "$GITHUB_EVENT_PATH" > /tmp/release.json
           fi
 
@@ -68,6 +68,7 @@ jobs:
           name = rel.get("name") or tag
           url = rel.get("url") or ""
           body = rel.get("body") or ""
+          published = rel.get("publishedAt") or None
 
           # Drop everything before the first Markdown heading (the body starts
           # with an HTML <div align="center"> header).
@@ -122,24 +123,28 @@ jobs:
           if truncated:
               body += "\n…and more in the full notes."
 
-          body += f"\n[Download](https://gazeunlock.com/download)\n[Release notes]({url})"
+          body += f"\n\n**[Download](https://gazeunlock.com/download)**  ·  [Release notes]({url})"
 
           version = tag[1:] if tag.startswith("v") else tag
 
           payload = {
               "username": "Gaze",
               "avatar_url": "https://raw.githubusercontent.com/OwenCope/Gaze/main/docs/images/icon.png",
-              "content": f"Gaze {version} is out.",
               "embeds": [
                   {
-                      "title": name,
+                      "title": f"Gaze {version}",
+                      "thumbnail": {"url": "https://raw.githubusercontent.com/OwenCope/Gaze/main/docs/images/icon.png"},
+                      "timestamp": published,
                       "url": url,
                       "description": body,
                       "color": 689407,
-                      "footer": {"text": "Settings > Install Update, or brew upgrade --cask gaze"},
+                      "footer": {"text": "Update in Gaze Settings, or run brew upgrade --cask gaze"},
                   }
               ],
           }
+
+          if not published:
+              payload["embeds"][0].pop("timestamp")
 
           with open("/tmp/discord.json", "w") as f:
               json.dump(payload, f)
