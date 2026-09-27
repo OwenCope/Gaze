@@ -139,7 +139,7 @@ final class CameraController {
 
 		let device: AVCaptureDevice
 		do {
-			device = try CameraDevice.trusted(pinnedID: pinnedDeviceID)
+			device = try CameraDevice.trusted(pinnedID: pinnedDeviceID, allowExternal: Preferences.shared.allowExternalCamera)
 		} catch {
 			stop()
 			state = .failed(String(describing: error))

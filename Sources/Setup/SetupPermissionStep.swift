@@ -76,70 +76,70 @@ struct SetupPermissionContent: View {
 	var onOpenSettings: () -> Void
 	var onRevealApp: () -> Void
 
-	var body: some View {
-		SetupScaffold(
-			position: position,
+	private var page: TourPage {
+		TourPage(
+			imageName: "Art/tour-backdrop.png",
+			imageBundle: .main,
 			title: status.isReady ? "Gaze has permission" : "Allow Gaze to enter your password",
-			message: status.isReady
+			description: status.isReady
 				? "macOS has confirmed Accessibility access.\nYou can continue with setup."
-				: "Accessibility lets Gaze type your saved password at the lock screen, only after it recognises you.\nYou control this in System Settings, and you can skip it for now.",
-			figureHeight: 200,
-			onBack: onBack,
-			onClose: onClose
-		) {
-			SetupPermissionFigure(isReady: status.isReady)
-		} detail: {
-			VStack(alignment: .leading, spacing: 18) {
-				HStack(spacing: 12) {
-					Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
-						.resizable().frame(width: 32, height: 32)
-						.accessibilityHidden(true)
-					VStack(alignment: .leading, spacing: 3) {
-						Text("Gaze").font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
-						Text(status.isReady ? "Access enabled" : status.accessibility ? "Waiting for macOS to confirm" : "Access not enabled")
-							.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
-					}
-					Spacer()
-					InfoButton(title: "About Accessibility access") {
-						Text("Gaze checks your face and movement before entering your saved login password. Accessibility enables keyboard events; it does not approve a face or replace macOS authentication. A Keychain password prompt is separate from this permission.")
-					}
-				}
-				.padding(14)
-				.background(.primary.opacity(0.06), in: .rect(cornerRadius: 12))
+				: "Accessibility lets Gaze type your saved password at the lock screen, only after it recognises you. In System Settings, open Privacy & Security, then Accessibility, and turn on Gaze."
+		)
+	}
 
-				if !status.isReady {
-					VStack(alignment: .leading, spacing: 10) {
-						instruction(1, "Open Privacy & Security → Accessibility.")
-						instruction(2, "Turn on Gaze, then return to this window.")
-					}
-					Button("Gaze isn’t listed? Show this app in Finder", action: onRevealApp)
-						.buttonStyle(.link).font(.system(size: 12))
-					Text(settingsError ?? (status.accessibility
-						? "If access stays pending, quit and reopen this copy of Gaze."
-						: "Use + in Accessibility to add this copy of Gaze if needed."))
+	private var primaryTitle: String { status.isReady ? "Continue" : "Open System Settings" }
+
+	private var primaryAction: () -> Void { status.isReady ? onContinue : onOpenSettings }
+
+	private var statusBlock: some View {
+		VStack(alignment: .leading, spacing: 10) {
+			HStack(spacing: 12) {
+				Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
+					.resizable().frame(width: 32, height: 32)
+					.accessibilityHidden(true)
+				VStack(alignment: .leading, spacing: 3) {
+					Text("Gaze").font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
+					Text(status.isReady ? "Access enabled" : status.accessibility ? "Waiting for macOS to confirm" : "Access not enabled")
+						.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
+				}
+				Spacer()
+				InfoButton(title: "About Accessibility access") {
+					Text("Gaze checks your face and movement before entering your saved login password. Accessibility enables keyboard events; it does not approve a face or replace macOS authentication. A Keychain password prompt is separate from this permission.")
+				}
+			}
+			.padding(14)
+			.background(.primary.opacity(0.06), in: .rect(cornerRadius: 12))
+
+			if !status.isReady {
+				Button("Gaze isn’t listed? Show this app in Finder", action: onRevealApp)
+					.buttonStyle(.link).font(.system(size: 12))
+				if let settingsError {
+					Text(settingsError)
 						.font(.system(size: 12)).foregroundStyle(Theme.setupSecondary)
 						.fixedSize(horizontal: false, vertical: true)
 				}
 			}
-			.frame(maxWidth: 400)
-			.padding(.top, 24)
-		} actions: {
-			if status.isReady {
-				SetupButton(action: onContinue)
-			} else {
-				SetupButton(title: "Open System Settings", action: onOpenSettings)
-				SetupSecondaryButton(title: "Set Up Later", action: onSkip)
-			}
 		}
+		.frame(maxWidth: 400)
 	}
 
-	private func instruction(_ number: Int, _ text: String) -> some View {
-		HStack(alignment: .firstTextBaseline, spacing: 12) {
-			Text("\(number).")
-				.font(.system(size: 13, weight: .semibold))
-				.foregroundStyle(Theme.setupTertiary)
-			Text(text).font(.system(size: 13)).foregroundStyle(Theme.setupSecondary)
-		}
+	var body: some View {
+		TourSlideshowView(
+			pages: [page],
+			width: GazeTourSizing.panelWidth,
+			continueButtonTitle: "\(primaryTitle)",
+			finishButtonTitle: "\(primaryTitle)",
+			onFinish: primaryAction,
+			onClose: onClose ?? onSkip,
+			pageMedia: { _ in AnyView(SetupPermissionFigure(isReady: status.isReady)) },
+			mediaHeight: 250,
+			pageAccessory: { _ in AnyView(statusBlock) },
+			secondaryButtonTitle: status.isReady ? nil : "Set Up Later",
+			onSecondary: status.isReady ? nil : onSkip,
+			footer: position.map { AnyView(SetupProgress(position: $0)) },
+			onBack: onBack
+		)
+		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 }
 
@@ -151,15 +151,6 @@ private struct SetupPermissionFigure: View {
 
 	var body: some View {
 		ZStack {
-			if let url = Bundle.main.url(forResource: "tour-backdrop", withExtension: "png", subdirectory: "Art"),
-				let image = NSImage(contentsOf: url)
-			{
-				Image(nsImage: image)
-					.resizable()
-					.scaledToFill()
-			} else {
-				Color(white: 0.06)
-			}
 			HStack(spacing: 40) {
 				GazeLookingCompanion(look: 1, happy: isReady)
 					.frame(width: 110, height: 110)
@@ -171,7 +162,6 @@ private struct SetupPermissionFigure: View {
 			}
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 		.accessibilityHidden(true)
 	}
 }

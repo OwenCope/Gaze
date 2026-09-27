@@ -49,15 +49,45 @@ struct SetupCaptureStep: View {
 	}
 
 	private var capture: some View {
-		SetupScaffold(
-			position: position,
-			title: title,
-			message: caption,
-			figureHeight: ringSide,
-			onBack: onBack,
-			onClose: onClose
-		) {
-			ZStack {
+		let isFailedRetry: Bool = {
+			if case .failed = camera.state, onRetry != nil, model?.phase != .complete { return true }
+			return false
+		}()
+		let page = TourPage(
+			imageName: "Art/tour-backdrop.png",
+			imageBundle: .main,
+			title: "\(title)",
+			description: "\(caption)"
+		)
+		return TourSlideshowView(
+			pages: [page],
+			width: GazeTourSizing.panelWidth,
+			continueButtonTitle: "Try Again",
+			finishButtonTitle: "Try Again",
+			onFinish: isFailedRetry ? { onRetry?() } : {},
+			onClose: onClose,
+			pageMedia: { _ in AnyView(scanFigure) },
+			mediaHeight: ringSide + 76,
+			pageAccessory: { _ in
+				guard !isFailedRetry else { return nil }
+				return AnyView(
+					Text(model.map { "\(Int($0.overallProgress * 100))%" } ?? "")
+						.font(Typography.setupBody.weight(.semibold).monospacedDigit())
+						.foregroundStyle(Theme.setupTertiary)
+						.opacity(showsPercentage ? 1 : 0)
+						.animation(reduceMotion ? nil : Theme.Motion.quick, value: showsPercentage)
+						.frame(height: 28)
+				)
+			},
+			showsPrimaryButton: isFailedRetry,
+			footer: position.map { AnyView(SetupProgress(position: $0)) },
+			onBack: onBack
+		)
+		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
+	}
+
+	private var scanFigure: some View {
+		ZStack {
 				if let model {
 					EnrollmentRing(
 						covered: model.covered,
@@ -94,18 +124,6 @@ struct SetupCaptureStep: View {
 								.foregroundStyle(Theme.setupTertiary)
 						}
 				}
-			}
-		} actions: {
-			if case .failed = camera.state, let onRetry, model?.phase != .complete {
-				SetupButton(title: "Try Again", action: onRetry)
-			} else {
-				Text(model.map { "\(Int($0.overallProgress * 100))%" } ?? "")
-					.font(Typography.setupBody.weight(.semibold).monospacedDigit())
-					.foregroundStyle(Theme.setupTertiary)
-					.opacity(showsPercentage ? 1 : 0)
-					.animation(reduceMotion ? nil : Theme.Motion.quick, value: showsPercentage)
-					.frame(height: 28)
-			}
 		}
 	}
 
@@ -222,40 +240,45 @@ struct SetupCameraAccessContent: View {
 		}
 	}
 
-	var body: some View {
-		SetupScaffold(
-			position: position,
+	private var page: TourPage {
+		TourPage(
+			imageName: "Art/tour-backdrop.png",
+			imageBundle: .main,
 			title: authorization == .restricted ? "Camera access is restricted" : "Let Gaze see you",
-			message: message,
-			figureHeight: 200,
-			onBack: onBack,
-			onClose: onClose
-		) {
-			cameraFigure
-		} detail: {
-			Label("Recognition happens on this Mac. Nothing is recorded until you enrol.", systemImage: "lock")
-				.font(.system(size: 12))
-				.foregroundStyle(Theme.setupSecondary)
-				.padding(.top, 24)
-		} actions: {
-			if let title = Self.actionTitle(for: authorization) {
-				SetupButton(title: isRequesting ? "Waiting for Permission…" : title, action: onRequest)
-					.disabled(isRequesting)
-			}
-		}
+			description: "\(message)"
+		)
+	}
+
+	private var lockNote: some View {
+		Label("Recognition happens on this Mac. Nothing is recorded until you enrol.", systemImage: "lock")
+			.font(.system(size: 12))
+			.foregroundStyle(Theme.setupSecondary)
+	}
+
+	var body: some View {
+		let actionTitle = Self.actionTitle(for: authorization)
+		let primaryTitle = actionTitle.map { isRequesting ? "Waiting for Permission…" : $0 } ?? "Close"
+		return TourSlideshowView(
+			pages: [page],
+			width: GazeTourSizing.panelWidth,
+			continueButtonTitle: "\(primaryTitle)",
+			finishButtonTitle: "\(primaryTitle)",
+			onFinish: actionTitle != nil ? onRequest : onClose,
+			onClose: onClose,
+			pageMedia: { _ in AnyView(cameraFigure) },
+			mediaHeight: 250,
+			pageAccessory: { _ in AnyView(lockNote) },
+			primaryEnabled: actionTitle != nil ? !isRequesting : true,
+			showsPrimaryButton: actionTitle != nil,
+			footer: position.map { AnyView(SetupProgress(position: $0)) },
+			onBack: onBack
+		)
+		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 
 	/// The companion glancing at the camera, on the tour's Pro Black backdrop.
 	private var cameraFigure: some View {
 		ZStack {
-			if let url = Bundle.main.url(forResource: "tour-backdrop", withExtension: "png", subdirectory: "Art"),
-				let nsImage = NSImage(contentsOf: url) {
-				Image(nsImage: nsImage)
-					.resizable()
-					.scaledToFill()
-			} else {
-				Color(white: 0.06)
-			}
 			HStack(spacing: 40) {
 				GazeLookingCompanion(look: authorization == .notDetermined ? look : 1, happy: false)
 					.frame(width: 120, height: 120)
@@ -263,7 +286,6 @@ struct SetupCameraAccessContent: View {
 			}
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 		.accessibilityHidden(true)
 		.task(id: animates) {
 			guard animates else { return }

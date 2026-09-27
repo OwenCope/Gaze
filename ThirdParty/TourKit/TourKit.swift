@@ -66,6 +66,14 @@ public struct TourSlideshowView: View {
     let onClose: (() -> Void)?
     /// Optional live content for the active page, inside the existing media region.
     let pageMedia: ((Int) -> AnyView?)?
+    let mediaHeight: CGFloat?
+    let pageAccessory: ((Int) -> AnyView?)?
+    let primaryEnabled: Bool
+    let showsPrimaryButton: Bool
+    let secondaryButtonTitle: LocalizedStringKey?
+    let onSecondary: (() -> Void)?
+    let footer: AnyView?
+    let onBack: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State var currentIndex: Int
@@ -80,7 +88,15 @@ public struct TourSlideshowView: View {
         buttonBundle: Bundle? = nil,
         onFinish: (() -> Void)? = nil,
         onClose: (() -> Void)? = nil,
-        pageMedia: ((Int) -> AnyView?)? = nil
+        pageMedia: ((Int) -> AnyView?)? = nil,
+        mediaHeight: CGFloat? = nil,
+        pageAccessory: ((Int) -> AnyView?)? = nil,
+        primaryEnabled: Bool = true,
+        showsPrimaryButton: Bool = true,
+        secondaryButtonTitle: LocalizedStringKey? = nil,
+        onSecondary: (() -> Void)? = nil,
+        footer: AnyView? = nil,
+        onBack: (() -> Void)? = nil
     ) {
         self.pages = pages
         self.width = width
@@ -91,13 +107,22 @@ public struct TourSlideshowView: View {
         self.onFinish = onFinish
         self.onClose = onClose
         self.pageMedia = pageMedia
+        self.mediaHeight = mediaHeight
+        self.pageAccessory = pageAccessory
+        self.primaryEnabled = primaryEnabled
+        self.showsPrimaryButton = showsPrimaryButton
+        self.secondaryButtonTitle = secondaryButtonTitle
+        self.onSecondary = onSecondary
+        self.footer = footer
+        self.onBack = onBack
         _currentIndex = State(initialValue: Self.clamped(initialPageIndex, pageCount: pages.count))
     }
 
     /// Absolute pixel height of the image region, rounded to whole points
     /// so the artwork's edges never anti-alias against the card background.
     var imageHeight: CGFloat {
-        (width / Self.imageAspectRatio).rounded()
+        if let mediaHeight { return mediaHeight }
+        return (width / Self.imageAspectRatio).rounded()
     }
 
     public var body: some View {
@@ -214,9 +239,30 @@ public struct TourSlideshowView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
 
+            if let accessory = pageAccessory?(currentIndex) {
+                accessory
+                    .padding(.top, 14)
+            }
+
             Spacer(minLength: 12)
 
-            primaryActionButton
+            if showsPrimaryButton {
+                primaryActionButton
+            } else {
+                Color.clear.frame(height: 40)
+            }
+
+            if let secondaryButtonTitle, let onSecondary {
+                Button(action: onSecondary) {
+                    Text(secondaryButtonTitle, tableName: buttonTableName, bundle: buttonBundle)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.72))
+                        .padding(6)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+            }
+
         }
         .padding(.horizontal, 32)
         .padding(.bottom, 24)
@@ -239,13 +285,19 @@ public struct TourSlideshowView: View {
 
     private var topControls: some View {
         HStack(spacing: 12) {
-            iconButton(systemName: "chevron.left", action: goBack)
-                .opacity(currentIndex > 0 ? 1 : 0)
-                .disabled(currentIndex == 0)
-                .accessibilityHidden(currentIndex == 0)
+            iconButton(systemName: "chevron.left", action: backAction)
+                .opacity(onBack != nil || currentIndex > 0 ? 1 : 0)
+                .disabled(onBack == nil && currentIndex == 0)
+                .accessibilityHidden(onBack == nil && currentIndex == 0)
                 .accessibilityLabel("Back")
 
             Spacer()
+
+            // The step counter sits between the controls, above the page.
+            if let footer {
+                footer
+                Spacer()
+            }
 
             iconButton(systemName: "xmark", action: performClose)
                 .accessibilityLabel("Close tour")
@@ -314,12 +366,22 @@ public struct TourSlideshowView: View {
                             .strokeBorder(LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0), .white.opacity(0.3)],
                                 startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
                     }
+                    .opacity(primaryEnabled ? 1 : 0.5)
                 }
                 .shadow(color: Color(red: 0, green: 0.12, blue: 0.27).opacity(0.3), radius: 8, y: 2)
                 .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(TourPressStyle())
         .keyboardShortcut(.defaultAction)
+        .disabled(!primaryEnabled)
+    }
+
+    private func backAction() {
+        if currentIndex == 0 {
+            onBack?()
+        } else {
+            goBack()
+        }
     }
 
     // MARK: - Icon controls

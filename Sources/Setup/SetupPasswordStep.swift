@@ -29,53 +29,66 @@ struct SetupPasswordStep: View {
 
 	private var canSubmit: Bool { !password.isEmpty && !isChecking }
 
-	var body: some View {
-		SetupScaffold(
-			position: position,
-			title: "Your login password",
-			message:
-				"Enter the password you type at login on this Mac.\nmacOS checks it before Gaze saves an encrypted copy in the keychain.\nIf you change your Mac password later, save the new one in Gaze Settings.",
-			figureHeight: 200,
-			onBack: onBack,
-			onClose: onClose
-		) {
-			SetupPasswordFigure()
-		} detail: {
-			VStack(spacing: 0) {
-				GlassField(
-					placeholder: "Mac login password",
-					text: $password,
-					isEnabled: !isChecking,
-					onSubmit: { if canSubmit { submit() } }
-				)
-					// The one place in setup where something is *wrong* rather than
-					// merely unfinished, and the only place a nudge is warranted.
-					.modifier(ShakeEffect(travel: shake, isEnabled: !reduceMotion))
+	private var buttonTitle: String { isChecking ? "Checking…" : "Save Password" }
 
-				// Reserved whether or not it is filled, so the buttons below do not jump
-				// up the screen the first time a password is wrong.
-				Text(error ?? " ")
-					.font(.caption)
-					.foregroundStyle(error == nil ? .clear : Theme.danger)
-					.multilineTextAlignment(.center)
-					.fixedSize(horizontal: false, vertical: true)
-					.frame(height: 30, alignment: .top)
-					.padding(.horizontal, 30)
-					.padding(.top, 9)
-				Text("If you skip this, Gaze will recognise you without unlocking until you add your password in Settings.")
-					.font(.caption)
-					.foregroundStyle(Theme.setupSecondary)
-					.multilineTextAlignment(.center)
-					.fixedSize(horizontal: false, vertical: true)
-					.padding(.horizontal, 30)
-			}
-			.padding(.top, 22)
-		} actions: {
-			SetupButton(title: isChecking ? "Checking…" : "Save Password", action: submit)
-				.disabled(!canSubmit)
-			SetupSecondaryButton(title: "Set Up Later", action: onSkip)
-				.disabled(isChecking)
+	private var page: TourPage {
+		TourPage(
+			imageName: "Art/tour-backdrop.png",
+			imageBundle: .main,
+			title: "Your login password",
+			description: "Enter the password you type at login on this Mac. macOS checks it before Gaze saves an encrypted copy in the keychain."
+		)
+	}
+
+	private var fieldBlock: some View {
+		VStack(spacing: 0) {
+			GlassField(
+				placeholder: "Mac login password",
+				text: $password,
+				isEnabled: !isChecking,
+				onSubmit: { if canSubmit { submit() } }
+			)
+				// The one place in setup where something is *wrong* rather than
+				// merely unfinished, and the only place a nudge is warranted.
+				.modifier(ShakeEffect(travel: shake, isEnabled: !reduceMotion))
+
+			// Reserved whether or not it is filled, so the buttons below do not jump
+			// up the screen the first time a password is wrong.
+			Text(error ?? " ")
+				.font(.caption)
+				.foregroundStyle(error == nil ? .clear : Theme.danger)
+				.multilineTextAlignment(.center)
+				.fixedSize(horizontal: false, vertical: true)
+				.frame(height: 22, alignment: .top)
+				.padding(.horizontal, 30)
+				.padding(.top, 9)
+			Text("If you skip this, Gaze recognises you without unlocking until you add your password in Settings.")
+				.font(.caption)
+				.foregroundStyle(Color.white.opacity(0.6))
+				.multilineTextAlignment(.center)
+				.fixedSize(horizontal: false, vertical: true)
+				.padding(.horizontal, 30)
 		}
+	}
+
+	var body: some View {
+		TourSlideshowView(
+			pages: [page],
+			width: GazeTourSizing.panelWidth,
+			continueButtonTitle: "\(buttonTitle)",
+			finishButtonTitle: "\(buttonTitle)",
+			onFinish: submit,
+			onClose: onClose ?? onSkip,
+			pageMedia: { _ in AnyView(SetupPasswordFigure()) },
+			mediaHeight: 250,
+			pageAccessory: { _ in AnyView(fieldBlock) },
+			primaryEnabled: canSubmit,
+			secondaryButtonTitle: "Set Up Later",
+			onSecondary: onSkip,
+			footer: position.map { AnyView(SetupProgress(position: $0)) },
+			onBack: onBack
+		)
+		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 
 	private func submit() {
@@ -119,7 +132,6 @@ struct SetupPasswordStep: View {
 private struct SetupPasswordFigure: View {
 	var body: some View {
 		ZStack {
-			SetupTourBackdrop()
 			HStack(spacing: 40) {
 				GazeLookingCompanion(look: 1, happy: false)
 					.frame(width: 110, height: 110)
@@ -130,23 +142,7 @@ private struct SetupPasswordFigure: View {
 			}
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
 		.accessibilityHidden(true)
-	}
-}
-
-/// The tour backdrop behind a setup figure, or a dark fill when it is missing.
-private struct SetupTourBackdrop: View {
-	var body: some View {
-		if let url = Bundle.main.url(forResource: "tour-backdrop", withExtension: "png", subdirectory: "Art"),
-			let image = NSImage(contentsOf: url)
-		{
-			Image(nsImage: image)
-				.resizable()
-				.scaledToFill()
-		} else {
-			Color(white: 0.06)
-		}
 	}
 }
 

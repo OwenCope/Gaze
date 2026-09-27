@@ -20,44 +20,71 @@ struct SetupHowStep: View {
 	var onClose: (() -> Void)? = nil
 	var movementCount = 2
 
-	var body: some View {
-		SetupScaffold(
-			position: position,
+	private var message: String {
+		movementCount == 0
+			? "Look at the camera. Gaze unlocks as soon as it recognises you. Gaze enters your saved login password after verification."
+			: "Look at the camera, then follow \(movementCount == 1 ? "one small movement" : "two small movements"). Gaze enters your saved login password after verification."
+	}
+
+	private var page: TourPage {
+		TourPage(
+			imageName: "Art/tour-backdrop.png",
+			imageBundle: .main,
 			title: "How Gaze unlocks your Mac",
-			message: "Look at the camera, then follow \(movementCount == 1 ? "one small movement" : "two small movements").\nGaze enters your saved login password after verification.",
-			figureHeight: 0,
-			onBack: onBack,
-			onClose: onClose
-		) {
-			EmptyView()
-		} detail: {
-			VStack(alignment: .leading, spacing: 24) {
-				fact("person.crop.rectangle", "Recognition stays on your Mac",
-					"Gaze uses the built-in camera. Face recognition runs on this device, not in the cloud.")
-				fact("lock", "You’re trusting Gaze with your login",
-					"To unlock, Gaze needs an encrypted, recoverable copy of your Mac password. This is not Apple Face ID.")
-				fact("keyboard", "Your usual way in stays available",
-					"Keep using your password or Touch ID whenever available. You can pause Gaze at any time.")
-			}
-			.frame(maxWidth: 440)
-			.padding(.top, 32)
-		} actions: {
-			SetupButton(action: onContinue)
+			description: LocalizedStringKey(message)
+		)
+	}
+
+	private var figure: some View {
+		ZStack {
+			GazeLookingCompanion(look: 1, happy: false)
+				.frame(width: 110, height: 110)
 		}
+		.frame(maxWidth: .infinity, maxHeight: .infinity)
+		.accessibilityHidden(true)
+	}
+
+	private var accessory: some View {
+		VStack(alignment: .leading, spacing: 16) {
+			fact("person.crop.rectangle", "Recognition stays on your Mac",
+				"Gaze uses the built-in camera. Face recognition runs on this device, not in the cloud.")
+			fact("lock", "You’re trusting Gaze with your login",
+				"To unlock, Gaze needs an encrypted, recoverable copy of your Mac password. This is not Apple Face ID.")
+			fact("keyboard", "Your usual way in stays available",
+				"Keep using your password or Touch ID whenever available. You can pause Gaze at any time.")
+		}
+		.frame(maxWidth: 480)
+	}
+
+	var body: some View {
+		TourSlideshowView(
+			pages: [page],
+			width: GazeTourSizing.panelWidth,
+			continueButtonTitle: "Continue",
+			finishButtonTitle: "Continue",
+			onFinish: onContinue,
+			onClose: onClose,
+			pageMedia: { _ in AnyView(figure) },
+			mediaHeight: 170,
+			pageAccessory: { _ in AnyView(accessory) },
+			footer: position.map { AnyView(SetupProgress(position: $0)) },
+			onBack: onBack
+		)
+		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
 	}
 
 	private func fact(_ symbol: String, _ title: String, _ detail: String) -> some View {
 		HStack(alignment: .top, spacing: 18) {
 			Image(systemName: symbol)
-				.font(.system(size: 23, weight: .regular))
-				.foregroundStyle(Theme.setupSecondary)
+				.font(.system(size: 20, weight: .regular))
+				.foregroundStyle(Color.white.opacity(0.7))
 				.frame(width: 30, height: 30)
 				.accessibilityHidden(true)
 			VStack(alignment: .leading, spacing: 5) {
-				Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(.primary)
+				Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
 				Text(detail)
 					.font(.system(size: 13))
-					.foregroundStyle(Theme.setupSecondary)
+					.foregroundStyle(Color.white.opacity(0.72))
 					.fixedSize(horizontal: false, vertical: true)
 					.lineSpacing(2)
 			}

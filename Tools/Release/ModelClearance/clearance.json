@@ -214,8 +214,8 @@
           },
           {
             "path": "Resources/Art/lockscreen-base.png",
-            "bytes": 7788315,
-            "sha256": "6e91fd10666d898f0f9177fbe20afebcde2610c8bad7e27e1bb57104489b6ef6"
+            "bytes": 1649019,
+            "sha256": "d0f6342ef500a18f26b6f3dea77add55853bd3ad86abfd5bc28e3e90c9daa612"
           },
           {
             "path": "Resources/Art/movement-blink.png",
@@ -273,19 +273,24 @@
             "sha256": "731e56683721068ab5bca6bc1e80a3bda7716303db287b5493974828b895190b"
           },
           {
+            "path": "Resources/Art/tour-backdrop.png",
+            "bytes": 364274,
+            "sha256": "28533475edd797ac805190f3158ab0bccc6bc6393bd9a830fce058b25cf01a15"
+          },
+          {
             "path": "Resources/Art/tour-general.png",
-            "bytes": 661362,
-            "sha256": "bd5b1be41e78aff0a3ad4e7777a7ab06ee7af53c5906528d010359d9584668a7"
+            "bytes": 339958,
+            "sha256": "9a46d17e3f26a5e63e5a2b9ac2c869b18c5980674b231f5d17eda07feb939f0b"
           },
           {
             "path": "Resources/Art/tour-how-unlock.png",
-            "bytes": 1029935,
-            "sha256": "ef5aea09467487f1096d5633f01c6d9f9bdcca11c9d248235f6a80e30baface1"
+            "bytes": 278014,
+            "sha256": "f4b4f36faaefba3a6f4ccb5f1f19871842f774db0663ef625d904674fac21459"
           },
           {
             "path": "Resources/Art/tour-notch.png",
-            "bytes": 352072,
-            "sha256": "29663983a4173f8aa50ad0cd4be1f6eaa6e339ac705c5f70793f5966ae3981ea"
+            "bytes": 362868,
+            "sha256": "da51ed460ec5124d8d4bc3593ae7c8af41b120b80a22d726e21cd8cafee50f4e"
           },
           {
             "path": "Resources/Art/tour-practice.png",
@@ -329,18 +334,18 @@
           },
           {
             "path": "Resources/Art/tour-security.png",
-            "bytes": 679942,
-            "sha256": "9868d53298d64c2a07dc5a368c6937c826b61aee5a90f9f3a5dbd01f7065f7e2"
+            "bytes": 381439,
+            "sha256": "71eaccf09bf9ea7746b2103fc48ac2952d771a96a4e3b39660d2608809cac065"
           },
           {
             "path": "Resources/Art/tour-unlock.png",
-            "bytes": 662308,
-            "sha256": "fa81d7b8920f2688e194fe31b99d12f93b613e9b109ff0599ac0de73a62ea711"
+            "bytes": 332978,
+            "sha256": "9cb480e54280c3e04a977e4d1ba8451415498b4cc39bfdece454076d352ec461"
           }
         ]
       },
       "provenance": {
-        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files \u2014 tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png \u2014 as screenshots/renders of their own machine and app with no third-party content; owner confirms (2026-09-21, release-clearance session) they created 28 of the 30 files themselves, screenshots and renders of their own machine and app with no third-party content. The two exceptions are NOT first-party and NOT cleared: Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are a widely-used wallpaper the owner did not create, of unestablished provenance; the owner knowingly accepts the risk of redistributing them, including in a public repository, carried in the owner's name.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files — tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png — as screenshots/renders of their own machine and app with no third-party content; owner confirms (2026-09-21, release-clearance session) they created 28 of the 30 files themselves, screenshots and renders of their own machine and app with no third-party content. The two exceptions are NOT first-party and NOT cleared: Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are a widely-used wallpaper the owner did not create, of unestablished provenance; the owner knowingly accepts the risk of redistributing them, including in a public repository, carried in the owner's name. Owner decision (2026-09-27, 0.1.1 release): tour images re-encoded at smaller sizes and re-recorded by bytes; Resources/Art/tour-backdrop.png, the backdrop behind the setup and tour cards, is recorded like backdrop.png as a wallpaper the owner did not create, of unestablished provenance, shipped as a known accepted risk carried in the owner's name.",
         "evidenceRefs": [
           "build.sh:131-134",
           "Tools/OnboardingArt/manifest.json",
@@ -395,6 +400,11 @@
             "sha256": "7c46d160e698aa7a517c0b2fecff059faae51ffa19afc2b6b71eced89e7354b3"
           },
           {
+            "path": "Resources/Credits/app-boringnotch.png",
+            "bytes": 52955,
+            "sha256": "a90cff70803f4008703866e08edfb737bcef94603ff3680ededf6428b20933bc"
+          },
+          {
             "path": "Resources/Credits/app-dynamiclake.png",
             "bytes": 23370,
             "sha256": "a7bf6a5bc51f9c6987ce9ad25b98ab173fb2328516312c89baf9c796ad279527"
@@ -420,6 +430,16 @@
             "sha256": "5e266a7dc70722497acd57cb94875b116dd44d535dd439edd7cd51d92516c772"
           },
           {
+            "path": "Resources/Credits/deepinsight.png",
+            "bytes": 58501,
+            "sha256": "d680e126415f6e0cae6dba2c8f08bb2c01b7918da6743f1019a36ca1ea577c0f"
+          },
+          {
+            "path": "Resources/Credits/harsh vardhan goswami.png",
+            "bytes": 38747,
+            "sha256": "5000ef2c5b6aa57b3f2acca75aedbd6e1183ca5abf49b2fe94ccefc27f3113a7"
+          },
+          {
             "path": "Resources/Credits/nautey.png",
             "bytes": 37112,
             "sha256": "9b23cd7e9a6b4a0215d5419f756009c388f9ab7cf9cc48aa15dca7affc028c4e"
@@ -437,7 +457,7 @@
         ]
       },
       "provenance": {
-        "summary": "Third-party likenesses and app icons (build.sh: 'each person's own picture, or their app's icon'; snapshots resized to 128pt). Owner confirms (2026-09-21, release-clearance session) they obtained permission from the people in the nine images.",
+        "summary": "Third-party likenesses and app icons (build.sh: 'each person's own picture, or their app's icon'; snapshots resized to 128pt). Owner confirms (2026-09-21, release-clearance session) they obtained permission from the people in the nine images. Owner decision (2026-09-27, 0.1.1 release): app-boringnotch.png, deepinsight.png and harsh vardhan goswami.png are attribution images of the app and people named on the credits page, recorded as a known accepted risk carried in the owner's name.",
         "evidenceRefs": [
           "build.sh:152-158",
           "Owner confirmation, release-clearance session 2026-09-21 (permission obtained from the people pictured)"

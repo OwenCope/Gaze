@@ -38,6 +38,8 @@ struct GlareCue: Sendable {
 	/// from a bright patch, so the cue abstains; full trust by `trustedFaceWidth`.
 	static let abstainFaceWidth: Float = 50
 	static let trustedFaceWidth: Float = 130
+	/// Below this mean face brightness the face is screen-lit in a dark room, where bright reflections read as glare — so the cue abstains.
+	static let minimumFaceLuma: Float = 0.3
 
 	private(set) var framesCounted = 0
 	private(set) var fired = false
@@ -92,6 +94,7 @@ struct GlareCue: Sendable {
 		let grid = 8
 		var cells = [Int](repeating: 0, count: grid * grid)
 		var glareTotal = 0
+		var lumaSum: Float = 0
 		let facePixels = (maxX - minX) * (maxY - minY)
 		pixels.data.withUnsafeBufferPointer { bytes in
 			for y in minY..<maxY {
@@ -102,6 +105,7 @@ struct GlareCue: Sendable {
 					let g = Float(bytes[offset + 1])
 					let b = Float(bytes[offset + 2])
 					let luma = 0.299 * r + 0.587 * g + 0.114 * b
+					lumaSum += luma / 255
 					guard luma >= 235 else { continue }
 					guard max(r, max(g, b)) - min(r, min(g, b)) <= 10 else { continue }
 					glareTotal += 1
@@ -110,6 +114,7 @@ struct GlareCue: Sendable {
 				}
 			}
 		}
+		guard lumaSum / Float(facePixels) >= Self.minimumFaceLuma else { return (0, 0) }
 		guard glareTotal > 0 else { return (0, confidence) }
 		let fraction = Float(glareTotal) / Float(facePixels)
 		let cluster = Float(cells.max() ?? 0) / Float(glareTotal)

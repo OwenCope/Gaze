@@ -72,6 +72,22 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			section: "securitySection"
 		),
 		SettingsSearchItem(
+			id: "sensitivity",
+			title: "Recognition sensitivity",
+			subtitle: "How strictly a face must match to unlock",
+			keywords: ["sensitivity", "sensitive", "threshold", "strict", "relaxed", "matching", "dim"],
+			pane: "face",
+			section: "securitySection"
+		),
+		SettingsSearchItem(
+			id: "usb-cameras",
+			title: "Allow USB cameras",
+			subtitle: "Use a USB webcam with the lid closed",
+			keywords: ["usb", "camera", "external", "webcam", "clamshell", "lid closed", "display"],
+			pane: "face",
+			section: "securitySection"
+		),
+		SettingsSearchItem(
 			id: "walk-away",
 			title: "Lock when I walk away",
 			subtitle: "Lock after absence is confirmed",

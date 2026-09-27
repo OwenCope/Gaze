@@ -58,6 +58,9 @@ struct RecognitionTestView: View {
 	/// One label per face in view, so the test can be run with a friend beside the owner.
 	@State private var faceLabels: [FaceLabel] = []
 	@State private var frameSize: CGSize = .zero
+	@State private var lockVerdict = "Not recognised"
+	@State private var lockWillUnlock = false
+	@State private var worker: RecognitionTestWorker?
 
 	private struct FaceLabel: Equatable {
 		var box: CGRect
@@ -76,6 +79,8 @@ struct RecognitionTestView: View {
 		var peak: Float = 0
 		var floor: Float = 1
 		var samples = 0
+		var lockVerdict = "Not recognised"
+		var lockWillUnlock = false
 	}
 
 	var body: some View {
@@ -112,7 +117,14 @@ struct RecognitionTestView: View {
 			pending.score = 0
 			spoofConf = nil
 			faceLabels = []
+			lockVerdict = "Not recognised"
+			lockWillUnlock = false
+			pending.lockVerdict = "Not recognised"
+			pending.lockWillUnlock = false
 			challenge.reset()
+		}
+		.onChange(of: store.faces.map(\.id)) { _, _ in
+			if let worker { Task { await worker.reset() } }
 		}
 	}
 
@@ -142,6 +154,7 @@ struct RecognitionTestView: View {
 
 	private var readout: RecognitionTestReadout {
 		var rows: [(String, String)] = [
+			("At the lock screen", lockVerdict),
 			("Analyzed / expired frames", "\(camera.analyzedFrames) / \(camera.expiredFrames)"),
 			("Requested movement", challenge.guidancePrompt),
 			("Match score", String(format: "%.3f", score)),
@@ -196,6 +209,7 @@ struct RecognitionTestView: View {
 		} else if camera.state == .running {
 			CameraPreview(controller: camera)
 				.overlay { faceBoxOverlay }
+				.overlay(alignment: .bottomTrailing) { lockVerdictPill.padding(14) }
 		} else {
 			ZStack {
 				Theme.surface
@@ -229,10 +243,42 @@ struct RecognitionTestView: View {
 		pending.peak = 0
 		pending.floor = 1
 		pending.samples = 0
+		pending.lockVerdict = "Not recognised"
+		pending.lockWillUnlock = false
 		blinked = false
 		eyesShut = false
 		challenge.next()
+		if let worker { Task { await worker.reset() } }
 		publish()
+	}
+
+	/// What the lock screen would do with the chosen face's result. Matches
+	/// `UnlockFrameEvaluator.Result.permitsMatchHold(requiresAntiSpoof: true)`.
+	private static func lockScreenVerdict(matched: Bool, decision: AntiSpoofGate.Decision?) -> (String, Bool) {
+		guard matched else { return ("Not recognised", false) }
+		switch decision {
+		case .live:
+			return ("Would unlock", true)
+		case .spoof(let reason, _):
+			let text = reason.lowercased()
+			if text.contains("device-bezel") { return ("Blocked: a rectangle around your face", false) }
+			if text.contains("glare") { return ("Blocked: glare on your face", false) }
+			return ("Blocked: looks like a photo or screen", false)
+		case .unavailable, nil:
+			return ("Blocked: photo check unavailable", false)
+		}
+	}
+
+	/// The lock-screen verdict, on the camera next to the recognition pill.
+	private var lockVerdictPill: some View {
+		HStack(spacing: 8) {
+			Circle().fill(lockWillUnlock ? Theme.faceID : Color.white.opacity(0.5)).frame(width: 8, height: 8)
+			Text("At the lock screen: \(lockVerdict)").font(.callout.weight(.semibold)).foregroundStyle(.white)
+		}
+		.padding(.horizontal, 12).padding(.vertical, 7)
+		.background(.black.opacity(0.55), in: Capsule())
+		.background(.ultraThinMaterial, in: Capsule())
+		.accessibilityElement(children: .combine)
 	}
 
 	private func eyeOpenness(_ lm: VNFaceLandmarks2D) -> Float? {
@@ -291,7 +337,8 @@ struct RecognitionTestView: View {
 	private func runRecognition() async {
 		let enrolledIDs = store.faces.map(\.id)
 		// Faces switched off in Settings are left out, as on the lock screen.
-		let worker = RecognitionTestWorker(embedder: store.embedder, faces: store.faces.filter(\.isEnabled), spoof: spoof)
+		let testWorker = RecognitionTestWorker(embedder: store.embedder, faces: store.faces.filter(\.isEnabled), spoof: spoof)
+		worker = testWorker
 		var frames = RecognitionFrameGate()
 		while !Task.isCancelled, camera.state == .running, store.faces.map(\.id) == enrolledIDs {
 			let start = ContinuousClock.now
@@ -303,7 +350,7 @@ struct RecognitionTestView: View {
 				let revision = testRevision
 				// Same rule as the lock screen: with several faces in view, the one that matches.
 				let faces = [sample] + sample.bystanders.filter(FrameQuality.isUsable)
-				let (results, chosen, confidence) = await worker.evaluate(faces)
+				let (results, chosen, confidence) = await testWorker.evaluate(faces)
 				let result = results[chosen]
 				guard !Task.isCancelled, camera.state == .running else { clearMatch(); return }
 				if revision == testRevision, store.faces.map(\.id) == enrolledIDs,
@@ -314,6 +361,7 @@ struct RecognitionTestView: View {
 					pending.samples += 1
 					pending.matched = result.matched
 					pending.score = result.score
+					(pending.lockVerdict, pending.lockWillUnlock) = Self.lockScreenVerdict(matched: result.matched, decision: result.spoofDecision)
 					spoofConf = confidence
 					faceLabels = zip(faces, results).map { face, verdict in
 						FaceLabel(box: face.boundingBox,
@@ -338,6 +386,10 @@ struct RecognitionTestView: View {
 		pending.score = 0
 		spoofConf = nil
 		faceLabels = []
+		lockVerdict = "Not recognised"
+		lockWillUnlock = false
+		pending.lockVerdict = "Not recognised"
+		pending.lockWillUnlock = false
 	}
 
 	private static func labelText(score: Float, matched: Bool) -> String {
@@ -389,6 +441,8 @@ struct RecognitionTestView: View {
 		peak = pending.peak
 		floor = pending.floor
 		samples = pending.samples
+		lockVerdict = pending.lockVerdict
+		lockWillUnlock = pending.lockWillUnlock
 	}
 }
 
@@ -397,12 +451,16 @@ private actor RecognitionTestWorker {
 	private let spoof: SpoofDetector?
 
 	init(embedder: any FaceEmbedder, faces: [FaceEnrollment], spoof: SpoofDetector?) {
-		evaluator = UnlockFrameEvaluator(embedder: embedder, faces: faces, antiSpoof: nil)
+		evaluator = UnlockFrameEvaluator(embedder: embedder, faces: faces, antiSpoof: AntiSpoofGate(spoof: spoof))
 		self.spoof = spoof
 	}
 
+	func reset() async {
+		await evaluator.resetSpoofCues()
+	}
+
 	/// Scores every face in view and picks the first that matches, else the first. The
-	/// anti-spoof pass runs once, on the chosen face.
+	/// verdict is read from the chosen face; the deny cues count every evaluated frame.
 	func evaluate(_ samples: [FaceSample]) async -> ([UnlockFrameEvaluator.Result], Int, Float?) {
 		var results: [UnlockFrameEvaluator.Result] = []
 		for sample in samples { results.append(await evaluator.evaluate(sample)) }

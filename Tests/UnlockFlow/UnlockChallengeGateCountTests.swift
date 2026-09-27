@@ -24,6 +24,8 @@ enum UnlockChallengeGateCountTests {
 		check(UnlockChallengeGate().requiredActions == 2, "default init retains two actions")
 		check(UnlockChallengeGate(requiredActions: 1).requiredActions == 1, "one movement is configurable")
 		check(UnlockChallengeGate(requiredActions: 2).requiredActions == 2, "two movements stay selectable")
+		check(UnlockChallengeGate(requiredActions: 0).requiredActions == 0, "no movement is configurable")
+		check(UnlockChallengeGate(requiredActions: 0).isVerified, "no-movement gate starts verified")
 		check(UnlockChallengeGate.presentationDelay == .milliseconds(350), "pin 350ms presentation interval")
 		check(UnlockChallengeGate.responseTimeout == .seconds(8), "pin eight-second response timeout")
 		invalidValues()
@@ -39,7 +41,7 @@ enum UnlockChallengeGateCountTests {
 	}
 
 	static func invalidValues() {
-		for value in [0, 3, -1, 99, Int.min, Int.max] {
+		for value in [3, -1, 99, Int.min, Int.max] {
 			check(UnlockChallengeGate(requiredActions: value).requiredActions == 2,
 				"invalid count \(value) resolves to two")
 			check(!UnlockChallengeGate(requiredActions: value).isVerified,

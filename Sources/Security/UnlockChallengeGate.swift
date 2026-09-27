@@ -13,7 +13,7 @@ struct UnlockChallengeGate {
 	private var lastCapture: ContinuousClock.Instant?
 
 	init(requiredActions: Int = Self.defaultRequiredActions) {
-		if requiredActions == 1 || requiredActions == 2 {
+		if requiredActions == 0 || requiredActions == 1 || requiredActions == 2 {
 			self.requiredActions = requiredActions
 		} else {
 			self.requiredActions = Self.defaultRequiredActions
@@ -21,6 +21,7 @@ struct UnlockChallengeGate {
 	}
 
 	var isPresented: Bool { presentedAt != nil }
+	/// Zero required actions is already satisfied: no prompt is ever presented.
 	var isVerified: Bool { completedActions == requiredActions }
 
 	@discardableResult

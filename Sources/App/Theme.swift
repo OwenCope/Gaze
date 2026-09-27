@@ -1,4 +1,5 @@
 import AppKit
+import ObjectiveC
 import SwiftUI
 
 /// Design tokens.
@@ -1096,5 +1097,42 @@ struct InfoButton<Content: View>: View {
 			}
 		}
 		.onDisappear { isShowing = false; pinned = false }
+	}
+}
+
+/// Lets a `.plain` window become key, so its fields take typing and its buttons draw active.
+///
+/// `.plain` windows are borderless, and borderless windows refuse key status. Giving the
+/// window a title bar instead drew macOS's own glass frame around the card, and adding
+/// `.titled` to the live window made SwiftUI rebuild it and broke closing it. So the
+/// window keeps its borderless style and its class is swapped for a subclass that
+/// answers yes to `canBecomeKey` and `canBecomeMain`.
+struct KeyablePlainWindow: NSViewRepresentable {
+	func makeNSView(context: Context) -> NSView { HostView() }
+	func updateNSView(_ nsView: NSView, context: Context) {}
+
+	private final class HostView: NSView {
+		override func viewDidMoveToWindow() {
+			super.viewDidMoveToWindow()
+			guard let window, !window.canBecomeKey else { return }
+			KeyablePlainWindow.makeKeyable(window)
+			window.makeKey()
+		}
+	}
+
+	@MainActor
+	static func makeKeyable(_ window: NSWindow) {
+		let base: AnyClass = type(of: window)
+		let name = "GazeKeyable_" + NSStringFromClass(base)
+		var subclass: AnyClass? = NSClassFromString(name)
+		if subclass == nil, let made = objc_allocateClassPair(base, name, 0) {
+			let yes: @convention(block) (AnyObject) -> Bool = { _ in true }
+			let imp = imp_implementationWithBlock(yes)
+			class_addMethod(made, #selector(getter: NSWindow.canBecomeKey), imp, "c@:")
+			class_addMethod(made, #selector(getter: NSWindow.canBecomeMain), imp, "c@:")
+			objc_registerClassPair(made)
+			subclass = made
+		}
+		if let subclass { object_setClass(window, subclass) }
 	}
 }

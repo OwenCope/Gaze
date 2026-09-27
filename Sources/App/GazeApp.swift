@@ -140,6 +140,7 @@ struct GazeApp: App {
 			EnrollmentWindow(store: store)
 				.scrollIndicators(.never)
 				.containerBackground(.clear, for: .window)
+				.background(KeyablePlainWindow())
 		}
 		.windowResizability(.contentSize)
 		.defaultSize(width: 760, height: 680)
@@ -151,6 +152,7 @@ struct GazeApp: App {
 		// from the guide entries in Settings and Notch settings, never on its own.
 		Window("Movement guide", id: "movement-guide") {
 			GazeMovementGuideWindow()
+				.background(KeyablePlainWindow())
 		}
 		.windowResizability(.contentSize)
 		.defaultSize(width: 760, height: 680)

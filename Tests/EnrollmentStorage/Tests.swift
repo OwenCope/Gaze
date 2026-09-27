@@ -45,6 +45,23 @@ enum Embedders {
 	static func best() -> FaceEmbedder { FixtureEmbedder() }
 }
 
+struct AdjustedThresholdEmbedder: FaceEmbedder {
+	let base: any FaceEmbedder
+	let offset: Float
+	var identifier: String { base.identifier }
+	var usesCosineSimilarity: Bool { base.usesCosineSimilarity }
+	var matchThreshold: Float { base.matchThreshold + offset }
+	func embed(_ sample: FaceSample) -> Faceprint? { base.embed(sample) }
+	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float { base.similarity(a, b) }
+}
+
+/// Only the sensitivity FaceEnrollment reads; standard adds nothing to the threshold.
+final class Preferences: @unchecked Sendable {
+	struct Sensitivity { let thresholdOffset: Float = 0 }
+	static let shared = Preferences()
+	let recognitionSensitivity = Sensitivity()
+}
+
 /// Models SecureVault.load/store semantics — one JSON blob that is either absent
 /// (nil) or present — while counting vault reads. The "decryption" step is a
 /// plain JSON decode of the staged plaintext, which is exactly the surface the

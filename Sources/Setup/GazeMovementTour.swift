@@ -44,7 +44,9 @@ struct GazeMovementTour: View {
 				imageBundle: .main,
 				title: "Practice the movements",
 				description: LocalizedStringKey(
-					stringLiteral: "Gaze asks for \(movementCount == 1 ? "one small movement" : "two small movements") before unlocking. Try each one here. This guide keeps the camera off."
+					stringLiteral: movementCount == 0
+						? "Movements are off, so Gaze unlocks without one. Try them here in case you turn them on. This guide keeps the camera off."
+						: "Gaze asks for \(movementCount == 1 ? "one small movement" : "two small movements") before unlocking. Try each one here. This guide keeps the camera off."
 				)
 			)
 		]

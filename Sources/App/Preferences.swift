@@ -127,15 +127,16 @@ final class Preferences {
 	/// How many completed movement responses Mac unlock asks for.
 	///
 	/// Two is the default for new and existing users. One is quicker and two asks
-	/// for another completed response. There is deliberately no zero/off option
-	/// for Mac unlock: the count only feeds the movement gate, never whether
-	/// recognition itself runs.
+	/// for another completed response. None skips the movement prompt and relies
+	/// on face match plus the photo and screen checks.
 	enum UnlockMovementCount: Int, CaseIterable, Sendable {
+		case none = 0
 		case one = 1
 		case two = 2
 
 		var title: String {
 			switch self {
+			case .none: return "No movement (less secure)"
 			case .one: return "One movement"
 			case .two: return "Two movements (recommended)"
 			}
@@ -151,6 +152,31 @@ final class Preferences {
 		}
 	}
 
+	/// How strictly a face must match its enrolment to unlock.
+	enum RecognitionSensitivity: String, CaseIterable, Sendable {
+		case relaxed
+		case standard
+		case strict
+
+		var title: String {
+			switch self {
+			case .relaxed: return "Relaxed"
+			case .standard: return "Standard (recommended)"
+			case .strict: return "Strict"
+			}
+		}
+
+		/// Added to the embedder's match threshold. Relaxed helps in dim rooms;
+		/// strict is harder to fool.
+		var thresholdOffset: Float {
+			switch self {
+			case .relaxed: return -0.08
+			case .standard: return 0
+			case .strict: return 0.05
+			}
+		}
+	}
+
 	private enum Key {
 		static let appTheme = "appTheme"
 		static let glyphPlacement = "notchGlyphPlacement"
@@ -163,7 +189,9 @@ final class Preferences {
 		static let touchIDFallback = "touchIDFallback"
 		static let tamperProtection = "tamperProtection"
 		static let requireBuiltInCamera = "requireBuiltInCamera"
+		static let allowExternalCamera = "allowExternalCamera"
 		static let unlockMovementCount = "unlockMovementCount"
+		static let recognitionSensitivity = "recognitionSensitivity"
 		static let unlockBackend = "unlockBackend"
 		static let pausedUntil = "pausedUntil"
 		static let walkAwayLock = "walkAwayLock"
@@ -270,9 +298,18 @@ final class Preferences {
 		didSet { defaults.set(requireBuiltInCamera, forKey: Key.requireBuiltInCamera) }
 	}
 
+	var allowExternalCamera: Bool {
+		didSet { defaults.set(allowExternalCamera, forKey: Key.allowExternalCamera) }
+	}
+
 	/// Completed responses required for Mac unlock; existing installations default to two.
 	var unlockMovementCount: UnlockMovementCount {
 		didSet { defaults.set(unlockMovementCount.rawValue, forKey: Key.unlockMovementCount) }
+	}
+
+	/// Strictness of the lock-screen face match; existing installations default to standard.
+	var recognitionSensitivity: RecognitionSensitivity {
+		didSet { defaults.set(recognitionSensitivity.rawValue, forKey: Key.recognitionSensitivity) }
 	}
 
 	var unlockBackend: UnlockBackendKind {
@@ -331,8 +368,12 @@ final class Preferences {
 		touchIDFallback = defaults.object(forKey: Key.touchIDFallback) as? Bool ?? true
 		tamperProtection = defaults.bool(forKey: Key.tamperProtection)
 		requireBuiltInCamera = defaults.object(forKey: Key.requireBuiltInCamera) as? Bool ?? true
+		allowExternalCamera = defaults.object(forKey: Key.allowExternalCamera) as? Bool ?? false
 		unlockMovementCount = UnlockMovementCount.resolve(
 			stored: defaults.object(forKey: Key.unlockMovementCount))
+		recognitionSensitivity =
+			defaults.string(forKey: Key.recognitionSensitivity)
+			.flatMap(RecognitionSensitivity.init(rawValue:)) ?? .standard
 		unlockBackend =
 			defaults.string(forKey: Key.unlockBackend)
 			.flatMap(UnlockBackendKind.init(rawValue:)) ?? .none

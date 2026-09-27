@@ -157,7 +157,17 @@ final class FaceEnrollmentStore {
 	private(set) var isCorrupted = false
 	private var isAddingFace = false
 
-	let embedder: FaceEmbedder = Embedders.best()
+	private let baseEmbedder: any FaceEmbedder = Embedders.best()
+
+	/// Base embedder with the Settings sensitivity offset on its threshold.
+	///
+	/// Computed each access so a sensitivity change applies to the next scan.
+	/// Prints stay in the base feature space (the wrapper forwards `identifier`),
+	/// so enrolments recorded under the base identifier keep comparing.
+	var embedder: any FaceEmbedder {
+		AdjustedThresholdEmbedder(
+			base: baseEmbedder, offset: Preferences.shared.recognitionSensitivity.thresholdOffset)
+	}
 
 	var isEnrolled: Bool { !faces.isEmpty }
 	var canAddFace: Bool { faces.count < Self.maximumFaces }
@@ -184,6 +194,26 @@ final class FaceEnrollmentStore {
 	var pinnedCameraID: String? {
 		guard let first = faces.first else { return nil }
 		return faces.allSatisfy { $0.cameraID == first.cameraID } ? first.cameraID : nil
+	}
+
+	/// Picks the camera to unlock against and the faces allowed on it.
+	///
+	/// With the USB option off this is the legacy pin: every enabled face belongs
+	/// to `pinnedCameraID`, otherwise there is no choice. With it on, enabled
+	/// faces stay grouped by their enrolment camera and the first available camera
+	/// that owns any wins, so a face is only ever compared against its own camera.
+	func unlockCamera(allowExternal: Bool, available: [String]) -> (cameraID: String, faceIDs: [UUID])? {
+		let enabled = faces.filter(\.isEnabled)
+		guard !enabled.isEmpty else { return nil }
+		guard allowExternal else {
+			guard let pinned = pinnedCameraID, !pinned.isEmpty else { return nil }
+			return (cameraID: pinned, faceIDs: enabled.map(\.id))
+		}
+		for cameraID in available where !cameraID.isEmpty {
+			let ids = enabled.filter { $0.cameraID == cameraID }.map(\.id)
+			if !ids.isEmpty { return (cameraID: cameraID, faceIDs: ids) }
+		}
+		return nil
 	}
 
 	init() {
@@ -346,8 +376,11 @@ final class FaceEnrollmentStore {
 		}
 
 		// Rebuilt whenever `faces` changes, which includes switching a face on or off.
+		// Built from the base embedder: the threshold is only compared at match
+		// time below, so a sensitivity change applies to the next scan with no
+		// cache to clear.
 		if cachedMatcher == nil {
-			cachedMatcher = FaceTemplateMatcher(templates: enabled.map(\.prints), embedder: embedder)
+			cachedMatcher = FaceTemplateMatcher(templates: enabled.map(\.prints), embedder: baseEmbedder)
 		}
 		guard let best = try? cachedMatcher?.bestMatch(to: candidate) else { return (false, 0, nil, nil) }
 		let matched = best.score >= embedder.matchThreshold

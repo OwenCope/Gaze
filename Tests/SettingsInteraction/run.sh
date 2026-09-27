@@ -13,6 +13,8 @@ xcrun swiftc -parse-as-library -target "$(host_target)" \
     "$ROOT/Sources/App/Theme.swift" \
     "$ROOT/Sources/Setup/SetupScaffold.swift" \
     "$ROOT/Sources/Setup/SetupControls.swift" \
+    "$ROOT/ThirdParty/TourKit/TourKit.swift" \
+    "$ROOT/Sources/Setup/GazeTourSizing.swift" \
     "$ROOT/Sources/Enrollment/EnrollmentRing.swift" \
     "$ROOT/Tests/Onboarding/Stubs.swift" \
     "$ROOT/Tests/SettingsInteraction/ServiceStubs.swift" \

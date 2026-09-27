@@ -79,7 +79,7 @@ need 'Lock when I walk away' \
 	"walk-away row untouched"
 need 'if !SpoofDetector.isAvailable { notes.append(' \
 	"a missing anti-spoof model is reported, since photo rejection is always on"
-need 'Button("Resume Gaze") { settings.resume() }' \
+need 'Button { settings.resume() } label: {' \
 	"paused Settings offers the existing resume action"
 need 'accessibilityAction(named: Text("Remove \(face.name)"), remove)' \
 	"face removal remains an accessibility action before hover"

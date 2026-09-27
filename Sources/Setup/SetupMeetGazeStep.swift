@@ -175,18 +175,43 @@ struct SetupMeetGazeStep: View {
 	var onClose: (() -> Void)? = nil
 	var movementCount = 2
 
+	private var page: TourPage {
+		TourPage(
+			imageName: "Art/tour-backdrop.png",
+			imageBundle: .main,
+			title: "Meet Gaze",
+			description: "\(message)"
+		)
+	}
+
+	private var message: String {
+		movementCount == 0
+			? "Movements are off in Settings, but here is what one looks like. When it turns back, return your head to where you started."
+			: "Gaze asks for \(movementCount == 1 ? "one small movement" : "two small movements"). When it turns back, return your head to where you started."
+	}
+
 	var body: some View {
-		SetupScaffold(position: position, title: "Meet Gaze",
-			message: "Gaze asks for \(movementCount == 1 ? "one small movement" : "two small movements").\nWhen it turns back, return your head to where you started.",
-			figureHeight: 0, onBack: onBack, onClose: onClose) {
-			EmptyView()
-		} detail: {
-			// Opens on the scanning lesson: it carries the one/two-movement instruction,
-			// which is the thing this screen is for. Waiting stays one step back via
-			// Previous and the lesson menu, and every other lesson is still reachable.
-			GazeExpressionGuide(lesson: .scanning, movementCount: movementCount).padding(.top, 20)
-		} actions: {
-			SetupButton(title: "Continue Setup", action: onContinue)
-		}
+		TourSlideshowView(
+			pages: [page],
+			width: GazeTourSizing.panelWidth,
+			continueButtonTitle: "Continue Setup",
+			finishButtonTitle: "Continue Setup",
+			onFinish: onContinue,
+			onClose: onClose,
+			pageMedia: { _ in AnyView(lessonMedia) },
+			mediaHeight: 400,
+			footer: position.map { AnyView(SetupProgress(position: $0)) },
+			onBack: onBack
+		)
+		.frame(width: GazeTourSizing.panelWidth, height: GazeTourSizing.panelHeight)
+	}
+
+	private var lessonMedia: some View {
+		// The guide's natural height (~350pt non-compact) exceeds the 324pt left
+		// after TourKit's media padding (36 top + 40 bottom of 400), so it is
+		// scaled rather than reflowed: compact mode would shrink the lesson text
+		// below setup's readable sizes, and scaleEffect keeps it interactive.
+		GazeExpressionGuide(lesson: .scanning, movementCount: movementCount)
+			.scaleEffect(0.85)
 	}
 }

@@ -474,17 +474,22 @@ struct SettingsView: View {
 				// their widths is what makes them read as a pair.
 				VStack(alignment: .trailing, spacing: 6) {
 					if settings.isPaused {
-						Button("Resume Gaze") { settings.resume() }
-							.gazeButton(.primary, size: .large)
-							.frame(maxWidth: .infinity)
+						Button { settings.resume() } label: {
+							Text("Resume Gaze").frame(maxWidth: .infinity)
+						}
+						.gazeButton(.primary, size: .large)
 					}
 					if store.isEnrolled, !cameraGranted {
-						Button("Review Permissions") { revealSettingsSection("permissionsSection") }
-							.gazeButton(.primary, size: .large)
+						Button { revealSettingsSection("permissionsSection") } label: {
+							Text("Review Permissions").frame(maxWidth: .infinity)
+						}
+						.gazeButton(.primary, size: .large)
 					} else if store.isEnrolled, !settings.isPaused, PasswordReplaySafety.isEnabled,
 						settings.unlockBackend != .none, readinessProblem != nil {
-						Button("Review Setup") {
+						Button {
 							revealSettingsSection(accessibilityGranted ? "unlockSection" : "permissionsSection")
+						} label: {
+							Text("Review Setup").frame(maxWidth: .infinity)
 						}
 						.gazeButton(.primary, size: .large)
 					} else if !store.isEnrolled {
@@ -1003,14 +1008,16 @@ struct SettingsView: View {
 		SettingsSection(title: "Security checks", footer: securityFooter,
 			info: "Choose which checks Gaze requires before unlocking. Movement verification asks for a random action each time. Password and Touch ID remain available on the lock screen.") {
 		if settings.unlockBackend == .keystroke {
-			// Not a choice in this mode: password release pins the enrolled camera,
-			// so a disabled switch forced on would read as broken rather than fixed.
-			SettingRow(
-				title: "Only trust the built-in camera",
-				detail: "Required for password release; the enrolled camera stays pinned",
-				symbol: "camera.fill"
-			) {
-				Text("Always on").foregroundStyle(Theme.secondaryLabel)
+			VStack(spacing: 0) {
+				SettingToggle(
+					title: "Allow USB cameras",
+					detail: "For clamshell mode. Each face only unlocks on the camera it was set up with",
+					symbol: "web.camera",
+					isOn: $settings.allowExternalCamera)
+				if settings.allowExternalCamera {
+					StatusLine(kind: .warning,
+						message: "A USB device can pretend to be a camera and replay a video of you. Turn this on only if you use your Mac with the lid closed, then add your face again with that camera.")
+				}
 			}
 		} else {
 			SettingToggle(
@@ -1020,20 +1027,53 @@ struct SettingsView: View {
 				isEnabled: settings.unlockBackend != .keystroke,
 				isOn: Binding(get: { settings.unlockBackend == .keystroke || settings.requireBuiltInCamera },
 					set: { settings.requireBuiltInCamera = $0 }))
+			RowDivider()
+			VStack(spacing: 0) {
+				SettingToggle(
+					title: "Allow USB cameras",
+					detail: "For clamshell mode. Each face only unlocks on the camera it was set up with",
+					symbol: "web.camera",
+					isOn: $settings.allowExternalCamera)
+				if settings.allowExternalCamera {
+					StatusLine(kind: .warning,
+						message: "A USB device can pretend to be a camera and replay a video of you. Turn this on only if you use your Mac with the lid closed, then add your face again with that camera.")
+				}
+			}
 		}
 
 
 			RowDivider()
+			VStack(spacing: 0) {
+				SettingRow(
+					title: "Movements to unlock this Mac",
+					detail: "One is quicker; two asks for another completed response",
+					symbol: "figure.walk.motion"
+				) {
+					SettingsChoiceMenu(title: "Movements to unlock this Mac",
+						valueLabel: settings.unlockMovementCount.title,
+						selection: $settings.unlockMovementCount) {
+						ForEach(Preferences.UnlockMovementCount.allCases, id: \.self) { count in
+							Text(count.title).tag(count)
+						}
+					}
+				}
+				if settings.unlockMovementCount == .none {
+					StatusLine(kind: .warning,
+						message: "Without a movement, a good photo or video is more likely to get through. The photo and screen checks still run.")
+				}
+			}
+
+			RowDivider()
 			SettingRow(
-				title: "Movements to unlock this Mac",
-				detail: "One is quicker; two asks for another completed response",
-				symbol: "figure.walk.motion"
+				title: "Recognition sensitivity",
+				detail: "Relaxed helps in dim rooms. Strict is harder to fool.",
+				symbol: "slider.horizontal.3"
 			) {
-				SettingsChoiceMenu(title: "Movements to unlock this Mac",
-					valueLabel: settings.unlockMovementCount.title,
-					selection: $settings.unlockMovementCount) {
-					ForEach(Preferences.UnlockMovementCount.allCases, id: \.self) { count in
-						Text(count.title).tag(count)
+				SettingsChoiceMenu(title: "Recognition sensitivity",
+					valueLabel: settings.recognitionSensitivity.title,
+					selection: $settings.recognitionSensitivity) {
+					ForEach(Preferences.RecognitionSensitivity.allCases, id: \.self) { sensitivity in
+						Text(sensitivity.title).tag(sensitivity)
 					}
 				}
 			}

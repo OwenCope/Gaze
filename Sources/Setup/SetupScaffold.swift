@@ -119,6 +119,11 @@ struct SetupProgress: View {
 	let position: SetupPosition
 
 	var body: some View {
+		// One step is not a sequence; saying "Step 1 of 1" only adds noise.
+		if position.count > 1 { counter }
+	}
+
+	private var counter: some View {
 		VStack(spacing: 7) {
 			Text("Step \(position.index + 1) of \(position.count)")
 				.font(.system(size: 12, weight: .medium))

@@ -12,10 +12,17 @@ import AVFoundation
 ///
 /// So we don't try to detect injection downstream. We refuse to read from anything
 /// but the machine's built-in camera, and we pin the exact device at enrolment.
+///
+/// An opt-in exception covers clamshell mode (lid closed, USB webcam): when the
+/// user allows USB cameras, `candidates(allowExternal:)` also admits devices whose
+/// transport is USB. Virtual cameras (CoreMediaIO plugins such as OBS) and
+/// Continuity Camera stay refused either way.
 enum CameraDevice {
 
 	/// FourCC reported by cameras soldered to the logic board (`'bltn'`).
 	private static let builtInTransport: Int32 = 0x626C746E
+	/// FourCC reported by USB-attached cameras (`'usb '`).
+	private static let usbTransport: Int32 = 0x75736220
 
 	enum TrustFailure: Error, CustomStringConvertible {
 		case noBuiltInCamera
@@ -47,12 +54,38 @@ enum CameraDevice {
 		).devices.first { $0.transportType == builtInTransport }
 	}
 
+	/// The trusted cameras in preference order: built-in first, then USB when allowed.
+	static func candidates(allowExternal: Bool) -> [AVCaptureDevice] {
+		var result: [AVCaptureDevice] = []
+		if let builtIn = builtIn() { result.append(builtIn) }
+		guard allowExternal else { return result }
+		let usb = AVCaptureDevice.DiscoverySession(
+			deviceTypes: [.external],
+			mediaType: .video,
+			position: .unspecified
+		).devices.filter { $0.transportType == usbTransport }
+		result.append(contentsOf: usb.filter { device in
+			!result.contains(where: { $0.uniqueID == device.uniqueID })
+		})
+		return result
+	}
+
 	/// Resolves the camera to authenticate against, refusing anything untrusted.
 	///
 	/// - Parameter pinnedID: the `uniqueID` recorded at enrolment. When present the
 	///   device must still be that same one, so swapping hardware invalidates unlock
 	///   rather than silently authenticating against a different sensor.
-	static func trusted(pinnedID: String?) throws -> AVCaptureDevice {
+	static func trusted(pinnedID: String?, allowExternal: Bool = false) throws -> AVCaptureDevice {
+		guard !allowExternal else {
+			let list = candidates(allowExternal: true)
+			if let pinnedID {
+				if let device = list.first(where: { $0.uniqueID == pinnedID }) { return device }
+				throw TrustFailure.deviceChanged(
+					expected: pinnedID, found: list.first?.uniqueID ?? "none")
+			}
+			guard let first = list.first else { throw TrustFailure.noBuiltInCamera }
+			return first
+		}
 		guard let device = builtIn() else { throw TrustFailure.noBuiltInCamera }
 
 		guard device.transportType == builtInTransport else {

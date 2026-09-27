@@ -42,6 +42,9 @@ final class LockWatcher {
 	private(set) var isLocked = false
 
 	private let capsule = NotchCapsuleController()
+	/// Checks the window server while the Mac is locked, in case the unlock notification
+	/// never arrives or arrives before the session stops reporting locked.
+	private var unlockWatchdog: Task<Void, Never>?
 
 	/// How long to keep looking after the screen locks before giving up.
 	///
@@ -155,6 +158,8 @@ final class LockWatcher {
 		attempt?.cancel()
 		attempt = nil
 		attemptID = nil
+		unlockWatchdog?.cancel()
+		unlockWatchdog = nil
 		capsule.hide()
 		isWatching = false
 		lastWakeTrigger = nil
@@ -235,6 +240,7 @@ final class LockWatcher {
 		// locked phase exists separately from scanning.
 		didSubmitPassword = false
 		capsule.show(phase: .locked)
+		startUnlockWatchdog()
 		// Every broadcast below is posted beside the capsule update that shows the same
 		// thing, so the panel and any subscriber can never disagree about the state.
 		StateBroadcast.reset()
@@ -261,8 +267,48 @@ final class LockWatcher {
 		}
 	}
 
-	private func screenUnlocked() {
-		guard AutofillConsoleSession.current() != nil else { return }
+	/// Two unlocked readings a second apart end the attempt as if the notification had come.
+	private func startUnlockWatchdog() {
+		unlockWatchdog?.cancel()
+		unlockWatchdog = Task { [weak self] in
+			var unlockedReadings = 0
+			while !Task.isCancelled {
+				try? await Task.sleep(for: .seconds(1))
+				guard let self, !Task.isCancelled, self.isLocked else { return }
+				unlockedReadings = Self.screenIsLocked() ? 0 : unlockedReadings + 1
+				if unlockedReadings >= 2 {
+					Self.logger.notice("Screen is unlocked but no unlock notification was handled; tidying up.")
+					self.screenUnlocked()
+					return
+				}
+			}
+		}
+	}
+
+	private func screenUnlocked(retry: Int = 0) {
+		guard AutofillConsoleSession.current() != nil else {
+			// The notification can arrive while the session still reports locked. Returning
+			// here left the panel on the desktop and the camera running, so check again.
+			if retry < 8 {
+				DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+					MainActor.assumeIsolated { self?.screenUnlocked(retry: retry + 1) }
+				}
+			} else if !Self.screenIsLocked() {
+				Self.logger.notice("Unlocked into a session Gaze cannot verify; hiding the panel.")
+				isLocked = false
+				submissionID = nil
+				didSubmitPassword = false
+				attempt?.cancel()
+				attempt = nil
+				attemptID = nil
+				unlockWatchdog?.cancel()
+				unlockWatchdog = nil
+				capsule.hide()
+			}
+			return
+		}
+		unlockWatchdog?.cancel()
+		unlockWatchdog = nil
 		if let diagnosticID {
 			if didSubmitPassword { LockScanDiagnostics.shared.record(.unlocked, for: diagnosticID) }
 			else { LockScanDiagnostics.shared.finishScanning(for: diagnosticID) }
@@ -319,8 +365,11 @@ final class LockWatcher {
 		guard UnlockGuard.embedderBlocker() == nil, store.isEnrolled, !store.isCorrupted,
 			let lockedSession = LockedConsoleSession.current() else { report(.verificationUnavailable); return }
 		// Only switched-on faces may unlock; a face turned off mid-attempt ends the attempt.
-		let enrolledFaces = store.faces.filter(\.isEnabled).map(\.id)
-		guard let pinnedCamera = store.pinnedCameraID, !pinnedCamera.isEmpty else { report(.cameraUnavailable); return }
+		let allowExternal = Preferences.shared.allowExternalCamera
+		let available = CameraDevice.candidates(allowExternal: allowExternal).map(\.uniqueID)
+		guard let choice = store.unlockCamera(allowExternal: allowExternal, available: available), !choice.cameraID.isEmpty else { report(.cameraUnavailable); return }
+		let pinnedCamera = choice.cameraID
+		let enrolledFaces = choice.faceIDs
 		let movementCount = Preferences.shared.unlockMovementCount
 		let entryEmbedder = Embedders.best().identifier
 		var inputGuard = LockScreenInputGuard(initial: inputSnapshot)
@@ -332,8 +381,9 @@ final class LockWatcher {
 					keystrokeSelected: Preferences.shared.unlockBackend == .keystroke),
 				Preferences.shared.unlockMovementCount == movementCount,
 				Embedders.best().identifier == entryEmbedder,
-				!store.isCorrupted, store.faces.filter(\.isEnabled).map(\.id) == enrolledFaces,
-				store.pinnedCameraID == pinnedCamera else { return false }
+				!store.isCorrupted, Preferences.shared.allowExternalCamera == allowExternal else { return false }
+			guard let current = store.unlockCamera(allowExternal: allowExternal, available: available),
+				current.cameraID == pinnedCamera, current.faceIDs == enrolledFaces else { return false }
 			return true
 		}
 		func requestIsCurrent() -> Bool {
@@ -382,7 +432,7 @@ final class LockWatcher {
 		capsule.update(phase: .scanning)
 		var freshFrames = RecognitionFrameGate()
 		var evaluatedContinuity: UInt64?
-		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces.filter(\.isEnabled), antiSpoof: antiSpoof)
+		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces.filter { $0.isEnabled && enrolledFaces.contains($0.id) }, antiSpoof: antiSpoof)
 		let challenge: LivenessChallenge? = LivenessChallenge()
 		var challengeGate = UnlockChallengeGate(requiredActions: movementCount.rawValue)
 		// Opt-in render timing (GAZE_RENDER_DIAGNOSTICS=1). Measurement and logging only:

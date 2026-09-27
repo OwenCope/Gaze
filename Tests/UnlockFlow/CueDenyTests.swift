@@ -90,6 +90,18 @@ enum CueDenyTests {
 		}
 		precondition(!small.fired && small.confidence == 0, "sub-50px face must leave the cue unfired at zero confidence")
 		checks += 1
+		// A dark face with a small bright reflection (a dim room lit by the laptop
+		// screen) never counts a glare frame: below minimumFaceLuma the cue abstains.
+		var dim = GlareCue()
+		let dark = denyBuffer(width: 224, height: 224, grey: 0.15)
+		let dimFace = CGRect(x: 37, y: 37, width: 150, height: 150)
+		denyPaintRect(dark, CGRect(x: 100, y: 100, width: 30, height: 30), grey: 1)
+		for _ in 0..<5 {
+			precondition(!dim.record(frame: dark, faceRect: dimFace), "a dim face with a bright reflection must not count a glare frame")
+			checks += 1
+		}
+		precondition(!dim.fired && dim.confidence == 0, "a dim face must leave the cue unfired at zero confidence")
+		checks += 1
 		print("PASS: \(checks) deny-cue checks; synthetic inputs only.")
 	}
 }

@@ -163,15 +163,6 @@ struct SetupFlow: View {
 				GazePeekingCompanion(isActive: model == nil || model?.phase == .positioning)
 			}
 		}
-		// The user's own wallpaper, blurred and darkened — the same ground the rest of the
-		// app now uses. Setup used to be flat black, which made it the one window in Gaze
-		// that did not belong to the machine it was running on.
-		.background {
-			if step != .welcome && step != .done {
-				SetupBackdrop()
-					.clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-			}
-		}
 		// Setup is designed dark only. Following a light system turned its text black
 		// on its own black ground.
 		.preferredColorScheme(.dark)
@@ -359,7 +350,7 @@ struct SetupFlow: View {
 
 	/// One window size for the whole flow: the tour and the setup steps share it,
 	/// so moving from the tour into capture never resizes the window.
-	private var preferredWidth: CGFloat { 760 }
+	private var preferredWidth: CGFloat { GazeTourSizing.panelWidth }
 	private var preferredHeight: CGFloat { 680 }
 
 	/// What is still missing once the flow reaches the end.
