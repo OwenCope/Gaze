@@ -82,19 +82,13 @@ jobs:
                   picture = src
                   break
 
-          # The notes: from the first Markdown heading, without HTML, without the
-          # Install section (Discord is not where you install it).
+          # The notes: from the first Markdown heading, without HTML. The Install
+          # section stays, so the brew command is right there to copy.
           lines = body.splitlines()
           start = next((k for k, line in enumerate(lines) if re.match(r"^#{1,6}\s+\S", line)), 0)
           body = "\n".join(lines[start:])
           body = re.sub(r"<[^>]+>", "", body)
           body = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", body)
-          kept = []
-          for line in body.splitlines():
-              if re.match(r"^##\s+Install\b", line, re.IGNORECASE):
-                  break
-              kept.append(line)
-          body = "\n".join(kept)
           body = re.sub(r"\n[ \t]*\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", body).strip()
 
           version = tag[1:] if tag.startswith("v") else tag
