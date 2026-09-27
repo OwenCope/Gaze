@@ -98,27 +98,54 @@ jobs:
           body = re.sub(r"\n[ \t]*\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", body).strip()
 
           version = tag[1:] if tag.startswith("v") else tag
-          links = f"**[Download](https://gazeunlock.com/download)**  ·  [Release notes](<{url}>)"
-          head = f"# Gaze {version}\n" + (f"{summary}\n" if summary else "") + "\n"
-          # Discord messages hold 2,000 characters.
-          room = 2000 - len(head) - len(links) - 40
-          if len(body) > room:
-              cut = body[:room]
-              body = cut[: cut.rfind("\n")].rstrip() + "\n…and more in the full notes."
-          content = head + body + "\n\n" + links
-
-          payload = {
+          # The notes' own "What's new" heading repeats what a release post is, so the
+          # section headings stand on their own.
+          body = re.sub(r"^##\s+What.s new\s*\n+", "", body, flags=re.IGNORECASE | re.MULTILINE).strip()
+          head = f"# Gaze {version}" + (f"\n{summary}" if summary else "")
+          download = "https://gazeunlock.com/download"
+          sender = {
               "username": "Gaze",
               "avatar_url": "https://raw.githubusercontent.com/OwenCope/Gaze/main/docs/images/icon.png",
-              "content": content,
               "allowed_mentions": {"parse": []},
           }
-          if picture:
-              payload["embeds"] = [{"image": {"url": picture}, "color": 689407}]
 
+          # Laid out like the release page: title and summary, the picture edge to
+          # edge, the notes, then real buttons. Discord caps a message's text at 4,000.
+          notes = body
+          if len(notes) > 3600:
+              cut = notes[:3600]
+              notes = cut[: cut.rfind("\n")].rstrip() + "\n…and more in the full notes."
+          components = [{"type": 10, "content": head}]
+          if picture:
+              components.append({"type": 12, "items": [{"media": {"url": picture}}]})
+          if notes:
+              components.append({"type": 10, "content": notes})
+          components.append({"type": 1, "components": [
+              {"type": 2, "style": 5, "label": "Download for Mac", "url": download},
+              {"type": 2, "style": 5, "label": "Release Notes", "url": url},
+          ]})
           with open("/tmp/discord.json", "w") as f:
-              json.dump(payload, f)
+              json.dump({**sender, "flags": 1 << 15, "components": components}, f)
+
+          # The plain message, if Discord ever refuses the layout above.
+          links = f"**[Download]({download})**  ·  [Release notes](<{url}>)"
+          room = 2000 - len(head) - len(links) - 40
+          plain = body
+          if len(plain) > room:
+              cut = plain[:room]
+              plain = cut[: cut.rfind("\n")].rstrip() + "\n…and more in the full notes."
+          fallback = {**sender, "content": head + "\n\n" + plain + "\n\n" + links}
+          if picture:
+              fallback["embeds"] = [{"image": {"url": picture}}]
+          with open("/tmp/discord-plain.json", "w") as f:
+              json.dump(fallback, f)
           PY
 
-          curl -fsS -H 'Content-Type: application/json' \
-            -d @/tmp/discord.json "$DISCORD_WEBHOOK"
+          # Components on a webhook message need with_components=true.
+          case "$DISCORD_WEBHOOK" in *\?*) SEP='&' ;; *) SEP='?' ;; esac
+          if ! curl -fsS -H 'Content-Type: application/json' \
+            -d @/tmp/discord.json "${DISCORD_WEBHOOK}${SEP}with_components=true"; then
+            echo "Discord refused the component layout; posting the plain message."
+            curl -fsS -H 'Content-Type: application/json' \
+              -d @/tmp/discord-plain.json "$DISCORD_WEBHOOK"
+          fi

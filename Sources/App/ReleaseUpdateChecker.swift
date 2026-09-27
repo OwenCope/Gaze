@@ -38,6 +38,9 @@ final class ReleaseUpdateChecker {
 	}
 
 	private(set) var state: State = .idle
+	/// A check started while an update is on screen, which leaves it there until a newer
+	/// one is found rather than blanking the release card for the length of the request.
+	private(set) var isRechecking = false
 	/// Owns the in-app install; the row reads `installer.state` for progress.
 	let installer = UpdateInstaller()
 	private let defaults: UserDefaults
@@ -238,14 +241,20 @@ final class ReleaseUpdateChecker {
 	// MARK: - Checking
 
 	func check() async {
-		guard state != .checking else { return }
+		guard state != .checking, !isRechecking else { return }
 		// A cancelled check restores this rather than reporting an offline
 		// failure: stopping the schedule is not the network being down.
 		let previous = state
-		state = .checking
+		let keepsOffer: Bool
+		if case .available = previous { keepsOffer = true } else { keepsOffer = false }
+		if keepsOffer { isRechecking = true } else { state = .checking }
 		var cancelled = false
 		defer {
+			isRechecking = false
 			if cancelled {
+				state = previous
+			} else if keepsOffer, case .failed = state {
+				// Not reaching the server says nothing about the update already found.
 				state = previous
 			} else {
 				switch state {

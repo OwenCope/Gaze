@@ -1372,6 +1372,13 @@ struct SettingsView: View {
 								Button(releaseButtonTitle) { releaseAction() }
 									.gazeButton()
 									.disabled(releases.state == .checking)
+							} else {
+								// A newer build may have shipped since this one was found.
+								Button(releases.isRechecking ? "Checking…" : "Check Again") {
+									Task { await releases.check() }
+								}
+								.gazeButton()
+								.disabled(releases.isRechecking)
 							}
 						} else {
 							Button(releaseButtonTitle) { releaseAction() }
@@ -1478,8 +1485,9 @@ struct SettingsView: View {
 			if case .failed(let message) = releases.installer.state { return message }
 			// The tag names the build; the release's own title, when it has one
 			// worth showing, says what changed.
-			return release.name.isEmpty
-				? "Gaze \(release.tag) is available." : "Gaze \(release.tag) is available — \(release.name)"
+			let version = release.tag.hasPrefix("v") ? String(release.tag.dropFirst()) : release.tag
+			return release.name.isEmpty || release.name == "Gaze \(version)"
+				? "Gaze \(version) is available." : "Gaze \(version) is available — \(release.name)"
 		// Concise on purpose: the raw HTTP status stays in the log, not on screen.
 		case .failed: return "Couldn’t check for updates. Try again."
 		}

@@ -64,6 +64,7 @@ typealias RepoRevealHelper = UpdateChecker
         case idle, checking, upToDate, available(Release), failed(String)
     }
     var state = State.idle
+    var isRechecking = false
     var checkCount = 0
     var downloadCount = 0
     func check() async { checkCount += 1; state = .upToDate }
@@ -78,6 +79,7 @@ typealias RepoRevealHelper = UpdateChecker
         case idle, downloading(fraction: Double), installing, failed(String)
     }
     var state = State.idle
+    var isRechecking = false
 }
 
 /// The camera-access figure draws the Metal companion; the fixture only needs its layout.
