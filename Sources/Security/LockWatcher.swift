@@ -45,6 +45,12 @@ final class LockWatcher {
 	/// Checks the window server while the Mac is locked, in case the unlock notification
 	/// never arrives or arrives before the session stops reporting locked.
 	private var unlockWatchdog: Task<Void, Never>?
+	/// After a scan ends with the Mac still locked, waits for the pointer to move and
+	/// looks again, so trying once more does not mean closing the lid.
+	private var pointerRetry: Task<Void, Never>?
+	/// Set by the attempt when the camera never started or stopped sending frames, the
+	/// one failure worth an automatic second try.
+	private var cameraFailed = false
 
 	/// How long to keep looking after the screen locks before giving up.
 	///
@@ -160,6 +166,8 @@ final class LockWatcher {
 		attemptID = nil
 		unlockWatchdog?.cancel()
 		unlockWatchdog = nil
+		pointerRetry?.cancel()
+		pointerRetry = nil
 		capsule.hide()
 		isWatching = false
 		lastWakeTrigger = nil
@@ -234,6 +242,8 @@ final class LockWatcher {
 		}
 
 		Self.logger.notice("\(trigger, privacy: .public) — looking for a face.")
+		pointerRetry?.cancel()
+		pointerRetry = nil
 
 		// A padlock, immediately. It is a statement about the Mac's state, not a claim
 		// that the camera is looking at anyone — that distinction is why the compact
@@ -263,7 +273,37 @@ final class LockWatcher {
 				try? await Task.sleep(for: settle)
 				guard !Task.isCancelled else { return }
 			}
-			await self.attemptUnlock(inputSnapshot: inputSnapshot, identifier: identifier)
+			// A camera that fails right after a wake usually works a second later, so it
+			// gets one restart. The input snapshot is kept, so a click during the first try
+			// still stops the second.
+			for retry in 0..<2 {
+				self.cameraFailed = false
+				await self.attemptUnlock(inputSnapshot: inputSnapshot, identifier: identifier)
+				guard self.cameraFailed, retry == 0, !Task.isCancelled, self.isLocked else { break }
+				Self.logger.notice("Camera failed; restarting it once.")
+				try? await Task.sleep(for: .seconds(1))
+				guard !Task.isCancelled else { return }
+			}
+			if !Task.isCancelled, self.isLocked { self.watchPointerForRetry() }
+		}
+	}
+
+	/// Moving the mouse or trackpad after a scan has ended starts a new one. Clicks and
+	/// key presses still stop Gaze for this lock (see `LockScreenInputGuard`).
+	private func watchPointerForRetry() {
+		pointerRetry?.cancel()
+		let moves = CGEventSource.counterForEventType(.hidSystemState, eventType: .mouseMoved)
+		pointerRetry = Task { [weak self] in
+			while !Task.isCancelled {
+				try? await Task.sleep(for: .milliseconds(500))
+				guard let self, !Task.isCancelled, self.isLocked, !Self.manualInputObserved else { return }
+				guard self.attempt == nil,
+					CGEventSource.counterForEventType(.hidSystemState, eventType: .mouseMoved) != moves
+				else { continue }
+				self.pointerRetry = nil
+				self.beginAttempt(trigger: "Pointer moved on a locked screen")
+				return
+			}
 		}
 	}
 
@@ -309,6 +349,8 @@ final class LockWatcher {
 		}
 		unlockWatchdog?.cancel()
 		unlockWatchdog = nil
+		pointerRetry?.cancel()
+		pointerRetry = nil
 		if let diagnosticID {
 			if didSubmitPassword { LockScanDiagnostics.shared.record(.unlocked, for: diagnosticID) }
 			else { LockScanDiagnostics.shared.finishScanning(for: diagnosticID) }
@@ -423,7 +465,10 @@ final class LockWatcher {
 		defer { camera.stop() }
 
 		guard camera.state == .running, camera.boundDeviceID == pinnedCamera, requestIsCurrent() else {
-			if contextIsCurrent() { report(.cameraUnavailable) }
+			if contextIsCurrent() {
+				report(.cameraUnavailable)
+				cameraFailed = true
+			}
 			Self.logger.error("Camera unavailable: \(String(describing: camera.state))")
 			return
 		}
@@ -560,6 +605,7 @@ final class LockWatcher {
 				let stage = freshFrames.hasReceivedFrame ? "running stream" : "first frame"
 				Self.logger.error("Camera timed out at \(stage, privacy: .public); analyzed=\(camera.analyzedFrames) expired=\(camera.expiredFrames). No password submitted.")
 				updateCapsule("notRecognised", .notRecognised)
+				cameraFailed = true
 				return
 			case .waiting:
 				continue

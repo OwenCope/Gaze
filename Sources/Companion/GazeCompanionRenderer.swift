@@ -84,6 +84,41 @@ class TransparentFaceView: MTKView {
 		super.viewDidMoveToWindow()
 		matchBackingScale()
 		updateRenderingState()
+		observeDisplayChanges()
+	}
+
+	private var displayObservers: [(NotificationCenter, NSObjectProtocol)] = []
+
+	/// Opening the lid shows the lock screen panel while the displays are still waking.
+	/// A face view made then got no drawable and a display link bound to no screen, so it
+	/// stayed blank for the whole scan while the text around it updated (issue #100).
+	/// Starting over once the window is actually on a live screen fixes both.
+	private func observeDisplayChanges() {
+		for (centre, token) in displayObservers { centre.removeObserver(token) }
+		displayObservers.removeAll()
+		guard let window else { return }
+		let restart: @Sendable (Notification) -> Void = { [weak self] _ in
+			MainActor.assumeIsolated { self?.restartRendering() }
+		}
+		let local = NotificationCenter.default
+		let workspace = NSWorkspace.shared.notificationCenter
+		displayObservers = [
+			(local, local.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main, using: restart)),
+			(local, local.addObserver(forName: NSWindow.didChangeScreenNotification, object: window, queue: .main, using: restart)),
+			(workspace, workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main, using: restart)),
+		]
+	}
+
+	func restartRendering() {
+		guard window != nil else { return }
+		matchBackingScale()
+		if isPaused {
+			needsDisplay = true
+		} else {
+			// Re-arms the display link on whichever screen the window is on now.
+			isPaused = true
+			isPaused = false
+		}
 	}
 
 	/// MTKView sizes its drawable as bounds × `layer.contentsScale`. The layer is
@@ -195,6 +230,7 @@ struct GazeCompanionRenderer: NSViewRepresentable {
 		var diagnostics: GazeRenderDiagnostics?
 		var diagnosticContext = "preview"
 		let frameBudget = DispatchSemaphore(value: 2)
+		private var missedFrames = 0
 		private var lastReport = 0.0
 
 		func finishDiagnostics(in view: MTKView, reason: String) {
@@ -232,8 +268,15 @@ struct GazeCompanionRenderer: NSViewRepresentable {
 			guard let drawable = currentDrawable,
 				let pass = view.currentRenderPassDescriptor, let command = gpu.queue.makeCommandBuffer() else {
 				budget.signal()
+				// A paused view draws only when asked, so a frame lost here (no drawable
+				// yet, as right after wake) would leave it blank. Ask again for a few seconds.
+				if view.isPaused, missedFrames < 30 {
+					missedFrames += 1
+					DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak view] in view?.needsDisplay = true }
+				}
 				return
 			}
+			missedFrames = 0
 			let time = Date.timeIntervalSinceReferenceDate
 			let uniforms = SoftFaceUniforms(pose: pose(time), size: view.drawableSize, angle: angle, opacity: opacity, material: material)
 			do { try gpu.encode(uniforms, pass: pass, command: command) }
