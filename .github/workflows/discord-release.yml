@@ -70,81 +70,51 @@ jobs:
           body = rel.get("body") or ""
           published = rel.get("publishedAt") or None
 
-          # Drop everything before the first Markdown heading (the body starts
-          # with an HTML <div align="center"> header).
-          lines = body.splitlines()
-          start = 0
-          for i, line in enumerate(lines):
-              if re.match(r"^#{1,6}\s+\S", line):
-                  start = i
+          # The one-line summary from the centred header, and the first release
+          # picture that is not the icon or the download button.
+          summary = ""
+          m = re.search(r"<h1>.*?</h1>\s*<p>(.*?)</p>", body, re.S)
+          if m and "<img" not in m.group(1):
+              summary = re.sub(r"<[^>]+>", "", m.group(1)).strip()
+          picture = None
+          for src in re.findall(r'<img[^>]+src="([^"]+)"', body) + re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", body):
+              if not src.endswith(("/icon.png", "download-button.png")):
+                  picture = src
                   break
-          else:
-              start = 0
+
+          # The notes: from the first Markdown heading, without HTML, without the
+          # Install section (Discord is not where you install it).
+          lines = body.splitlines()
+          start = next((k for k, line in enumerate(lines) if re.match(r"^#{1,6}\s+\S", line)), 0)
           body = "\n".join(lines[start:])
-
-          # Strip any remaining HTML tags.
           body = re.sub(r"<[^>]+>", "", body)
-
-          # Drop the whole '## Install' section and anything after it.
+          body = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", body)
           kept = []
           for line in body.splitlines():
               if re.match(r"^##\s+Install\b", line, re.IGNORECASE):
                   break
               kept.append(line)
           body = "\n".join(kept)
-
-          # Collapse 3+ blank lines down to one blank line.
-          body = re.sub(r"\n[ \t]*\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", body)
-          body = body.strip()
-
-          # Convert '### Heading' to Discord bold, drop "## What's new"
-          # (the embed title covers it).
-          out = []
-          for line in body.splitlines():
-              if re.match(r"^##\s+What\xe2\x80\x99s new\s*$", line, re.IGNORECASE) or \
-                 re.match(r"^##\s+What's new\s*$", line, re.IGNORECASE):
-                  continue
-              m = re.match(r"^###\s+(.*\S)\s*$", line)
-              if m:
-                  out.append(f"**{m.group(1).strip()}**")
-              else:
-                  out.append(line)
-          body = "\n".join(out).strip()
-
-          # Truncate to 3,900 chars at a line boundary.
-          truncated = False
-          if len(body) > 3900:
-              truncated = True
-              cut = body[:3900]
-              nl = cut.rfind("\n")
-              body = cut[:nl] if nl > 0 else cut
-              body = body.rstrip()
-
-          if truncated:
-              body += "\n…and more in the full notes."
-
-          body += f"\n\n**[Download](https://gazeunlock.com/download)**  ·  [Release notes]({url})"
+          body = re.sub(r"\n[ \t]*\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", body).strip()
 
           version = tag[1:] if tag.startswith("v") else tag
+          links = f"**[Download](https://gazeunlock.com/download)**  ·  [Release notes](<{url}>)"
+          head = f"# Gaze {version}\n" + (f"{summary}\n" if summary else "") + "\n"
+          # Discord messages hold 2,000 characters.
+          room = 2000 - len(head) - len(links) - 40
+          if len(body) > room:
+              cut = body[:room]
+              body = cut[: cut.rfind("\n")].rstrip() + "\n…and more in the full notes."
+          content = head + body + "\n\n" + links
 
           payload = {
               "username": "Gaze",
               "avatar_url": "https://raw.githubusercontent.com/OwenCope/Gaze/main/docs/images/icon.png",
-              "embeds": [
-                  {
-                      "title": f"Gaze {version}",
-                      "thumbnail": {"url": "https://raw.githubusercontent.com/OwenCope/Gaze/main/docs/images/icon.png"},
-                      "timestamp": published,
-                      "url": url,
-                      "description": body,
-                      "color": 689407,
-                      "footer": {"text": "Update in Gaze Settings, or run brew upgrade --cask gaze"},
-                  }
-              ],
+              "content": content,
+              "allowed_mentions": {"parse": []},
           }
-
-          if not published:
-              payload["embeds"][0].pop("timestamp")
+          if picture:
+              payload["embeds"] = [{"image": {"url": picture}, "color": 689407}]
 
           with open("/tmp/discord.json", "w") as f:
               json.dump(payload, f)
