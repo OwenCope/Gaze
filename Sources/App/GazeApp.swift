@@ -599,12 +599,13 @@ private struct GazeStatusItemLabel: View {
 		Image(nsImage: GazeBrand.menuBarIcon)
 			.renderingMode(.template)
 			.accessibilityLabel("Gaze")
-			.onAppear {
-				AppActivation.openSettings = {
-					AppActivation.bringToFront(userInitiated: true)
-					openWindow(id: "settings")
-				}
+		.onAppear {
+			AppActivation.openSettings = {
+				AppActivation.bringToFront(userInitiated: true)
+				openWindow(id: "settings")
 			}
+			SettingsNavigator.shared.presentSettings = AppActivation.openSettings
+		}
 	}
 }
 

@@ -53,14 +53,14 @@ enum EnrollmentTests {
 		let embedder = FixtureEmbedder()
 		let model = EnrollmentModel(embedder: embedder)
 		let frontal = FaceSample()
-		for _ in 0..<8 { model.consume(frontal) }
+		for _ in 0..<5 { model.consume(frontal) }
 		check(model.phase == .positioning && embedder.calls == 0, "Require a stable run before embedding")
 		var blurred = frontal
 		blurred.quality = 0.34
 		model.consume(blurred)
 		model.consume(frontal)
 		check(model.phase == .positioning, "Poor-quality frame breaks the positioning run")
-		for _ in 0..<7 { model.consume(frontal) }
+		for _ in 0..<4 { model.consume(frontal) }
 		embedder.available = false
 		model.consume(frontal)
 		check(model.phase == .positioning && model.prints.isEmpty, "Missing frontal embedding cannot start capture")
@@ -103,15 +103,22 @@ enum EnrollmentTests {
 		check(model.progress == savedProgress && embedder.calls == savedCalls, "Invalid bounds never reach the embedder")
 		model.consume(nil)
 		check(model.phase == .capturing(pass: 1) && model.progress == savedProgress, "Brief absence preserves already captured directions")
-		for segment in 0..<EnrollmentModel.segmentCount {
-			let angle = Double(segment) * 2 * .pi / Double(EnrollmentModel.segmentCount)
-			var sample = frontal
-			sample.pose.yaw = -sin(angle) * 0.3
-			sample.pose.pitch = -cos(angle) * 0.3
-			model.consume(sample)
-			if model.phase == .complete { break }
+		// Two passes, like Face ID: the first full ring starts the second.
+		for lap in 0..<2 {
+			if lap == 1 {
+				check(model.phase != .complete, "The first full ring starts a second pass rather than finishing")
+				for _ in 0..<8 where model.phase == .positioning { model.consume(frontal) }
+			}
+			for segment in 0..<EnrollmentModel.segmentCount {
+				let angle = Double(segment) * 2 * .pi / Double(EnrollmentModel.segmentCount)
+				var sample = frontal
+				sample.pose.yaw = -sin(angle) * 0.3
+				sample.pose.pitch = -cos(angle) * 0.3
+				model.consume(sample)
+				if model.phase == .complete { break }
+			}
 		}
-		check(model.phase == .complete, "Three-quarter coverage with frontal and both-side turns completes without a second pass")
+		check(model.phase == .complete, "Two passes with frontal and both-side turns complete")
 		check(model.prints.count >= 8, "Completed capture retains the existing print minimum")
 		let completedPrints = model.prints
 		model.consume(nil)
@@ -126,6 +133,15 @@ enum EnrollmentTests {
 		guidance.now = { base }
 		for _ in 0..<9 { guidance.consume(frontal) }
 		check(guidance.captureStatus == .steady && guidance.instruction.contains("Gently turn"), "Centered face is detected, not misreported as absent")
+		// The gap and stall rules apply on the second pass, so finish the first one.
+		for segment in 0..<48 {
+			let angle = (Double(segment) + 0.5) * 2 * .pi / 48
+			var pose = frontal
+			pose.pose.yaw = -sin(angle) * 0.3
+			pose.pose.pitch = -cos(angle) * 0.3
+			guidance.consume(pose)
+		}
+		check(guidance.phase == .capturing(pass: 2), "A full first ring moves on to the second pass")
 		for segment in 0..<48 where !(10...19).contains(segment) {
 			let angle = (Double(segment) + 0.5) * 2 * .pi / 48
 			var pose = frontal
@@ -133,7 +149,7 @@ enum EnrollmentTests {
 			pose.pose.pitch = -cos(angle) * 0.3
 			guidance.consume(pose)
 		}
-		check(guidance.phase == .capturing(pass: 1) && guidance.progress > 0.75 && guidance.progress < 0.85, "Near-complete fixture retains a real gap below a full ring")
+		check(guidance.phase == .capturing(pass: 2) && guidance.progress > 0.75 && guidance.progress < 0.85, "Near-complete fixture retains a real gap below a full ring")
 		check(guidance.targetSegment != nil && guidance.instruction.contains("fill the circle"), "Remaining gap has actionable guidance")
 		let gapProgress = guidance.progress
 		let gapPrints = guidance.prints
@@ -171,7 +187,7 @@ enum EnrollmentTests {
 			pose.pose.pitch = -cos(angle) * 0.3
 			guidance.consume(pose)
 		}
-		check(guidance.phase == .capturing(pass: 1) && guidance.progress < 1, "A remaining gap does not finish before the stall rule")
+		check(guidance.phase == .capturing(pass: 2) && guidance.progress < 1, "A remaining gap does not finish before the stall rule")
 		guidance.now = { base.addingTimeInterval(10) }
 		var repeatPose = frontal
 		repeatPose.pose.yaw = -sin(0.5) * 0.3

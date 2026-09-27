@@ -18,6 +18,8 @@ final class EnrollmentModel {
 	/// How far the head must turn before a direction counts as covered. Below this the
 	/// user is effectively looking straight ahead and every segment would fill at once.
 	private static let engagementThreshold = 0.22
+	/// How far from straight on (radians, about 15 degrees) still counts as centred.
+	private static let centredTolerance = 0.26
 
 	/// A scan finishes when the whole ring is filled, as people expect from Face ID.
 	/// Pitch-led segments take a gentler nod (see engagement below) so the top and
@@ -71,6 +73,9 @@ final class EnrollmentModel {
 	private var hasFrontalPrint = false
 	private var hasLeftPrint = false
 	private var hasRightPrint = false
+	/// When the ring first filled, so a missing turn cannot hold the scan open forever.
+	private var ringFilledAt: Date?
+	private static let widerTurnGrace: TimeInterval = 8
 	private var lastCoverageAdvance = Date()
 	/// Clock seam for the stall timers.
 	var now: () -> Date = { Date() }
@@ -89,7 +94,8 @@ final class EnrollmentModel {
 	/// instead of leaping there from the high 30s when the early-completion rule fires.
 	var overallProgress: Double {
 		if phase == .complete { return 1 }
-		return min(0.99, progress / Self.earlyCompletionCoverage)
+		// Both passes as one figure: the first fills 0–50%, the second 50–100%.
+		return min(0.99, (Double(pass - 1) + progress) / 2)
 	}
 
 	var captureTitle: String {
@@ -131,6 +137,7 @@ final class EnrollmentModel {
 		case .positioning:
 			return "Position your face in the circle"
 		case .capturing:
+			if needsWiderTurn { return "Turn your head a little further to each side." }
 			if stalledForGuidance, targetSegment != nil { return "Tilt your head a little toward the gap" }
 			if captureStatus == .steady { return "Gently turn your head to fill the circle." }
 			return "Move your head slowly to fill the circle"
@@ -160,7 +167,7 @@ final class EnrollmentModel {
 		// nearly full ring waiting for a pitch angle Vision reports poorly.
 		if case .capturing = phase,
 			now().timeIntervalSince(lastCoverageAdvance) >= Self.stallCompletionAfter,
-			progress >= Self.stallCompletionCoverage, hasAngleDiversity,
+			pass == 2, progress >= Self.stallCompletionCoverage, hasAngleDiversity,
 			prints.count >= Self.minimumPrints {
 			phase = .complete
 			// A finished scan reads as a full ring, even when the stall rule filled the last gap.
@@ -205,11 +212,15 @@ final class EnrollmentModel {
 		// from a single lucky detection as the user is still sitting down.
 		framesWithFace += 1
 		if case .positioning = phase {
-			guard sample.pose.offCentre < Self.engagementThreshold else {
-				framesWithFace = 0
+			// Forgiving on purpose: a wide window, an axis the camera cannot measure counts as
+			// straight, and one stray frame steps the count back instead of starting over.
+			let yaw = sample.pose.yaw.isFinite ? sample.pose.yaw : 0
+			let pitch = sample.pose.pitch.isFinite ? sample.pose.pitch : 0
+			guard hypot(yaw, pitch) < Self.centredTolerance else {
+				framesWithFace = max(0, framesWithFace - 3)
 				return
 			}
-			guard framesWithFace > 8 else { return }
+			guard framesWithFace > 5 else { return }
 			// Capture one straight-ahead print before the turning begins.
 			//
 			// Every other print in the set is taken mid-turn — `capture` only runs once the
@@ -272,16 +283,30 @@ final class EnrollmentModel {
 		// Three quarters of the ring with a frontal print and a clear turn each way
 		// matches as well as the full circle: the missing ticks are the extreme
 		// pitch angles users never present at the lock screen.
-		if progress >= Self.earlyCompletionCoverage, hasAngleDiversity,
+		// Always two passes, like Face ID: the early finish only applies on the second.
+		if pass == 2, progress >= Self.earlyCompletionCoverage, hasAngleDiversity,
 			prints.count >= Self.minimumPrints {
 			phase = .complete
 			// A finished scan reads as a full ring, even when the stall rule filled the last gap.
 			covered = Array(repeating: true, count: Self.segmentCount)
 			return
 		}
+		// One pass only. A full ring still missing a clear turn asks for it rather than
+		// starting a second lap, which read as the scan restarting on some Macs.
 		guard progress >= 1 else { return }
-		advancePass()
+		if pass == 1 {
+			advancePass()
+			return
+		}
+		if ringFilledAt == nil { ringFilledAt = now() }
+		if let filled = ringFilledAt, now().timeIntervalSince(filled) >= Self.widerTurnGrace,
+			hasFrontalPrint, prints.count >= Self.minimumPrints {
+			phase = .complete
+		}
 	}
+
+	/// The ring is full but a clear turn to one side is still missing.
+	private var needsWiderTurn: Bool { pass == 2 && progress >= 1 && !hasAngleDiversity }
 
 	private func validatedPrint(_ sample: FaceSample) -> Faceprint? {
 		guard let candidate = embedder.embed(sample), candidate.source == embedder.identifier,
@@ -349,6 +374,7 @@ final class EnrollmentModel {
 		hasFrontalPrint = false
 		hasLeftPrint = false
 		hasRightPrint = false
+		ringFilledAt = nil
 		lastCoverageAdvance = now()
 		framesWithFace = 0
 		isEngaged = false

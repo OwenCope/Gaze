@@ -7,7 +7,7 @@ FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/gaze-readiness.XXXXXX")"
 trap 'rm -rf "$FIXTURE"' EXIT
 mkdir -p "$FIXTURE/Sources/GazeReadiness" "$FIXTURE/Tests/GazeReadinessTests"
 cp "$ROOT/Sources/App/ReleaseUpdateChecker.swift" "$ROOT/Sources/App/ReleaseURLPolicy.swift" \
-   "$ROOT/Sources/App/UpdateInstaller.swift" \
+   "$ROOT/Sources/App/UpdateInstaller.swift" "$ROOT/Sources/App/SettingsNavigator.swift" \
    "$ROOT/Sources/App/DesktopWallpaper.swift" "$FIXTURE/Sources/GazeReadiness/"
 cp "$ROOT/Tests/AppReadiness/ThemeStub.swift" "$FIXTURE/Sources/GazeReadiness/"
 cp "$ROOT/Tests/AppReadiness/Tests.swift" "$FIXTURE/Tests/GazeReadinessTests/"

@@ -50,6 +50,9 @@ final class ReleaseUpdateChecker {
 		self.defaults = defaults
 		self.sessionConfiguration = sessionConfiguration
 		self.startupDelay = startupDelay
+		// The notification delegate cannot reach back through `.shared`: the lifecycle
+		// harness forbids that reference file-wide, so each instance registers itself.
+		ReleaseNotificationDelegate.shared.checker = self
 	}
 
 	/// The version this bundle claims to be.
@@ -369,25 +372,42 @@ final class ReleaseUpdateChecker {
 
 	// MARK: - Notifications
 
-	/// Posts one notification per version; clicking it opens the same URL as Download.
+	/// Posts one notification per version. The Install action runs the in-app installer;
+	/// clicking the notification opens Settings on the Updates section, falling back to
+	/// the same URL as Download only when no verified install is offered.
 	private static func postNotification(for release: Release) {
 		// UNUserNotificationCenter raises outside an app bundle (test harnesses,
 		// command-line runs); there is nobody to notify there anyway.
 		guard Bundle.main.bundleURL.pathExtension == "app" else { return }
 		let center = UNUserNotificationCenter.current()
 		center.delegate = ReleaseNotificationDelegate.shared
+		let install = UNNotificationAction(
+			identifier: ReleaseNotificationDelegate.installActionID, title: "Install", options: .foreground)
+		center.setNotificationCategories([
+			UNNotificationCategory(
+				identifier: ReleaseNotificationDelegate.categoryID, actions: [install],
+				intentIdentifiers: [], options: [])
+		])
 		let content = UNMutableNotificationContent()
-		content.title = "Gaze \(release.tag) is available"
-		content.body = release.name.isEmpty ? "A new version is ready to download." : release.name
+		content.title = "Gaze \(Self.displayVersion(for: release.tag)) is ready"
+		content.body = "Install it now, or anytime from Settings."
+		content.categoryIdentifier = ReleaseNotificationDelegate.categoryID
 		let url = release.downloadURL.flatMap { ReleaseURLPolicy.isTrusted($0) ? $0 : nil }
 			?? ReleaseURLPolicy.releases
-		content.userInfo = ["url": url.absoluteString]
+		content.userInfo = ["url": url.absoluteString, "installable": release.downloadSHA256 != nil]
 		let request = UNNotificationRequest(
 			identifier: "gaze-release-\(release.tag)", content: content, trigger: nil)
 		center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
 			guard granted else { return }
 			center.add(request)
 		}
+	}
+
+	/// The tag without a leading v, for display.
+	static func displayVersion(for tag: String) -> String {
+		var value = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+		if value.first == "v" || value.first == "V" { value.removeFirst() }
+		return value
 	}
 
 	// MARK: - Versions
@@ -488,10 +508,20 @@ final class ReleaseUpdateChecker {
 	}
 }
 
-/// Opens the notification's URL in the browser. The URL was allow-listed when the
-/// notification was posted and is checked again here, so only gazeunlock.com opens.
+/// Routes the update notification: Install runs the in-app installer, clicking opens
+/// Settings on Updates, and only a release with no verified download falls back to the
+/// browser. The URL was allow-listed when the notification was posted and is checked
+/// again here, so only gazeunlock.com opens.
 private final class ReleaseNotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Sendable {
 	static let shared = ReleaseNotificationDelegate()
+	static let categoryID = "gaze-update"
+	static let installActionID = "install"
+
+	/// The checker to install with. A plain reference would need `.shared`, which the
+	/// lifecycle harness forbids file-wide, so each checker registers itself in `init`.
+	/// `nonisolated(unsafe)` because the delegate answers off the main actor; every use
+	/// hops to it before touching the checker.
+	nonisolated(unsafe) weak var checker: ReleaseUpdateChecker?
 
 	func userNotificationCenter(
 		_ center: UNUserNotificationCenter, willPresent notification: UNNotification
@@ -502,7 +532,18 @@ private final class ReleaseNotificationDelegate: NSObject, UNUserNotificationCen
 	func userNotificationCenter(
 		_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
 	) async {
-		guard let value = response.notification.request.content.userInfo["url"] as? String,
+		if response.actionIdentifier == Self.installActionID {
+			let checker = self.checker
+			await MainActor.run { checker?.install() }
+			return
+		}
+		guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+		let content = response.notification.request.content
+		if content.userInfo["installable"] as? Bool == true {
+			await MainActor.run { SettingsNavigator.shared.openUpdates() }
+			return
+		}
+		guard let value = content.userInfo["url"] as? String,
 			let url = URL(string: value), ReleaseURLPolicy.isTrusted(url)
 		else { return }
 		await MainActor.run { NSWorkspace.shared.open(url) }

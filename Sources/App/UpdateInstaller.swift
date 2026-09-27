@@ -24,7 +24,7 @@ final class UpdateInstaller {
 		let scriptPath: String
 	}
 
-	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "UpdateInstall")
+	nonisolated private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "UpdateInstall")
 
 	private(set) var state: State = .idle
 
@@ -113,15 +113,19 @@ final class UpdateInstaller {
 			try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
 			let dmg = tmp.appending(path: "Gaze.dmg", directoryHint: .notDirectory)
 			try await download(url: url, to: dmg, progress: progress)
+			Self.logger.notice("Update downloaded.")
 			let digest = try sha256Hex(of: dmg)
 			guard digest.lowercased() == sha256.lowercased() else {
 				throw InstallFailure(message: "The download didn't match. Try again.")
 			}
+			Self.logger.notice("Update checksum verified.")
 			let mount = try mount(dmg: dmg, randomRoot: tmp)
+			Self.logger.notice("Update image mounted.")
 			defer { detach(mount: mount) }
 			let candidate = URL(fileURLWithPath: mount).appending(
 				path: "Gaze.app", directoryHint: .isDirectory)
 			try verify(app: candidate, expectedVersion: expectedVersion)
+			Self.logger.notice("Update verified.")
 			let parent = URL(fileURLWithPath: runningPath).deletingLastPathComponent()
 			let staged = parent.appending(
 				path: ".Gaze-update-\(UUID().uuidString).app", directoryHint: .isDirectory)
@@ -131,13 +135,17 @@ final class UpdateInstaller {
 			try runProcess(
 				"/usr/bin/xattr", ["-dr", "com.apple.quarantine", staged.path],
 				message: "Couldn't install the update. Try again.")
+			Self.logger.notice("Update staged.")
 			let script = tmp.appending(path: "update.sh", directoryHint: .notDirectory)
 			try writeSwapScript(
 				at: script, appPath: runningPath, stagedPath: staged.path, tmpPath: tmp.path)
+			Self.logger.notice("Update script written.")
 			return .success(Swap(scriptPath: script.path))
 		} catch let failure as InstallFailure {
+			Self.logger.notice("Update failed: \(failure.message)")
 			return .failure(failure)
 		} catch {
+			Self.logger.notice("Update failed: couldn't install the update.")
 			return .failure(InstallFailure(message: "Couldn't install the update. Try again."))
 		}
 	}

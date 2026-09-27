@@ -12,6 +12,7 @@ python3 "$ROOT/Tests/SettingsInteraction/generate.py" "$OUTPUT/SettingsFixture.s
 xcrun swiftc -parse-as-library -target "$(host_target)" \
     "$ROOT/Sources/App/Theme.swift" \
     "$ROOT/Sources/Setup/SetupScaffold.swift" \
+    "$ROOT/Sources/App/ReleaseNotesView.swift" \
     "$ROOT/Sources/Setup/SetupAccessibilityDemo.swift" \
     "$ROOT/Sources/Setup/SetupShot.swift" \
     "$ROOT/Sources/Setup/SetupControls.swift" \

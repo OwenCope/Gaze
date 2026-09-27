@@ -14,6 +14,7 @@ members = [
     "private var releaseRowTitle:", "private var releaseRowDetail:",
     "private var releaseButtonTitle:", "private func releaseAction(", "private func bind(",
     "private var isInstallOffered:", "private var canInstall:", "private var installButtonTitle:",
+    "private func releaseCard(", "private var installerBusyLabel:", "private var isInstallerBusy:", "private var installProgressBar:",
 ]
 
 def member(anchor):
@@ -27,6 +28,7 @@ for name in state_names:
     matches = [line for line in source.splitlines() if line.startswith(f"\t@State private var {name} ") or line.startswith(f"\t@State private var {name}:")]
     assert len(matches) == 1, name
     state_lines.append(matches[0])
+state_lines.append("\t@Environment(\\.accessibilityReduceMotion) private var reduceMotion")
 
 assert "refreshLoginItemState()" in member("private func refreshExternalState(")
 # aboutSection moved out of SettingsView into the top-level SettingsAboutPane struct (same file).
@@ -35,6 +37,8 @@ about = source[pane_start:source.index("\n}\n", pane_start) + len("\n}")]
 source_start = about.index("\t\t\tif updates.repositoryURL != nil {")
 source_end = about.index("\n\t\t\t}", source_start) + len("\n\t\t\t}")
 source_build = about[source_start:source_end]
+morph_start = source.index("private struct InstallMorphLabel:")
+install_morph = source[morph_start:source.index("\n}\n", morph_start) + len("\n}")]
 assert 'title: "Source build"' in source_build
 
 body = """import AppKit
@@ -62,7 +66,7 @@ struct SettingsFixture: View {
         }
         .onDisappear { driver.changeLoginItem = nil; driver.refresh = nil }
     }
-""" + "\n\n".join(member(anchor) for anchor in members) + "\n    @ViewBuilder private var sourceBuildSection: some View {\n" + source_build + "\n    }\n}\n"
+""" + "\n\n".join(member(anchor) for anchor in members) + "\n    @ViewBuilder private var sourceBuildSection: some View {\n" + source_build + "\n    }\n}\n\n" + install_morph + "\n"
 destination.write_text(body)
 destination.with_suffix(".json").write_text(json.dumps({
     "source": "Sources/App/SettingsView.swift",

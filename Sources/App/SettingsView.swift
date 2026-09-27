@@ -99,6 +99,7 @@ struct SettingsView: View {
 	@State private var settings = Preferences.shared
 	@State private var updates = RepoRevealHelper.shared
 	@State private var releases = ReleaseUpdateChecker.shared
+	@State private var navigator = SettingsNavigator.shared
 	@State private var passwordEntry = ""
 	@State private var passwordError: String?
 	/// Whether a password is stored, re-read whenever this window comes forward.
@@ -140,6 +141,7 @@ struct SettingsView: View {
 
 	@Environment(\.openWindow) private var openWindow
 	@Environment(\.colorScheme) private var colorScheme
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
 	var body: some View {
 		let _ = pauseExpiryRevision
@@ -163,7 +165,8 @@ struct SettingsView: View {
 					highlightToken = nil
 				}
 			}
-			.onChange(of: searchQuery) { _, query in
+			.onChange(of: navigator.pending) { _, _ in consumeNavigatorRequest() }
+		.onChange(of: searchQuery) { _, query in
 				// Typing a new search supersedes the previous destination.
 				// (Selections set the query back to empty, so they keep it.)
 				if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -180,12 +183,38 @@ struct SettingsView: View {
 			// one. `.principal` centres it between the traffic lights and the trailing
 			// edge — the same slot Finder's view switcher and Xcode's segmented controls
 			// use — and AppKit owns the glass, the height and the scroll-edge behaviour.
-			.toolbar {
-				ToolbarItem(placement: .principal) {
-					GazeSettingsPicker(selection: $pane)
-						.fixedSize()
+		.toolbar {
+			ToolbarItem(placement: .principal) {
+				GazeSettingsPicker(selection: $pane)
+					.fixedSize()
+			}
+			ToolbarItem(placement: .navigation) {
+				if isUpdateBadgeVisible {
+					Group {
+						if isInstallerBusy {
+							ProgressView()
+								.progressViewStyle(.circular)
+								.controlSize(.small)
+						} else {
+							Button {
+								pane = .general
+								revealSettingsSection("updatesSection")
+							} label: {
+								Label("Update available", systemImage: "square.and.arrow.down")
+									.labelStyle(.iconOnly)
+							}
+							// A plain toolbar button: macOS sizes its glass like the pane
+							// icons beside it. Custom styles here stretched to the row height.
+							.foregroundStyle(.blue)
+							.help("Gaze \(availableDisplayVersion) is ready to install")
+							.accessibilityLabel("Update available")
+						}
+					}
+					.transition(reduceMotion ? .identity : .scale.combined(with: .opacity))
+					.animation(reduceMotion ? nil : Theme.Motion.quick, value: isUpdateBadgeVisible)
 				}
 			}
+		}
 		// A floor, not a fixed size.
 		//
 		// The window was pinned at exactly 700×540 and non-resizable, which meant a user who
@@ -246,6 +275,7 @@ struct SettingsView: View {
 			AppActivation.bringToFront()
 			refreshExternalState()
 			consumePendingPane()
+			consumeNavigatorRequest()
 		}
 		// Both of these can be changed outside this window — the password by the setup flow
 		// that "Change" opens, Accessibility in System Settings — and neither sends a
@@ -315,9 +345,10 @@ struct SettingsView: View {
 					permissionsSection.id("permissionsSection").modifier(searchDestination("permissionsSection"))
 					securitySection.id("securitySection").modifier(searchDestination("securitySection"))
 				case .general:
+					// Updates first, so a waiting update is the first thing General shows.
+					updatesSection.id("updatesSection").modifier(searchDestination("updatesSection"))
 					behaviourSection.id("behaviourSection").modifier(searchDestination("behaviourSection"))
 					appearanceSection.id("appearanceSection").modifier(searchDestination("appearanceSection"))
-					updatesSection.id("updatesSection").modifier(searchDestination("updatesSection"))
 					onboardingSection.id("onboardingSection").modifier(searchDestination("onboardingSection"))
 				case .notch:
 					NotchSettingsSection(settings: settings).id("NotchSettingsSection").modifier(searchDestination("NotchSettingsSection"))
@@ -428,8 +459,35 @@ struct SettingsView: View {
 	}
 
 	private func revealSettingsSection(_ section: String) {
-		guard let item = SettingsSearchItem.all.first(where: { $0.pane == "face" && $0.section == section }) else { return }
+		guard let item = SettingsSearchItem.all.first(where: { $0.section == section }) else { return }
 		selectSearchResult(item)
+	}
+
+	/// Applies an external open-Settings request (notification click): selects the pane
+	/// and reveals the section, then clears it so repeating the same destination still
+	/// observes a change.
+	private func consumeNavigatorRequest() {
+		guard let next = navigator.pending else { return }
+		navigator.pending = nil
+		if let destination = SettingsPane(rawValue: next.pane) { pane = destination }
+		revealSettingsSection(next.section)
+	}
+
+	private var isUpdateBadgeVisible: Bool {
+		if case .available = releases.state { return true }
+		return false
+	}
+
+	private var isInstallerBusy: Bool {
+		switch releases.installer.state {
+		case .downloading, .installing: return true
+		case .idle, .failed: return false
+		}
+	}
+
+	private var availableDisplayVersion: String {
+		guard case .available(let release) = releases.state else { return "" }
+		return ReleaseUpdateChecker.displayVersion(for: release.tag)
 	}
 
 	/// The highlight for one searchable section, active only while it is the
@@ -1302,14 +1360,25 @@ struct SettingsView: View {
 				symbol: "arrow.trianglehead.2.clockwise"
 			) {
 				HStack(spacing: 8) {
-					if isInstallOffered {
-						Button(installButtonTitle) { releases.install() }
-							.gazeButton(.primary)
-							.disabled(!canInstall)
+					switch releases.installer.state {
+					// Progress lives in the release card, in place of its Install button.
+					case .downloading, .installing:
+						EmptyView()
+					default:
+						// An installable update is installed from the release card below; the
+						// row only keeps Download as the fallback when installing failed.
+						if isInstallOffered {
+							if case .failed = releases.installer.state {
+								Button(releaseButtonTitle) { releaseAction() }
+									.gazeButton()
+									.disabled(releases.state == .checking)
+							}
+						} else {
+							Button(releaseButtonTitle) { releaseAction() }
+								.gazeButton()
+								.disabled(releases.state == .checking)
+						}
 					}
-					Button(releaseButtonTitle) { releaseAction() }
-						.gazeButton()
-						.disabled(releases.state == .checking)
 				}
 			}
 
@@ -1317,20 +1386,83 @@ struct SettingsView: View {
 				!release.notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 			{
 				RowDivider(inset: 0)
-				DisclosureGroup {
-					Text(release.notes)
-						.font(Typography.detail)
-						.foregroundStyle(Theme.secondaryLabel)
-						.multilineTextAlignment(.leading)
-						.frame(maxWidth: .infinity, alignment: .leading)
-						.fixedSize(horizontal: false, vertical: true)
-						.textSelection(.enabled)
-				} label: {
-					Theme.disclosureLabel("Release Notes")
-				}
-				.settingsDisclosureRow()
+				releaseCard(release)
 			}
 		}
+	}
+
+	/// The release as it reads on GitHub: title, summary, one Install button where the
+	/// download button would be, then the pictures and notes.
+	private func releaseCard(_ release: ReleaseUpdateChecker.Release) -> some View {
+		VStack(spacing: 14) {
+			VStack(spacing: 4) {
+				// The app icon heads the card, as it heads the release on GitHub.
+				Image(nsImage: NSApplication.shared.applicationIconImage ?? NSImage())
+					.resizable()
+					.interpolation(.high)
+					.frame(width: 72, height: 72)
+					.accessibilityHidden(true)
+					.padding(.bottom, 6)
+				Text("Gaze \(release.tag.hasPrefix("v") ? String(release.tag.dropFirst()) : release.tag)")
+					.font(.title2.weight(.bold))
+					.foregroundStyle(Theme.label)
+				if !release.name.isEmpty, release.name != "Gaze \(release.tag.dropFirst())" {
+					Text(release.name)
+						.font(Typography.detail)
+						.foregroundStyle(Theme.secondaryLabel)
+				}
+			}
+			if isInstallOffered {
+				ZStack {
+					if isInstallerBusy {
+						installProgressBar
+							.transition(.opacity.combined(with: .scale(scale: 0.96)))
+					} else {
+						InstallMorphLabel(isEnabled: canInstall) { releases.install() }
+						.transition(.opacity.combined(with: .scale(scale: 0.96)))
+					}
+				}
+				.frame(height: 36)
+				.animation(reduceMotion ? nil : .smooth(duration: 0.35), value: isInstallerBusy)
+			}
+			ReleaseNotesView(markdown: release.notes)
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.fixedSize(horizontal: false, vertical: true)
+				.textSelection(.enabled)
+		}
+		.frame(maxWidth: .infinity)
+		.padding(.horizontal, Theme.rowInset)
+		.padding(.vertical, 18)
+	}
+
+	/// Where the Install button was: a bar with the percentage beside it, then an
+	/// indeterminate bar while the new version is checked and swapped in.
+	private var installProgressBar: some View {
+		HStack(spacing: 10) {
+			if case .downloading(let fraction) = releases.installer.state, fraction < 0.99 {
+				ProgressView(value: fraction)
+					.progressViewStyle(.linear)
+					.animation(reduceMotion ? nil : .smooth(duration: 0.25), value: fraction)
+				Text("\(Int((fraction * 100).rounded()))%")
+					.font(Typography.detail.monospacedDigit())
+					.foregroundStyle(Theme.secondaryLabel)
+					.frame(width: 40, alignment: .trailing)
+					.contentTransition(.numericText())
+			} else {
+				ProgressView()
+					.progressViewStyle(.linear)
+				Text("Installing…")
+					.font(Typography.detail)
+					.foregroundStyle(Theme.secondaryLabel)
+					.fixedSize()
+			}
+		}
+		.frame(width: 260)
+	}
+
+	private var installerBusyLabel: String {
+		if case .downloading(let fraction) = releases.installer.state, fraction < 0.99 { return "Downloading…" }
+		return "Installing…"
 	}
 
 	private var releaseRowTitle: String {
@@ -1383,11 +1515,7 @@ struct SettingsView: View {
 	}
 
 	private var installButtonTitle: String {
-		switch releases.installer.state {
-		case .downloading(let fraction): "Downloading… \(Int((fraction * 100).rounded()))%"
-		case .installing: "Installing…"
-		case .idle, .failed: "Install Update"
-		}
+		"Install Update"
 	}
 
 	// MARK: - Actions
@@ -2177,5 +2305,42 @@ private struct AddFaceTile: View {
 		.onHover { hovering = $0 }
 
 		.animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovering)
+	}
+}
+
+/// The Install button. "Install" blurs into a download arrow while the pointer is anywhere
+/// over the button, like the website's buttons.
+private struct InstallMorphLabel: View {
+	var isEnabled: Bool
+	var action: () -> Void
+	@State private var hovered = false
+	@Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+	var body: some View {
+		let morphed = hovered && isEnabled && !reduceMotion
+		Button(action: action) {
+			ZStack {
+				Text("Install")
+					.font(.system(size: 14, weight: .semibold))
+					.opacity(morphed ? 0 : 1)
+					.blur(radius: morphed ? 8 : 0)
+				Image(systemName: "arrow.down")
+					.font(.system(size: 15, weight: .semibold))
+					.opacity(morphed ? 1 : 0)
+					.blur(radius: morphed ? 0 : 8)
+					.accessibilityHidden(true)
+			}
+			.frame(width: 160, height: 22)
+			.animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.34), value: morphed)
+		}
+		.buttonStyle(.glassProminent)
+		.buttonBorderShape(.capsule)
+		.tint(.blue)
+		.controlSize(.large)
+		.disabled(!isEnabled)
+		// On the whole button, glass padding included, not just the word.
+		.contentShape(Capsule())
+		.onHover { hovered = $0 }
+		.accessibilityLabel("Install")
 	}
 }

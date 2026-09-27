@@ -209,9 +209,17 @@ struct SettingsInteractionTests {
                     let values = nodes(host).map(label).joined(separator: "\n")
                     require(values.contains("Literal <script> text stays text."), "Release notes must display literal plain text")
                 }
+                require(find("Download", in: host) == nil, "An installable update offers Install, not Download")
+                let installs = ReleaseUpdateChecker.shared.installCount
+                press("Install", in: host)
+                require(ReleaseUpdateChecker.shared.installCount == installs + 1, "Install Update delegates once to the installer")
+                ReleaseUpdateChecker.shared.installer.state = .failed("Couldn't install the update. Try again.")
+                settle()
                 let count = ReleaseUpdateChecker.shared.downloadCount
                 press("Download", in: host)
-                require(ReleaseUpdateChecker.shared.downloadCount == count + 1, "Download delegates once to the existing action")
+                require(ReleaseUpdateChecker.shared.downloadCount == count + 1, "A failed install falls back to Download")
+                ReleaseUpdateChecker.shared.installer.state = .idle
+                settle()
                 try snapshot(host, to: output.appendingPathComponent("updates-\(expanded ? "notes" : "collapsed")-\(scheme == .dark ? "dark" : "light").png"))
                 UpdateChecker.shared.repositoryURL = URL(fileURLWithPath: "/fixture/Gaze")
                 settle()
