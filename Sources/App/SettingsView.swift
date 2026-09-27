@@ -1653,7 +1653,7 @@ private struct SettingsCreditsPane: View {
 				RowDivider()
 				creditRow(
 					name: "Unxnown",
-					detail: "Set up the Discord, where every early build lands",
+					detail: "Helped develop Gaze and set up the Discord",
 					symbol: "bubble.left.and.bubble.right.fill",
 					link: "https://github.com/UnxnownYT", linkName: "Unxnown on GitHub",
 					app: .init(
