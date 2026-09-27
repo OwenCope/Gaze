@@ -16,6 +16,7 @@ cask "gaze" do
   desc "Face ID-style face unlock"
   homepage "https://gazeunlock.com/"
 
+  auto_updates true
   depends_on macos: :tahoe
 
   app "Gaze.app"
