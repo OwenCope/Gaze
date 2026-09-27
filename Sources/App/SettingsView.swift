@@ -973,7 +973,7 @@ struct SettingsView: View {
 			SettingRow(
 				title: "Accessibility",
 				detail: accessibilityGranted
-					? "Allowed" : "Not allowed — review Accessibility access",
+					? "Allowed" : "Not allowed. If Gaze is already on, remove it and add it again.",
 				symbol: "accessibility",
 				symbolTint: accessibilityGranted ? nil : Theme.warning
 			) {
@@ -1294,16 +1294,23 @@ struct SettingsView: View {
 	private var updatesSection: some View {
 		SettingsSection(
 			title: "Updates",
-			footer: "Downloads open in your browser. Gaze does not install updates automatically."
+			footer: "Gaze installs the update and restarts. Your faces and settings stay."
 		) {
 			SettingRow(
 				title: releaseRowTitle,
 				detail: releaseRowDetail,
 				symbol: "arrow.trianglehead.2.clockwise"
 			) {
-				Button(releaseButtonTitle) { releaseAction() }
-					.gazeButton()
-					.disabled(releases.state == .checking)
+				HStack(spacing: 8) {
+					if isInstallOffered {
+						Button(installButtonTitle) { releases.install() }
+							.gazeButton(.primary)
+							.disabled(!canInstall)
+					}
+					Button(releaseButtonTitle) { releaseAction() }
+						.gazeButton()
+						.disabled(releases.state == .checking)
+				}
 			}
 
 			if case .available(let release) = releases.state,
@@ -1336,6 +1343,7 @@ struct SettingsView: View {
 		case .checking: return "Checking gazeunlock.com…"
 		case .upToDate: return "Gaze is up to date"
 		case .available(let release):
+			if case .failed(let message) = releases.installer.state { return message }
 			// The tag names the build; the release's own title, when it has one
 			// worth showing, says what changed.
 			return release.name.isEmpty
@@ -1359,6 +1367,26 @@ struct SettingsView: View {
 			releases.openDownload()
 		} else {
 			Task { await releases.check() }
+		}
+	}
+
+	private var isInstallOffered: Bool {
+		guard case .available(let release) = releases.state else { return false }
+		return release.downloadURL != nil
+	}
+
+	private var canInstall: Bool {
+		switch releases.installer.state {
+		case .idle, .failed: return releases.state != .checking
+		case .downloading, .installing: return false
+		}
+	}
+
+	private var installButtonTitle: String {
+		switch releases.installer.state {
+		case .downloading(let fraction): "Downloading… \(Int((fraction * 100).rounded()))%"
+		case .installing: "Installing…"
+		case .idle, .failed: "Install Update"
 		}
 	}
 

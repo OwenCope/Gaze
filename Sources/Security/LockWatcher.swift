@@ -698,9 +698,46 @@ final class LockWatcher {
 				continue
 			}
 			bestScore = max(bestScore, frameBest)
-			guard result.matched, let face = result.face else {
-				matchingHold.reset()
-				if challengeGate.isPresented, let challenge {
+		guard result.matched, let face = result.face else {
+			// A head turned for the requested movement scores below the match
+			// threshold, so a near-miss on the tracked face feeds the challenge
+			// instead of wiping it. Anything else keeps the rejection path below.
+			let turningScoreFloor = store.embedder.matchThreshold - 0.15
+			let trackedContinuity = trackedBox.map {
+				Self.overlap(sample.boundingBox, $0) >= Self.subjectChangeOverlap
+			} ?? true
+			let isSameFaceTurning = result.comparedIdentity && result.failure == nil
+				&& result.score >= turningScoreFloor && trackedContinuity
+			if isSameFaceTurning, let challenge, challengeGate.isPresented, !challengeGate.isVerified {
+				guard challengeGate.admits(frameID: sampleFrameID, capturedAt: sampleCapturedAt, now: .now)
+				else { continue }
+				Self.logger.notice("Movement progress from turning frame; action=\(challenge.action.prompt, privacy: .public) score=\(result.score) returning=\(challenge.isReturningToRest).")
+				let wasReturningToRest = challenge.isReturningToRest
+				let consumption = challenge.consume(sample)
+				if consumption.poseSourceInvalidated {
+					matchingHold.reset()
+					rejectionHold.reset()
+					resetMovementGuidance(reason: "pose source changed")
+					continue
+				}
+				if challenge.isReturningToRest && !wasReturningToRest {
+					let hint = challenge.guidanceHint
+					updateCapsule("return", .challenge(prompt: challenge.guidancePrompt,
+						symbol: challenge.guidanceSymbol, hintX: hint.x, hintY: hint.y, pulses: hint.pulses,
+						isReturningToRest: true))
+					Self.logger.notice("Requested movement observed; waiting for return to rest. action=\(challenge.action.prompt, privacy: .public)")
+				}
+				if challenge.isComplete {
+					challengeGate.completeAction()
+					if !challengeGate.isVerified {
+						challenge.next()
+					}
+				}
+				continue
+			}
+			if isSameFaceTurning { continue }
+			matchingHold.reset()
+			if challengeGate.isPresented, let challenge {
 					let pose = challenge.poseMeasurement(yaw: sample.pose.yaw, pitch: sample.pose.pitch,
 						yawSource: sample.pose.yawSource, pitchSource: sample.pose.pitchSource)
 					LockScanDiagnostics.shared.recordMovementFailure(.init(action: challenge.action.prompt,

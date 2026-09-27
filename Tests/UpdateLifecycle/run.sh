@@ -28,7 +28,10 @@ trap 'rm -rf "$BUILD"' EXIT
 xcrun swiftc -parse-as-library \
 	"$ROOT/Sources/App/ReleaseUpdateChecker.swift" \
 	"$ROOT/Sources/App/ReleaseURLPolicy.swift" \
+	"$ROOT/Sources/App/UpdateInstaller.swift" \
 	"$ROOT/Tests/UpdateLifecycle/Tests.swift" \
 	-framework AppKit \
+	-framework Security \
+	-framework CryptoKit \
 	-o "$BUILD/update-lifecycle-tests"
 "$BUILD/update-lifecycle-tests"

@@ -13,6 +13,7 @@ members = [
     "private var behaviourFooter:", "private var updatesSection:",
     "private var releaseRowTitle:", "private var releaseRowDetail:",
     "private var releaseButtonTitle:", "private func releaseAction(", "private func bind(",
+    "private var isInstallOffered:", "private var canInstall:", "private var installButtonTitle:",
 ]
 
 def member(anchor):

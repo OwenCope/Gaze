@@ -111,7 +111,7 @@ struct SetupPermissionContent: View {
 			.background(.primary.opacity(0.06), in: .rect(cornerRadius: 12))
 
 			if !status.isReady {
-				Button("Gaze isn’t listed? Show this app in Finder", action: onRevealApp)
+				Button("Already on, or not listed? Show Gaze in Finder", action: onRevealApp)
 					.buttonStyle(.link).font(.system(size: 12))
 				if let settingsError {
 					Text(settingsError)

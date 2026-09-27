@@ -68,6 +68,16 @@ typealias RepoRevealHelper = UpdateChecker
     var downloadCount = 0
     func check() async { checkCount += 1; state = .upToDate }
     func openDownload() { downloadCount += 1 }
+    let installer = UpdateInstaller()
+    var installCount = 0
+    func install() { installCount += 1 }
+}
+
+@Observable @MainActor final class UpdateInstaller {
+    enum State: Equatable {
+        case idle, downloading(fraction: Double), installing, failed(String)
+    }
+    var state = State.idle
 }
 
 /// The camera-access figure draws the Metal companion; the fixture only needs its layout.

@@ -19,6 +19,22 @@ final class EnrollmentModel {
 	/// user is effectively looking straight ahead and every segment would fill at once.
 	private static let engagementThreshold = 0.22
 
+	/// Finishing early takes three quarters of the ring, not every tick: the last gaps
+	/// sit at the largest pitch angles, where Vision's pitch estimate is worst and
+	/// real scans stall.
+	private static let earlyCompletionCoverage = 0.75
+	/// Stall escape hatch: past this coverage the set already spans the needed angles.
+	private static let stallCompletionCoverage = 0.60
+	/// A print counts as clearly turned at this yaw (radians, about 14 degrees).
+	private static let clearTurnYaw = 0.25
+	/// Seconds without a newly covered segment before guidance names the gap.
+	private static let stallGuidanceAfter: TimeInterval = 3
+	/// Seconds without a newly covered segment before a stalled scan finishes, when
+	/// the coverage and angle minimums are already met.
+	private static let stallCompletionAfter: TimeInterval = 6
+	/// Prints needed before the set may be saved. Unchanged from the two-pass rule.
+	private static let minimumPrints = 8
+
 	/// Vision's own quality score, below which a frame is too blurred, dark or oblique
 	/// to enrol from. Keeping junk out of the enrolment set matters more than speed.
 	private static let minimumQuality: Float = 0.35
@@ -52,6 +68,12 @@ final class EnrollmentModel {
 	}
 
 	private var heldTarget: Int?
+	private var hasFrontalPrint = false
+	private var hasLeftPrint = false
+	private var hasRightPrint = false
+	private var lastCoverageAdvance = Date()
+	/// Clock seam for the stall timers.
+	var now: () -> Date = { Date() }
 
 	private func nearestUncovered(to index: Int) -> Int? {
 		let count = Self.segmentCount
@@ -63,11 +85,11 @@ final class EnrollmentModel {
 		return nil
 	}
 
-	/// Both passes as one figure: the first fills 0–50%, the second 50–100%. Shown per
-	/// pass, the number fell from the high 90s back to zero with no explanation.
+	/// Measured against the coverage that finishes the scan, so the number climbs to 100%
+	/// instead of leaping there from the high 30s when the early-completion rule fires.
 	var overallProgress: Double {
 		if phase == .complete { return 1 }
-		return (Double(pass - 1) + progress) / 2
+		return min(0.99, progress / Self.earlyCompletionCoverage)
 	}
 
 	var captureTitle: String {
@@ -107,14 +129,10 @@ final class EnrollmentModel {
 		switch phase {
 		case .positioning:
 			return "Position your face in the circle"
-		case .capturing(let pass):
-			if let targetSegment {
-				let directions = ["up", "up and right", "right", "down and right", "down", "down and left", "left", "up and left"]
-				let direction = directions[((targetSegment + 3) / 6) % 8]
-				return "Slowly point your face \(direction), toward the bright tick. Keep your eyes visible to the camera."
-			}
+		case .capturing:
+			if stalledForGuidance, targetSegment != nil { return "Tilt your head a little toward the gap" }
 			if captureStatus == .steady { return "Your face is detected. Gently turn your head to capture the unfilled angles." }
-			return pass == 1 ? "Move your head slowly to complete the circle" : "Almost done — turn your head slowly once more to finish the circle"
+			return "Move your head slowly to fill the circle"
 		case .complete:
 			return "Gaze is set up"
 		case .failed(let message):
@@ -135,6 +153,16 @@ final class EnrollmentModel {
 		switch phase {
 		case .complete, .failed: return
 		default: break
+		}
+
+		// Stalled with the minimums already in hand: finish rather than sit on a
+		// nearly full ring waiting for a pitch angle Vision reports poorly.
+		if case .capturing = phase,
+			now().timeIntervalSince(lastCoverageAdvance) >= Self.stallCompletionAfter,
+			progress >= Self.stallCompletionCoverage, hasAngleDiversity,
+			prints.count >= Self.minimumPrints {
+			phase = .complete
+			return
 		}
 
 		// A second face pauses capture without enrolling either one and without
@@ -190,7 +218,9 @@ final class EnrollmentModel {
 			if pass == 1 {
 				guard let frontal = validatedPrint(sample) else { return }
 				prints.append(frontal)
+				hasFrontalPrint = true
 			}
+			lastCoverageAdvance = now()
 			phase = .capturing(pass: pass)
 		}
 
@@ -202,7 +232,10 @@ final class EnrollmentModel {
 			return
 		}
 		currentAngle = sample.pose.ringAngle
-		isEngaged = sample.pose.offCentre >= Self.engagementThreshold
+		// Pitch-led directions (top and bottom of the ring) read poorly: Vision drops
+		// the pitch axis at large chin-up/chin-down angles, so those segments stall
+		// while yaw-led ones fill. Halve the bar there; a moderate tilt counts.
+		isEngaged = sample.pose.offCentre >= Self.engagementThreshold(for: currentAngle)
 
 		guard isEngaged else { return }
 		captureStatus = .turning
@@ -225,10 +258,22 @@ final class EnrollmentModel {
 		if isNewDirection {
 			guard let faceprint = validatedPrint(sample) else { return }
 			prints.append(faceprint)
+			if sample.pose.yaw >= Self.clearTurnYaw { hasLeftPrint = true }
+			if sample.pose.yaw <= -Self.clearTurnYaw { hasRightPrint = true }
 		}
+		let filledBefore = covered.filter { $0 }.count
 		for index in neighbours { covered[index] = true }
+		if covered.filter({ $0 }).count > filledBefore { lastCoverageAdvance = now() }
 		if heldTarget == nil || covered[heldTarget!] { heldTarget = targetSegment }
 
+		// Three quarters of the ring with a frontal print and a clear turn each way
+		// matches as well as the full circle: the missing ticks are the extreme
+		// pitch angles users never present at the lock screen.
+		if progress >= Self.earlyCompletionCoverage, hasAngleDiversity,
+			prints.count >= Self.minimumPrints {
+			phase = .complete
+			return
+		}
 		guard progress >= 1 else { return }
 		advancePass()
 	}
@@ -253,14 +298,32 @@ final class EnrollmentModel {
 		return candidate
 	}
 
+	/// Frontal print plus a clear turn each way. Positive yaw faces screen left in
+	/// the mirrored preview.
+	private var hasAngleDiversity: Bool { hasFrontalPrint && hasLeftPrint && hasRightPrint }
+
+	/// Past three seconds without a new segment, the highlight is already the
+	/// nearest gap (`targetSegment`), so guidance just names it.
+	private var stalledForGuidance: Bool {
+		guard case .capturing = phase else { return false }
+		return now().timeIntervalSince(lastCoverageAdvance) >= Self.stallGuidanceAfter
+	}
+
+	/// Engagement bar for a ring angle. Halved where pitch leads (near the top and
+	/// bottom of the ring) so a moderate nod covers what used to need a full tilt.
+	private static func engagementThreshold(for angle: Double) -> Double {
+		abs(sin(angle)) < 0.7071 ? engagementThreshold / 2 : engagementThreshold
+	}
+
 	private func advancePass() {
 		if pass == 1 {
 			pass = 2
 			covered = [Bool](repeating: false, count: Self.segmentCount)
 			heldTarget = nil
+			lastCoverageAdvance = now()
 			phase = .capturing(pass: 2)
 		} else {
-			phase = prints.count >= 8
+			phase = prints.count >= Self.minimumPrints
 				? .complete
 				: .failed("Not enough of your face was captured. Choose Try Again and use brighter, even light.")
 		}
@@ -278,6 +341,10 @@ final class EnrollmentModel {
 		prints = []
 		pass = 1
 		heldTarget = nil
+		hasFrontalPrint = false
+		hasLeftPrint = false
+		hasRightPrint = false
+		lastCoverageAdvance = now()
 		framesWithFace = 0
 		isEngaged = false
 		currentAngle = 0

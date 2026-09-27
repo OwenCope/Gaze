@@ -188,6 +188,7 @@ private enum UpdateLifecycleTests {
         try await futureTimestampStillChecks()
         try await recentTimestampSkips()
         try await availableSkipsEvenWithFutureTimestamp()
+        try await trustedDownloadHops()
         print("UpdateLifecycle regression checks passed")
     }
 
@@ -335,6 +336,34 @@ private enum UpdateLifecycleTests {
         await checker.checkIfDue()
         try require(StubFeedProtocol.requestCount == 0, "recent timestamp still skips")
         try require(checker.state == .idle, "recent timestamp skip leaves state idle")
+    }
+
+    @MainActor
+    static func trustedDownloadHops() async throws {
+        for value in [
+            "https://gazeunlock.com/download",
+            "https://github.com/OwenCope/Gaze/releases/download/v1.2.3/Gaze.dmg",
+            "https://release-assets.githubusercontent.com/123/abc/Gaze.dmg",
+            "https://objects.githubusercontent.com/abc123",
+        ] {
+            try require(
+                URL(string: value).map({ ReleaseURLPolicy.isTrustedDownloadHop($0) }) == true,
+                "trusted download hop allowed: \(value)")
+        }
+        for value in [
+            "http://gazeunlock.com/download",
+            "https://example.com/Gaze.dmg",
+            "https://github.com/OwenCope/Gaze/blob/main/README.md",
+            "https://github.com/SomeoneElse/Other/releases/download/v1/Gaze.dmg",
+            "https://user@gazeunlock.com/download",
+            "https://user:pass@github.com/OwenCope/Gaze/releases/download/v1/Gaze.dmg",
+            "https://gazeunlock.com/download#part",
+            "https://gazeunlock.com:8443/download",
+        ] {
+            try require(
+                URL(string: value).map({ ReleaseURLPolicy.isTrustedDownloadHop($0) }) == false,
+                "untrusted download hop rejected: \(value)")
+        }
     }
 
     @MainActor

@@ -73,8 +73,11 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 										.animation(reducedMotion || previewReduceMotion ? nil : .smooth(duration: 0.25), value: readout.instruction)
 								}
 								.frame(maxWidth: .infinity, alignment: .leading)
-								Button("Try another movement", action: next)
+								Button("Try another", action: next)
 									.gazeButton(.standard, size: .regular).disabled(!readout.canChallenge)
+									// Never truncated: the card gives the label its full width first.
+									.fixedSize()
+									.accessibilityLabel("Try another movement")
 							}
 							Divider().overlay(Theme.separator)
 							matchMeter

@@ -25,6 +25,7 @@ final class ReleaseUpdateChecker {
 		let name: String
 		let notes: String
 		let downloadURL: URL?
+		let downloadSHA256: String?
 	}
 
 	enum State: Equatable {
@@ -37,6 +38,8 @@ final class ReleaseUpdateChecker {
 	}
 
 	private(set) var state: State = .idle
+	/// Owns the in-app install; the row reads `installer.state` for progress.
+	let installer = UpdateInstaller()
 	private let defaults: UserDefaults
 	private let sessionConfiguration: () -> URLSessionConfiguration
 	private let startupDelay: Duration
@@ -317,11 +320,12 @@ final class ReleaseUpdateChecker {
 				return
 			}
 
-			let release = Release(
-				tag: latest.tag,
-				name: latest.name,
-				notes: latest.notes,
-				downloadURL: ReleaseURLPolicy.download(latest.download?.url))
+		let release = Release(
+			tag: latest.tag,
+			name: latest.name,
+			notes: latest.notes,
+			downloadURL: ReleaseURLPolicy.download(latest.download?.url),
+			downloadSHA256: latest.download?.sha256)
 			state = .available(release)
 			Self.logger.notice("Update available: \(latest.tag, privacy: .public)")
 			// One notification per version, however often the state is re-entered.
@@ -342,6 +346,16 @@ final class ReleaseUpdateChecker {
 			// Offline is not an error worth alarming anyone about — it is the normal state of
 			// a laptop half the time — so this says what happened and stops.
 			state = .failed("Couldn't reach gazeunlock.com.")
+		}
+	}
+
+	/// Installs the available release in place, relaunching when done.
+	func install() {
+		guard case .available(let release) = state, let url = release.downloadURL else { return }
+		let checker = self
+		Task {
+			await checker.installer.install(
+				url: url, sha256: release.downloadSHA256, expectedVersion: release.tag)
 		}
 	}
 
@@ -469,6 +483,7 @@ final class ReleaseUpdateChecker {
 			let url: String
 			let name: String?
 			let size: Int?
+			let sha256: String?
 		}
 	}
 }
