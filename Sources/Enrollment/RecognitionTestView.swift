@@ -30,6 +30,7 @@ struct RecognitionTestView: View {
 	@State private var peak: Float = 0
 	@State private var floor: Float = 1
 	@State private var samples = 0
+	@State private var lastProblem: String?
 	@State private var testRevision = UUID()
 	@State private var showsDetail = false
 
@@ -79,6 +80,7 @@ struct RecognitionTestView: View {
 		var peak: Float = 0
 		var floor: Float = 1
 		var samples = 0
+		var lastProblem: String?
 		var lockVerdict = "Not recognised"
 		var lockWillUnlock = false
 	}
@@ -161,6 +163,7 @@ struct RecognitionTestView: View {
 			("Match threshold", String(format: "%.2f", store.embedder.matchThreshold)),
 			("Lowest / highest", String(format: "%.3f / %.3f", floor == 1 ? 0 : floor, peak)),
 			("Samples", "\(samples)"),
+			("Last problem", lastProblem ?? "None"),
 			("Yaw (raw)", currentYaw.map { String(format: "%+.2f rad", $0) } ?? "—"),
 			("Pitch (raw)", currentPitch.map { String(format: "%+.2f rad", $0) } ?? "—"),
 			("Blink observed", blinked ? "Yes" : "Not yet"),
@@ -243,6 +246,7 @@ struct RecognitionTestView: View {
 		pending.peak = 0
 		pending.floor = 1
 		pending.samples = 0
+		pending.lastProblem = nil
 		pending.lockVerdict = "Not recognised"
 		pending.lockWillUnlock = false
 		blinked = false
@@ -371,7 +375,15 @@ struct RecognitionTestView: View {
 					frameSize = CGSize(width: CVPixelBufferGetWidth(sample.pixelBuffer),
 						height: CVPixelBufferGetHeight(sample.pixelBuffer))
 					publish()
-				} else { clearMatch() }
+				} else {
+					// Shown in the details: a frame that fails before comparison used to
+					// leave only "Samples 0", with nothing saying why.
+					if let failure = result.failure {
+						pending.lastProblem = Self.problemText(failure)
+						lastProblem = pending.lastProblem
+					}
+					clearMatch()
+				}
 			}
 			let delay = max(.zero, Duration.milliseconds(100) - start.duration(to: .now))
 			do { try await Task.sleep(for: delay) } catch { break }
@@ -435,12 +447,24 @@ struct RecognitionTestView: View {
 			width: width, height: height)
 	}
 
+	private static func problemText(_ failure: UnlockFrameEvaluator.Failure) -> String {
+		switch failure {
+		case .noEnrollment: "No saved face is on"
+		case .embeddingUnavailable: "Recognition model unavailable"
+		case .invalidSimilarity: "Saved face needs adding again"
+		case .unusableFrame: "Face too small or blurry"
+		case .invalidConfiguration: "Recognition settings are invalid"
+		case .cancelled: "Scan was cancelled"
+		}
+	}
+
 	private func publish() {
 		score = pending.score
 		matched = pending.matched
 		peak = pending.peak
 		floor = pending.floor
 		samples = pending.samples
+		lastProblem = pending.lastProblem
 		lockVerdict = pending.lockVerdict
 		lockWillUnlock = pending.lockWillUnlock
 	}

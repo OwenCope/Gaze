@@ -1,0 +1,149 @@
+# Posts every published Gaze release to Discord.
+#
+# Needs repository secret DISCORD_RELEASE_WEBHOOK (the Discord webhook URL).
+# Create it with:
+#   Discord channel > Edit Channel > Integrations > Webhooks > New Webhook > Copy URL
+#   GitHub repo > Settings > Secrets and variables > Actions > New repository secret
+#     Name: DISCORD_RELEASE_WEBHOOK, Value: <pasted webhook URL>
+# If the secret is empty the workflow prints a notice and exits 0.
+
+name: discord-release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to re-post (e.g. v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post release to Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DISCORD_WEBHOOK:-}" ]; then
+            echo "DISCORD_RELEASE_WEBHOOK is not set; skipping Discord announcement."
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$DISPATCH_TAG"
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --json tagName,name,body,url,isDraft,isPrerelease > /tmp/release.json
+          else
+            jq '{tagName: .release.tag_name, name: .release.name, body: (.release.body // ""), url: .release.html_url, isDraft: .release.draft, isPrerelease: .release.prerelease}' \
+              "$GITHUB_EVENT_PATH" > /tmp/release.json
+          fi
+
+          if [ "$(jq -r '.isDraft // false' /tmp/release.json)" = "true" ]; then
+            echo "Skipping: release is a draft."
+            exit 0
+          fi
+          if [ "$(jq -r '.isPrerelease // false' /tmp/release.json)" = "true" ]; then
+            echo "Skipping: release is a prerelease."
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import json
+          import re
+
+          with open("/tmp/release.json") as f:
+              rel = json.load(f)
+
+          tag = rel.get("tagName") or ""
+          name = rel.get("name") or tag
+          url = rel.get("url") or ""
+          body = rel.get("body") or ""
+
+          # Drop everything before the first Markdown heading (the body starts
+          # with an HTML <div align="center"> header).
+          lines = body.splitlines()
+          start = 0
+          for i, line in enumerate(lines):
+              if re.match(r"^#{1,6}\s+\S", line):
+                  start = i
+                  break
+          else:
+              start = 0
+          body = "\n".join(lines[start:])
+
+          # Strip any remaining HTML tags.
+          body = re.sub(r"<[^>]+>", "", body)
+
+          # Drop the whole '## Install' section and anything after it.
+          kept = []
+          for line in body.splitlines():
+              if re.match(r"^##\s+Install\b", line, re.IGNORECASE):
+                  break
+              kept.append(line)
+          body = "\n".join(kept)
+
+          # Collapse 3+ blank lines down to one blank line.
+          body = re.sub(r"\n[ \t]*\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", body)
+          body = body.strip()
+
+          # Convert '### Heading' to Discord bold, drop "## What's new"
+          # (the embed title covers it).
+          out = []
+          for line in body.splitlines():
+              if re.match(r"^##\s+What\xe2\x80\x99s new\s*$", line, re.IGNORECASE) or \
+                 re.match(r"^##\s+What's new\s*$", line, re.IGNORECASE):
+                  continue
+              m = re.match(r"^###\s+(.*\S)\s*$", line)
+              if m:
+                  out.append(f"**{m.group(1).strip()}**")
+              else:
+                  out.append(line)
+          body = "\n".join(out).strip()
+
+          # Truncate to 3,900 chars at a line boundary.
+          truncated = False
+          if len(body) > 3900:
+              truncated = True
+              cut = body[:3900]
+              nl = cut.rfind("\n")
+              body = cut[:nl] if nl > 0 else cut
+              body = body.rstrip()
+
+          if truncated:
+              body += "\n…and more in the full notes."
+
+          body += f"\n[Download](https://gazeunlock.com/download)\n[Release notes]({url})"
+
+          version = tag[1:] if tag.startswith("v") else tag
+
+          payload = {
+              "username": "Gaze",
+              "avatar_url": "https://raw.githubusercontent.com/OwenCope/Gaze/main/docs/images/icon.png",
+              "content": f"Gaze {version} is out.",
+              "embeds": [
+                  {
+                      "title": name,
+                      "url": url,
+                      "description": body,
+                      "color": 689407,
+                      "footer": {"text": "Settings > Install Update, or brew upgrade --cask gaze"},
+                  }
+              ],
+          }
+
+          with open("/tmp/discord.json", "w") as f:
+              json.dump(payload, f)
+          PY
+
+          curl -fsS -H 'Content-Type: application/json' \
+            -d @/tmp/discord.json "$DISCORD_WEBHOOK"
