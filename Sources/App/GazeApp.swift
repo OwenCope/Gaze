@@ -445,6 +445,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 	func applicationDidFinishLaunching(_ notification: Notification) {
 		MainActor.assumeIsolated {
 			let totalStart = StartupTiming.start()
+			// Created now rather than at the first dark scan, so a brightness boost left
+			// behind by a quit mid-scan is put back as soon as Gaze opens again.
+			_ = LockScreenLight.shared
 			StartupTiming.measure(label: "tamper-guard") { TamperGuard.shared.start() }
 			StartupTiming.measure(label: "unlock-triggers") { AppServices.shared.startUnlockTrigger() }
 			// Looks for a new release shortly after launch, then daily. See

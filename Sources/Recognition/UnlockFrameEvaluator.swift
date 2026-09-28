@@ -12,6 +12,11 @@ actor UnlockFrameEvaluator {
 		let spoofDecision: AntiSpoofGate.Decision?
 		var comparedIdentity = true
 		var failure: Failure?
+		/// The print of the frame that matched, for learning after a confirmed unlock.
+		var matchedPrint: Faceprint?
+		/// True when the match came from the upper face alone (the mask path). The
+		/// caller must require the movement challenge on this path, always.
+		var viaUpperFace = false
 
 		func permitsMatchHold(requiresAntiSpoof: Bool) -> Bool {
 			failure == nil && comparedIdentity && matched && face != nil && (requiresAntiSpoof ? spoofDecision == .live : spoofDecision == nil || spoofDecision == .live)
@@ -26,6 +31,12 @@ actor UnlockFrameEvaluator {
 	private let embedder: any FaceEmbedder
 	private let faces: [FaceEnrollment]
 	private let antiSpoof: AntiSpoofGate?
+	/// Whether the mask path may run at all. The caller only enables it alongside a
+	/// movement challenge, so an upper-face match is never the sole proof.
+	private let allowsMaskUnlock: Bool
+	/// Faces that have upper-face prints, and where they sit in `faces`.
+	private let upperMatcher: FaceTemplateMatcher?
+	private let upperFaceIndices: [Int]
 	/// Passive deny cues (device bezel, screen glare), adapted from Glance. Owned
 	/// here — on this actor, off the main thread — rather than in `AntiSpoofGate` so
 	/// the gate stays a stateless per-frame verdict and the hardening suite's stubs
@@ -35,11 +46,19 @@ actor UnlockFrameEvaluator {
 	private var glareCue = GlareCue()
 	private let matcher: FaceTemplateMatcher
 
-	init(embedder: any FaceEmbedder, faces: [FaceEnrollment], antiSpoof: AntiSpoofGate?) {
+	init(embedder: any FaceEmbedder, faces: [FaceEnrollment], antiSpoof: AntiSpoofGate?, allowsMaskUnlock: Bool = false) {
 		self.embedder = embedder
 		self.faces = faces
 		self.antiSpoof = antiSpoof
-		self.matcher = FaceTemplateMatcher(templates: faces.map(\.prints), embedder: embedder)
+		self.allowsMaskUnlock = allowsMaskUnlock
+		// Learned prints match alongside the originals, so the face the Mac sees
+		// improves with use — but the originals alone anchor the drift guard.
+		self.matcher = FaceTemplateMatcher(templates: faces.map { $0.prints + $0.learnedPrints }, embedder: embedder)
+		let withUpper = faces.enumerated().filter { !$0.element.upperPrints.isEmpty }
+		self.upperFaceIndices = withUpper.map(\.offset)
+		self.upperMatcher = withUpper.isEmpty
+			? nil
+			: FaceTemplateMatcher(templates: withUpper.map(\.element.upperPrints), embedder: embedder)
 	}
 
 	/// Clears the deny cues' per-scan counts, so the next look after a spoof
@@ -64,9 +83,27 @@ actor UnlockFrameEvaluator {
 		guard !Task.isCancelled else { return .rejected(.cancelled) }
 		guard let best else { return .rejected(.noEnrollment) }
 		let matched = best.score >= embedder.matchThreshold
-		let decision = matched ? denyChecked(sample) : nil
+		if matched {
+			let decision = denyChecked(sample)
+			guard !Task.isCancelled else { return .rejected(.cancelled) }
+			return Result(matched: true, score: best.score, face: faces[best.index],
+				spoofDecision: decision, matchedPrint: candidate)
+		}
+		// The mask path: the full face did not match, so try the upper face alone,
+		// a little harder to pass than the full-face threshold. Only for faces
+		// enrolled with upper prints, and never as the sole proof — the caller
+		// keeps the movement challenge on for it.
+		if allowsMaskUnlock, let upperMatcher, let upper = embedder.embedUpperFace(sample),
+			let upperBest = try? upperMatcher.bestMatch(to: upper),
+			upperBest.index < upperFaceIndices.count,
+			upperBest.score >= embedder.matchThreshold + 0.05 {
+			let decision = denyChecked(sample)
+			guard !Task.isCancelled else { return .rejected(.cancelled) }
+			return Result(matched: true, score: upperBest.score, face: faces[upperFaceIndices[upperBest.index]],
+				spoofDecision: decision, matchedPrint: upper, viaUpperFace: true)
+		}
 		guard !Task.isCancelled else { return .rejected(.cancelled) }
-		return Result(matched: matched, score: best.score, face: matched ? faces[best.index] : nil, spoofDecision: decision)
+		return Result(matched: false, score: best.score, face: nil, spoofDecision: nil)
 	}
 
 	/// The classifier verdict plus the passive deny cues. The cues run only on frames

@@ -53,6 +53,8 @@ protocol FaceEmbedder: Sendable {
 	/// The similarity above which two prints are considered the same person.
 	var matchThreshold: Float { get }
 	func embed(_ sample: FaceSample) -> Faceprint?
+	/// The same face described by its upper half alone, for matching under a mask.
+	func embedUpperFace(_ sample: FaceSample) -> Faceprint?
 	/// How alike two prints are, 0...1.
 	///
 	/// Part of the embedder rather than of `Faceprint` because the right metric depends
@@ -66,6 +68,9 @@ protocol FaceEmbedder: Sendable {
 
 extension FaceEmbedder {
 	func warmUp() {}
+	/// Nil where the embedder cannot describe the upper face alone (the geometry
+	/// fallback): the mask path then never matches, rather than failing.
+	func embedUpperFace(_ sample: FaceSample) -> Faceprint? { nil }
 }
 
 extension FaceEmbedder {
@@ -246,8 +251,39 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 	}
 
 	func embed(_ sample: FaceSample) -> Faceprint? {
+		guard let crop = FaceAligner.alignedCrop(sample, side: side) else { return nil }
+		return predict(crop)
+	}
+
+	/// The upper face with the lower 45% masked to neutral grey, run through the
+	/// same model — the half a mask leaves visible, in the same feature space so
+	/// it compares against prints captured the same way at enrolment.
+	func embedUpperFace(_ sample: FaceSample) -> Faceprint? {
+		guard let crop = FaceAligner.alignedCrop(sample, side: side) else { return nil }
+		guard CVPixelBufferLockBaseAddress(crop, []) == kCVReturnSuccess else { return nil }
+		defer { CVPixelBufferUnlockBaseAddress(crop, []) }
+		guard let base = CVPixelBufferGetBaseAddress(crop) else { return nil }
+		let rowBytes = CVPixelBufferGetBytesPerRow(crop)
+		let pixels = base.assumingMemoryBound(to: UInt8.self)
+		let maskedFrom = Int(Double(side) * 0.55)
+		// Neutral grey, not black: the model reads it as no information rather
+		// than as a shadowed face.
+		for y in maskedFrom..<side {
+			let row = pixels + y * rowBytes
+			for x in 0..<side {
+				let px = row + x * 4
+				px[0] = 128
+				px[1] = 128
+				px[2] = 128
+				px[3] = 255
+			}
+		}
+		return predict(crop)
+	}
+
+	/// One prediction on an aligned crop: tensor in, L2-normalised print out.
+	private func predict(_ crop: CVPixelBuffer) -> Faceprint? {
 		guard
-			let crop = FaceAligner.alignedCrop(sample, side: side),
 			let tensor = Self.tensor(from: crop, side: side),
 			let output = predictionLock.withLock({
 				try? model.prediction(from: try MLDictionaryFeatureProvider(

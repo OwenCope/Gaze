@@ -195,6 +195,8 @@ final class Preferences {
 		static let unlockBackend = "unlockBackend"
 		static let pausedUntil = "pausedUntil"
 		static let walkAwayLock = "walkAwayLock"
+		static let screenGlowInDark = "screenGlowInDark"
+		static let unlockWithMask = "unlockWithMask"
 	}
 
 	private let defaults: UserDefaults
@@ -316,6 +318,19 @@ final class Preferences {
 		didSet { defaults.set(unlockBackend.rawValue, forKey: Key.unlockBackend) }
 	}
 
+	/// Whether the lock screen may light its edges in a dark room so the camera
+	/// can see a face. On by default.
+	var screenGlowInDark: Bool {
+		didSet { defaults.set(screenGlowInDark, forKey: Key.screenGlowInDark) }
+	}
+
+	/// Whether a face may unlock while wearing a mask, matched on the upper face
+	/// only. Off by default, and only offered for faces enrolled with upper-face
+	/// prints.
+	var unlockWithMask: Bool {
+		didSet { defaults.set(unlockWithMask, forKey: Key.unlockWithMask) }
+	}
+
 	// MARK: - Notch
 
 	var notchStyle: NotchStyle {
@@ -377,6 +392,8 @@ final class Preferences {
 		unlockBackend =
 			defaults.string(forKey: Key.unlockBackend)
 			.flatMap(UnlockBackendKind.init(rawValue:)) ?? .none
+		screenGlowInDark = defaults.object(forKey: Key.screenGlowInDark) as? Bool ?? true
+		unlockWithMask = defaults.object(forKey: Key.unlockWithMask) as? Bool ?? false
 
 		notchStyle =
 			defaults.string(forKey: Key.notchStyle)

@@ -13,6 +13,12 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 	/// their head or the light changes. Matching requires two supporting prints from
 	/// this spread, so an isolated outlier cannot decide identity.
 	var prints: [Faceprint]
+	/// Prints learned from confirmed unlocks, so matching improves with use. Guarded
+	/// by `learn(_:for:)`; never the anchor for further learning.
+	var learnedPrints: [Faceprint]
+	/// Upper-face prints, for unlocking with a mask. Empty on faces enrolled before
+	/// this existed, which is what the Settings gate reads.
+	var upperPrints: [Faceprint]
 	/// Which embedder produced these. Changing models invalidates the enrolment.
 	var embedder: String
 	/// `uniqueID` of the camera used at enrolment, re-checked at every unlock.
@@ -25,6 +31,8 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 		id: UUID = UUID(),
 		name: String,
 		prints: [Faceprint],
+		learnedPrints: [Faceprint] = [],
+		upperPrints: [Faceprint] = [],
 		embedder: String,
 		cameraID: String,
 		enrolledAt: Date = Date(),
@@ -33,6 +41,8 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 		self.id = id
 		self.name = name
 		self.prints = prints
+		self.learnedPrints = learnedPrints
+		self.upperPrints = upperPrints
 		self.embedder = embedder
 		self.cameraID = cameraID
 		self.enrolledAt = enrolledAt
@@ -57,6 +67,9 @@ struct FaceEnrollment: Codable, Sendable, Identifiable {
 		// true keeps those faces working with no migration, the same way a
 		// missing `id` or `name` above falls back instead of throwing.
 		isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+		// Absent on records written before learning and masks existed.
+		learnedPrints = try container.decodeIfPresent([Faceprint].self, forKey: .learnedPrints) ?? []
+		upperPrints = try container.decodeIfPresent([Faceprint].self, forKey: .upperPrints) ?? []
 	}
 
 	/// The name a newly enrolled face gets.
@@ -259,7 +272,7 @@ final class FaceEnrollmentStore {
 
 	/// Adds a newly captured face.
 	@discardableResult
-	func add(prints: [Faceprint], cameraID: String, name: String? = nil) async throws -> FaceEnrollment {
+	func add(prints: [Faceprint], upperPrints: [Faceprint] = [], cameraID: String, name: String? = nil) async throws -> FaceEnrollment {
 		try Task.checkCancellation()
 		guard !isAddingFace else { throw EnrollmentError.busy }
 		guard canAddFace else { throw EnrollmentError.full }
@@ -276,6 +289,7 @@ final class FaceEnrollmentStore {
 		let record = FaceEnrollment(
 			name: name ?? FaceEnrollment.defaultName(ordinal: faces.count + 1),
 			prints: prints,
+			upperPrints: upperPrints,
 			embedder: embedder.identifier,
 			cameraID: cameraID)
 		faces.append(record)
@@ -329,6 +343,28 @@ final class FaceEnrollmentStore {
 		do { try persist() } catch { faces[index].isEnabled = previous }
 	}
 
+	/// Learns a print from a confirmed unlock, so matching improves with use.
+	///
+	/// Three guards, in order. The print must genuinely be the enrolled face, scored
+	/// against the *original* prints a little above the match threshold — never against
+	/// the learned ones, so a chain of learned prints cannot drift onto another face.
+	/// It must not be a near-duplicate of one already learned, which would fill the
+	/// set with copies. And the set is capped, dropping the oldest, so it cannot grow
+	/// without bound.
+	func learn(_ print: Faceprint, for faceID: UUID) {
+		guard let index = faces.firstIndex(where: { $0.id == faceID }) else { return }
+		guard print.source == faces[index].embedder else { return }
+		guard let original = try? FaceTemplateMatcher(templates: [faces[index].prints], embedder: embedder)
+			.bestMatch(to: print), original.score >= embedder.matchThreshold + 0.05 else { return }
+		guard !faces[index].learnedPrints.contains(where: { embedder.similarity(print, $0) > 0.97 }) else { return }
+		var updated = faces[index]
+		updated.learnedPrints.append(print)
+		if updated.learnedPrints.count > 8 { updated.learnedPrints.removeFirst() }
+		let previous = faces[index]
+		faces[index] = updated
+		do { try persist() } catch { faces[index] = previous }
+	}
+
 	func remove(_ id: UUID) {
 		let previous = faces
 		faces.removeAll { $0.id == id }
@@ -375,12 +411,12 @@ final class FaceEnrollmentStore {
 			return (false, 0, nil, nil)
 		}
 
-		// Rebuilt whenever `faces` changes, which includes switching a face on or off.
-		// Built from the base embedder: the threshold is only compared at match
-		// time below, so a sensitivity change applies to the next scan with no
-		// cache to clear.
+		// Rebuilt whenever `faces` changes, which includes switching a face on or off
+		// and learning a print. Built from the base embedder: the threshold is only
+		// compared at match time below, so a sensitivity change applies to the next
+		// scan with no cache to clear.
 		if cachedMatcher == nil {
-			cachedMatcher = FaceTemplateMatcher(templates: enabled.map(\.prints), embedder: baseEmbedder)
+			cachedMatcher = FaceTemplateMatcher(templates: enabled.map { $0.prints + $0.learnedPrints }, embedder: baseEmbedder)
 		}
 		guard let best = try? cachedMatcher?.bestMatch(to: candidate) else { return (false, 0, nil, nil) }
 		let matched = best.score >= embedder.matchThreshold

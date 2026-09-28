@@ -40,6 +40,22 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			section: "unlockSection"
 		),
 		SettingsSearchItem(
+			id: "screen-glow",
+			title: "Light up the screen when it’s dark",
+			subtitle: "Turns up the brightness so the camera can see you",
+			keywords: ["light", "dark", "glow", "night", "brightness"],
+			pane: "face",
+			section: "unlockSection"
+		),
+		SettingsSearchItem(
+			id: "mask-unlock",
+			title: "Unlock with a mask",
+			subtitle: "Unlock while wearing a mask or glasses",
+			keywords: ["mask", "glasses", "covering", "face"],
+			pane: "face",
+			section: "unlockSection"
+		),
+		SettingsSearchItem(
 			id: "camera-permission",
 			title: "Camera",
 			subtitle: "Permission for Gaze to see you",

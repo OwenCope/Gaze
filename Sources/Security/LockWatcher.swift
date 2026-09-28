@@ -51,6 +51,10 @@ final class LockWatcher {
 	/// Set by the attempt when the camera never started or stopped sending frames, the
 	/// one failure worth an automatic second try.
 	private var cameraFailed = false
+	/// The most recent matched print this lock, learned only after the Mac confirms
+	/// the unlock was ours. A match alone is not a confirmed Gaze unlock, and learning
+	/// from anything less would let a near-miss write itself into the vault.
+	private var pendingLearnedPrint: (print: Faceprint, faceID: UUID)?
 
 	/// How long to keep looking after the screen locks before giving up.
 	///
@@ -68,6 +72,12 @@ final class LockWatcher {
 	/// glance does not.
 	private static let requiredMatchDuration: TimeInterval = 2.0
 
+	/// The hold when a movement challenge is configured. The challenge itself is the
+	/// proof of presence, so the hold can be shorter and the unlock feel sooner — but
+	/// only on that path. With the challenge off, the full hold above is all that stands
+	/// between a match and the password, and it stays.
+	private static let requiredMatchDurationWithChallenge: TimeInterval = 1.2
+
 	/// How long the opened padlock stays before the panel goes home.
 	///
 	/// Three seconds, not one. The Mac is already unlocked by this point, so the padlock is
@@ -80,8 +90,10 @@ final class LockWatcher {
 	private static let wakeDebounce: TimeInterval = 3.0
 	/// A beat for the camera to actually be awake before the first frame is asked for.
 	/// Opening it immediately after a wake returns a device that reports running and then
-	/// delivers black frames, which reads to the recogniser as "nobody there".
-	private static let wakeSettle = Duration.milliseconds(700)
+	/// delivers black frames, which reads to the recogniser as "nobody there". Shorter
+	/// than it once was: the camera restarts itself after a wake now, so a device that
+	/// is genuinely not ready gets a second chance without costing every unlock 700 ms.
+	private static let wakeSettle = Duration.milliseconds(450)
 
 	/// How long to wait for the Mac to actually unlock before giving up on it.
 	private static let unlockGracePeriod: TimeInterval = 3.0
@@ -175,6 +187,7 @@ final class LockWatcher {
 		pointerRetry?.cancel()
 		pointerRetry = nil
 		capsule.hide()
+		LockScreenLight.shared.hide()
 		isWatching = false
 		lastWakeTrigger = nil
 		for token in observers {
@@ -282,6 +295,7 @@ final class LockWatcher {
 		// that the camera is looking at anyone — that distinction is why the compact
 		// locked phase exists separately from scanning.
 		didSubmitPassword = false
+		pendingLearnedPrint = nil
 		capsule.show(phase: .locked)
 		startUnlockWatchdog()
 		// Every broadcast below is posted beside the capsule update that shows the same
@@ -408,6 +422,13 @@ final class LockWatcher {
 		}
 		didSubmitPassword = false
 		lockout.recordSuccess()
+		// Ours, confirmed: this is the only moment learning may happen. The print is
+		// the frame that matched, never a mask-path one — learned prints must stay in
+		// the same space as the originals they are guarded against.
+		if let pending = pendingLearnedPrint {
+			store.learn(pending.print, for: pending.faceID)
+		}
+		pendingLearnedPrint = nil
 		StateBroadcast.post(.succeeded)
 
 		// The Mac agreed. Retract to the resting bar and let the padlock open there, which
@@ -436,6 +457,10 @@ final class LockWatcher {
 	// MARK: - Attempt
 
 	private func attemptUnlock(inputSnapshot: LockScreenInputSnapshot, identifier: UUID) async {
+		// Whatever ends the scan — an unlock, a rejection, the lockout, a camera that
+		// died — the edge light goes out with it.
+		SceneBrightness.reset()
+		defer { LockScreenLight.shared.hide() }
 		func report(_ outcome: LockScanDiagnostics.Outcome) {
 			LockScanDiagnostics.shared.record(outcome, for: identifier)
 		}
@@ -448,6 +473,10 @@ final class LockWatcher {
 		let pinnedCamera = choice.cameraID
 		let enrolledFaces = choice.faceIDs
 		let movementCount = Preferences.shared.unlockMovementCount
+		// Mask matching only runs alongside a movement challenge, so an upper-face
+		// match is never the sole proof of presence. With the challenge off, the
+		// setting does nothing at the lock screen rather than weakening anything.
+		let maskUnlock = Preferences.shared.unlockWithMask && movementCount != .none
 		let entryEmbedder = Embedders.best().identifier
 		var inputGuard = LockScreenInputGuard(initial: inputSnapshot)
 		func contextIsCurrent() -> Bool {
@@ -457,6 +486,7 @@ final class LockWatcher {
 				UnlockExecutionPolicy.current.permitsScanning(passwordReplayEnabled: PasswordReplaySafety.isEnabled,
 					keystrokeSelected: Preferences.shared.unlockBackend == .keystroke),
 				Preferences.shared.unlockMovementCount == movementCount,
+				(Preferences.shared.unlockWithMask && Preferences.shared.unlockMovementCount != .none) == maskUnlock,
 				Embedders.best().identifier == entryEmbedder,
 				!store.isCorrupted, Preferences.shared.allowExternalCamera == allowExternal else { return false }
 			guard let current = store.unlockCamera(allowExternal: allowExternal, available: available),
@@ -512,7 +542,7 @@ final class LockWatcher {
 		capsule.update(phase: .scanning)
 		var freshFrames = RecognitionFrameGate()
 		var evaluatedContinuity: UInt64?
-		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces.filter { $0.isEnabled && enrolledFaces.contains($0.id) }, antiSpoof: antiSpoof)
+		let evaluator = UnlockFrameEvaluator(embedder: store.embedder, faces: store.faces.filter { $0.isEnabled && enrolledFaces.contains($0.id) }, antiSpoof: antiSpoof, allowsMaskUnlock: maskUnlock)
 		let challenge: LivenessChallenge? = LivenessChallenge()
 		var challengeGate = UnlockChallengeGate(requiredActions: movementCount.rawValue)
 		// Opt-in render timing (GAZE_RENDER_DIAGNOSTICS=1). Measurement and logging only:
@@ -556,6 +586,9 @@ final class LockWatcher {
 		var lastFaceAt = Date()
 		/// Set after a rejection, so the next try starts from a clean slate.
 		var cooldownUntil: Date?
+		/// When the current run of too-blurred frames began, so a second of them
+		/// can ask for light before the search gives up on the face.
+		var blurredSince: Date?
 		/// Box of the last matched face. The next frame's candidates are tried in
 		/// overlap order so the tracked subject is re-found without embedding the
 		/// other faces when it is still there.
@@ -677,6 +710,12 @@ final class LockWatcher {
 			}
 
 			ticks += 1
+			// The screen is the only lamp a locked Mac has. Checked before the face, since
+			// in a dark enough room there is no face to find until the light is on.
+			if Preferences.shared.screenGlowInDark, !LockScreenLight.shared.isShowing,
+				let brightness = SceneBrightness.current(), brightness < 0.12 {
+				LockScreenLight.shared.show()
+			}
 			guard !camera.faceMissing, var sample = camera.sample else {
 				lastAbsence = camera.absence?.summary ?? "no sample"
 				// Face left the frame — both runs are broken and start again from zero.
@@ -688,6 +727,7 @@ final class LockWatcher {
 				continue
 			}
 			lastFaceAt = Date()
+
 
 			// A beat after a rejection before looking again, so the panel has time to say
 			// "not recognised" and the next attempt is not judged on the same frames.
@@ -721,11 +761,21 @@ final class LockWatcher {
 				qualityRejects += 1
 				switch FrameQuality.rejection(sample) {
 				case .tooSmall: tooSmall += 1
-				case .tooBlurred: tooBlurred += 1
+				case .tooBlurred:
+					tooBlurred += 1
+					// A run of blurred faces is often the camera asking for light, not
+					// the person refusing to hold still. A second of it is enough to ask.
+					let since = blurredSince ?? Date()
+					blurredSince = since
+					if Preferences.shared.screenGlowInDark, !LockScreenLight.shared.isShowing,
+						Date().timeIntervalSince(since) >= 1 {
+						LockScreenLight.shared.show()
+					}
 				default: break
 				}
 				continue
 			}
+			blurredSince = nil
 
 			let sampleFrameID = camera.frameID
 			let sampleContinuity = camera.evidenceContinuity.revision
@@ -853,6 +903,13 @@ final class LockWatcher {
 			}
 			rejectionHold.reset()
 
+			// Remember the matched frame for learning, but only a full-face match —
+			// a mask-path print lives in the same space but describes half a face,
+			// and learned prints must stay comparable with the originals.
+			if !result.viaUpperFace, let matchedPrint = result.matchedPrint {
+				pendingLearnedPrint = (matchedPrint, face.id)
+			}
+
 			if let decision = result.spoofDecision {
 				if case .unavailable = decision {
 					report(.verificationUnavailable)
@@ -898,7 +955,8 @@ final class LockWatcher {
 			}
 			trackedBox = sample.boundingBox
 			let heldMatch = matchingHold.consume(faceID: face.id, now: sampleCapturedAt,
-				required: .seconds(Self.requiredMatchDuration))
+				required: .seconds(movementCount == .none
+					? Self.requiredMatchDuration : Self.requiredMatchDurationWithChallenge))
 			if !challengeGate.isPresented && !challengeGate.isVerified {
 				challenge?.prepareBaseline(sample)
 			}

@@ -15,6 +15,7 @@ struct AdjustedThresholdEmbedder: FaceEmbedder, @unchecked Sendable {
 	var matchThreshold: Float { min(0.7, max(0.3, base.matchThreshold + offset)) }
 
 	func embed(_ sample: FaceSample) -> Faceprint? { base.embed(sample) }
+	func embedUpperFace(_ sample: FaceSample) -> Faceprint? { base.embedUpperFace(sample) }
 	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float { base.similarity(a, b) }
 	func warmUp() { base.warmUp() }
 }

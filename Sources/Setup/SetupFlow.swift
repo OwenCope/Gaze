@@ -411,7 +411,7 @@ struct SetupFlow: View {
 			return
 		}
 		do {
-			try await store.add(prints: model.prints, cameraID: cameraID)
+			try await store.add(prints: model.prints, upperPrints: model.upperPrints, cameraID: cameraID)
 			guard work.isCurrent(revision), isPresented, step == .capture else { return }
 			camera.stop()
 			failure = nil

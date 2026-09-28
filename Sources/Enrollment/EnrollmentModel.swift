@@ -114,6 +114,10 @@ final class EnrollmentModel {
 	}
 
 	private(set) var prints: [Faceprint] = []
+	/// Upper-face prints captured alongside the full ones, for unlocking with a
+	/// mask. Stays empty where the embedder cannot describe the upper face alone,
+	/// which is what the Settings gate reads.
+	private(set) var upperPrints: [Faceprint] = []
 
 	var progress: Double {
 		Double(covered.filter { $0 }.count) / Double(Self.segmentCount)
@@ -232,6 +236,7 @@ final class EnrollmentModel {
 			if pass == 1 {
 				guard let frontal = validatedPrint(sample) else { return }
 				prints.append(frontal)
+				captureUpperPrint(sample)
 				hasFrontalPrint = true
 			}
 			lastCoverageAdvance = now()
@@ -272,6 +277,7 @@ final class EnrollmentModel {
 		if isNewDirection {
 			guard let faceprint = validatedPrint(sample) else { return }
 			prints.append(faceprint)
+			captureUpperPrint(sample)
 			if sample.pose.yaw >= Self.clearTurnYaw { hasLeftPrint = true }
 			if sample.pose.yaw <= -Self.clearTurnYaw { hasRightPrint = true }
 		}
@@ -328,6 +334,15 @@ final class EnrollmentModel {
 		return candidate
 	}
 
+	/// The upper-face twin of a captured print, where the embedder can produce one.
+	/// Best-effort by design: a scan that never lands one simply enrols a face
+	/// without mask support, which the Settings gate says plainly.
+	private func captureUpperPrint(_ sample: FaceSample) {
+		if let upper = embedder.embedUpperFace(sample) {
+			upperPrints.append(upper)
+		}
+	}
+
 	/// Frontal print plus a clear turn each way. Positive yaw faces screen left in
 	/// the mirrored preview.
 	private var hasAngleDiversity: Bool { hasFrontalPrint && hasLeftPrint && hasRightPrint }
@@ -369,6 +384,7 @@ final class EnrollmentModel {
 		phase = .positioning
 		covered = [Bool](repeating: false, count: Self.segmentCount)
 		prints = []
+		upperPrints = []
 		pass = 1
 		heldTarget = nil
 		hasFrontalPrint = false

@@ -823,6 +823,23 @@ struct SettingsView: View {
 			retainedPasswordRow
 		}
 
+		RowDivider()
+		SettingToggle(
+			title: "Light up the screen when it’s dark",
+			detail: "Turns up the brightness so the camera can see you",
+			symbol: "sun.max",
+			isOn: $settings.screenGlowInDark)
+
+		RowDivider()
+		SettingToggle(
+			title: "Unlock with a mask",
+			detail: maskUnlockAvailable
+				? "Unlock while wearing a mask or glasses"
+				: "Scan your face again to use this",
+			symbol: "facemask.fill",
+			isEnabled: maskUnlockAvailable,
+			isOn: $settings.unlockWithMask)
+
 			if let problem = readinessProblem, PasswordReplaySafety.isEnabled || settings.unlockBackend == .authPlugin {
 				RowDivider(inset: 0)
 				StatusLine(kind: problem.kind, message: problem.message)
@@ -840,6 +857,12 @@ struct SettingsView: View {
 				// Apply immediately rather than at next launch.
 				AppServices.shared.startUnlockTrigger()
 			})
+	}
+
+	/// Whether any switched-on face can unlock with a mask: only faces enrolled
+	/// with upper-face prints can.
+	private var maskUnlockAvailable: Bool {
+		store.faces.contains { $0.isEnabled && !$0.upperPrints.isEmpty }
 	}
 
 	private var unlockInfo: String {

@@ -338,6 +338,7 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 	) {
 		let capturedAt = ContinuousClock.now
 		guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+		SceneBrightness.record(buffer, at: capturedAt)
 
 		let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .up)
 

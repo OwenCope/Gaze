@@ -36,8 +36,18 @@ struct FixtureEmbedder: FaceEmbedder {
 	func embed(_ sample: FaceSample) -> Faceprint? {
 		Faceprint(values: [1, 0], source: identifier)
 	}
+	/// Real cosine, not equality: `learn` needs graded similarity to tell a new
+	/// angle of the same face from a near-duplicate.
 	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float {
-		a == b ? 1 : 0
+		guard a.source == b.source, a.values.count == b.values.count, !a.values.isEmpty else { return 0 }
+		var dot: Float = 0, aa: Float = 0, bb: Float = 0
+		for i in a.values.indices {
+			dot += a.values[i] * b.values[i]
+			aa += a.values[i] * a.values[i]
+			bb += b.values[i] * b.values[i]
+		}
+		guard aa > 0, bb > 0, dot.isFinite else { return 0 }
+		return dot / (sqrt(aa) * sqrt(bb))
 	}
 }
 
@@ -132,6 +142,28 @@ enum EnrollmentStorageTests {
 			cameraID: "camera-1")
 	}
 
+	static func fp(_ values: [Float]) -> Faceprint {
+		Faceprint(values: values, source: "fixture-embedder-v1")
+	}
+
+	// A learned-print candidate: mostly the base axis with a unique side
+	// channel, so every candidate scores 0.6 against the base print (above the
+	// 0.55 drift floor) but only 0.36 against any other candidate (below the
+	// 0.97 near-duplicate line). 2D rotations cannot hold 8 such prints, so
+	// these live in 12 dimensions.
+	static func learnedCandidate(_ index: Int, source: String = "fixture-embedder-v1") -> Faceprint {
+		var values = [Float](repeating: 0, count: 12)
+		values[0] = 0.6
+		values[index % 11 + 1] = 0.8
+		return Faceprint(values: values, source: source)
+	}
+
+	static func learnedBase(source: String = "fixture-embedder-v1") -> Faceprint {
+		var values = [Float](repeating: 0, count: 12)
+		values[0] = 1
+		return Faceprint(values: values, source: source)
+	}
+
 	static func main() {
 		// Absent enrollment: empty faces, no corruption, exactly one vault read.
 		SecureVault.reset()
@@ -212,6 +244,8 @@ enum EnrollmentStorageTests {
 		let decodedOld = try! JSONDecoder().decode(
 			FaceEnrollment.self, from: JSONSerialization.data(withJSONObject: oldRecord))
 		check(decodedOld.isEnabled, "A record without isEnabled decodes as enabled")
+		check(decodedOld.learnedPrints.isEmpty && decodedOld.upperPrints.isEmpty,
+			"A record without learnedPrints or upperPrints decodes both as empty")
 
 		// New faces start switched on.
 		check(makeRecord().isEnabled, "A newly created face is enabled by default")
@@ -241,6 +275,129 @@ enum EnrollmentStorageTests {
 		store.setEnabled(store.faces[0].id, true)
 		check(store.anyEnabled, "Switching one face back on reads as enabled")
 		check(store.matches(FaceSample()).matched, "A re-enabled face matches again")
+
+		// Learning: the drift guard, the near-duplicate skip, the cap of eight.
+		let cappedRecord = FaceEnrollment(
+			name: "Capped",
+			prints: [fp([1, 0])],
+			learnedPrints: (0..<8).map { _ in fp([1, 0]) },
+			embedder: "fixture-embedder-v1",
+			cameraID: "camera-1")
+		SecureVault.reset(plaintext: try! JSONEncoder().encode([cappedRecord]))
+		store = FaceEnrollmentStore()
+		let cappedFaceID = store.faces[0].id
+		let writesBeforeLearning = SecureVault.storeCount
+
+		// A print unlike the originals is refused — the face cannot drift.
+		store.learn(fp([0, 1]), for: cappedFaceID)
+		check(store.faces[0].learnedPrints.count == 8, "A print unlike the originals is not learned")
+
+		// A near-duplicate of a learned print is skipped.
+		store.learn(fp([1, 0]), for: cappedFaceID)
+		check(store.faces[0].learnedPrints.count == 8, "A near-duplicate of a learned print is skipped")
+
+		// A new angle of the same face is learned, and the oldest is dropped.
+		store.learn(fp([0.8, 0.6]), for: cappedFaceID)
+		check(store.faces[0].learnedPrints.count == 8, "The learned set stays capped at eight")
+		check(store.faces[0].learnedPrints.last == fp([0.8, 0.6]), "Learning at the cap drops the oldest")
+		check(SecureVault.storeCount == writesBeforeLearning + 1, "Learning persists to the vault")
+
+		// An unknown face is a no-op, not a crash and not a write.
+		store.learn(fp([1, 0]), for: UUID())
+		check(SecureVault.storeCount == writesBeforeLearning + 1, "Learning an unknown face writes nothing")
+
+		// A failed write reverts the learned print.
+		SecureVault.storeError = SecureVault.SimulatedFailure()
+		store.learn(fp([0.95, 0.312]), for: cappedFaceID)
+		check(store.faces[0].learnedPrints.last == fp([0.8, 0.6]) && store.faces[0].learnedPrints.count == 8,
+			"A failed learn write reverts the print")
+		SecureVault.storeError = nil
+
+		// Learned prints participate in matching: originals that do not match the
+		// live print alone, matched through what was learned. Both sets need two
+		// supporting prints, per the matcher's multi-print rule.
+		let originalsOnly = FaceEnrollment(
+			name: "Originals", prints: [fp([0, 1]), fp([0, 1])],
+			embedder: "fixture-embedder-v1", cameraID: "camera-1")
+		SecureVault.reset(plaintext: try! JSONEncoder().encode([originalsOnly]))
+		store = FaceEnrollmentStore()
+		check(!store.matches(FaceSample()).matched, "A face whose originals do not match does not match")
+		let withLearned = FaceEnrollment(
+			name: "WithLearned",
+			prints: [fp([0, 1]), fp([0, 1])],
+			learnedPrints: [fp([1, 0]), fp([1, 0])],
+			embedder: "fixture-embedder-v1",
+			cameraID: "camera-1")
+		SecureVault.reset(plaintext: try! JSONEncoder().encode([withLearned]))
+		store = FaceEnrollmentStore()
+		check(store.matches(FaceSample()).matched, "Learned prints participate in matching")
+
+		// Records written before learned prints and mask matching existed carry
+		// neither key; both must default to empty rather than failing the decode.
+		let bareRecord: [String: Any] = [
+			"id": UUID().uuidString,
+			"name": "Bare",
+			"prints": [["values": [1.0, 0.0], "source": "fixture-embedder-v1"]],
+			"embedder": "fixture-embedder-v1",
+			"cameraID": "camera-1",
+			"enrolledAt": 0.0,
+			"isEnabled": true,
+		]
+		let decodedBare = try! JSONDecoder().decode(
+			FaceEnrollment.self, from: JSONSerialization.data(withJSONObject: bareRecord))
+		check(decodedBare.learnedPrints.isEmpty, "A record without learnedPrints decodes as none learned")
+		check(decodedBare.upperPrints.isEmpty, "A record without upperPrints decodes as none")
+
+		// Learned prints and upper prints round-trip through the vault encoding.
+		let seeded = FaceEnrollment(
+			name: "Seeded",
+			prints: [Faceprint(values: [1, 0], source: "fixture-embedder-v1")],
+			learnedPrints: [learnedCandidate(0)],
+			upperPrints: [Faceprint(values: [0, 1], source: "fixture-embedder-v1")],
+			embedder: "fixture-embedder-v1",
+			cameraID: "camera-1")
+		let roundTripped = try! JSONDecoder().decode(
+			FaceEnrollment.self, from: JSONEncoder().encode(seeded))
+		check(roundTripped.learnedPrints == seeded.learnedPrints, "learnedPrints round-trip through the vault encoding")
+		check(roundTripped.upperPrints == seeded.upperPrints, "upperPrints round-trip through the vault encoding")
+
+		// Learning banks a qualifying print and persists it.
+		let learnerBase = learnedBase()
+		SecureVault.reset(plaintext: try! JSONEncoder().encode([FaceEnrollment(
+			name: "Learner", prints: [learnerBase, learnerBase], embedder: "fixture-embedder-v1", cameraID: "camera-1")]))
+		store = FaceEnrollmentStore()
+		let learnerID = store.faces[0].id
+		check(store.faces[0].learnedPrints.isEmpty, "A fresh face has no learned prints")
+		store.learn(learnedCandidate(0), for: learnerID)
+		check(store.faces[0].learnedPrints.count == 1, "A distinct qualifying print is learned")
+		let learnedPersisted = try! JSONDecoder().decode([FaceEnrollment].self, from: SecureVault.storedPlaintext!)
+		check(learnedPersisted[0].learnedPrints.count == 1, "learn persists the learned print")
+
+		// Near-duplicates add nothing, so a print within 0.97 of a learned one is skipped.
+		let writesAfterFirst = SecureVault.storeCount
+		store.learn(store.faces[0].learnedPrints[0], for: learnerID)
+		check(store.faces[0].learnedPrints.count == 1, "A near-duplicate of a learned print is skipped")
+		check(SecureVault.storeCount == writesAfterFirst, "A skipped duplicate writes nothing")
+
+		// Prints too far from the original enrolment are rejected, so learning
+		// can never drift: a side-channel-free print scores below threshold + 0.05.
+		var drifter = [Float](repeating: 0, count: 12)
+		drifter[3] = 1
+		store.learn(Faceprint(values: drifter, source: "fixture-embedder-v1"), for: learnerID)
+		check(store.faces[0].learnedPrints.count == 1, "A print far from the original prints is rejected")
+
+		// At most 8 learned prints are kept; the oldest drops when full.
+		for index in 1...8 {
+			store.learn(learnedCandidate(index), for: learnerID)
+		}
+		check(store.faces[0].learnedPrints.count == 8, "Learned prints are capped at 8")
+		check(!store.faces[0].learnedPrints.contains(learnedCandidate(0)), "The oldest learned print drops when full")
+
+		// Unknown faces and wrong-embedder prints are ignored.
+		let beforeIgnored = store.faces[0].learnedPrints.count
+		store.learn(learnedCandidate(9), for: UUID())
+		store.learn(learnedCandidate(9, source: "other-embedder-v9"), for: learnerID)
+		check(store.faces[0].learnedPrints.count == beforeIgnored, "Unknown faces and foreign prints are ignored")
 
 		print("PASS: \(checks) enrollment-storage checks; one vault read per startup shape, no Keychain, Secure Enclave, biometric UI, camera or filesystem portrait use.")
 	}

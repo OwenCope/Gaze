@@ -23,6 +23,12 @@ protocol FaceEmbedder {
 	var matchThreshold: Float { get }
 	func embed(_ sample: FaceSample) -> Faceprint?
 	func similarity(_ a: Faceprint, _ b: Faceprint) -> Float
+	func embedUpperFace(_ sample: FaceSample) -> Faceprint?
+}
+
+extension FaceEmbedder {
+	/// Matches the production default: no upper-face print, so enrolment captures none.
+	func embedUpperFace(_ sample: FaceSample) -> Faceprint? { nil }
 }
 
 final class FixtureEmbedder: FaceEmbedder {

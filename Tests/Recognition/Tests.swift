@@ -17,6 +17,8 @@ struct FaceSample: @unchecked Sendable {
 struct FaceEnrollment: Sendable {
 	var id = UUID()
 	var prints: [Faceprint]
+	var learnedPrints: [Faceprint] = []
+	var upperPrints: [Faceprint] = []
 }
 
 struct FixtureEmbedder: FaceEmbedder {
