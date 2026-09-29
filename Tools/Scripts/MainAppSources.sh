@@ -6,7 +6,7 @@ collect_gaze_main_sources() {
 	GAZE_MAIN_SOURCES=()
 	for source in "$root"/Sources/*/*.swift; do
 		case "$source" in
-			"$root"/Sources/Autofill/*|"$root"/Sources/App/AutofillSettings.swift|"$root"/Sources/Security/FaceCheck.swift) continue ;;
+			"$root"/Sources/Autofill/*|"$root"/Sources/App/AutofillSettings.swift|"$root"/Sources/Security/FaceCheck.swift|"$root"/Sources/FinderExtension/*) continue ;;
 		esac
 		GAZE_MAIN_SOURCES+=("$source")
 	done

@@ -985,6 +985,53 @@ struct SettingsChoiceMenu<Selection: Hashable, Options: View>: View {
 	}
 }
 
+/// A setting with a few ordered steps, as a slider with the steps named under it.
+///
+/// Used where the choices run from one end to the other (close to far, relaxed to
+/// strict), so where you are on the range reads at a glance. Clicking a step's name
+/// jumps to it; the slider only writes when the step actually changes.
+struct SettingsStepSlider<Value: Hashable>: View {
+	let title: String
+	let values: [Value]
+	@Binding var selection: Value
+	let label: (Value) -> String
+
+	private var index: Int { values.firstIndex(of: selection) ?? 0 }
+
+	private func select(_ newIndex: Int) {
+		let value = values[min(values.count - 1, max(0, newIndex))]
+		if value != selection { selection = value }
+	}
+
+	var body: some View {
+		VStack(spacing: 2) {
+			Slider(
+				value: Binding(get: { Double(index) }, set: { select(Int($0.rounded())) }),
+				in: 0...Double(max(1, values.count - 1)),
+				step: 1)
+				.controlSize(.small)
+				.tint(Theme.label.opacity(0.85))
+			HStack(spacing: 0) {
+				ForEach(values.indices, id: \.self) { i in
+					if i > 0 { Spacer(minLength: 4) }
+					Text(label(values[i]))
+						.font(Typography.caption)
+						.foregroundStyle(i == index ? Theme.label : Theme.secondaryLabel)
+						.contentShape(Rectangle())
+						.onTapGesture { select(i) }
+				}
+			}
+		}
+		.frame(width: 200)
+		// VoiceOver gets a picker of the named steps; a plain Slider reads out its index.
+		.accessibilityRepresentation {
+			Picker(title, selection: $selection) {
+				ForEach(values, id: \.self) { Text(label($0)).tag($0) }
+			}
+		}
+	}
+}
+
 /// The shared expandable-row treatment for the native `DisclosureGroup`s.
 ///
 /// Label styling lives in `Theme.disclosureLabel(_:)`; this modifier carries the native

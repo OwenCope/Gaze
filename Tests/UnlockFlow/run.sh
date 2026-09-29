@@ -10,6 +10,7 @@ xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Security/LockScreenInputGuard.swift" \
 	"$ROOT/Sources/Camera/FacePose.swift" \
 	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
+	"$ROOT/Tests/Support/PupilLocatorStub.swift" \
 	"$ROOT/Tests/UnlockFlow/Tests.swift" -o "$BUILD/tests"
 "$BUILD/tests"
 bash "$ROOT/Tests/Recognition/run.sh"
@@ -40,6 +41,7 @@ xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Camera/FacePose.swift" \
 	"$ROOT/Sources/Security/UnlockChallengeGate.swift" \
 	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
+	"$ROOT/Tests/Support/PupilLocatorStub.swift" \
 	"$ROOT/Tests/UnlockFlow/ChallengePoseIntegrationTests.swift" -o "$BUILD/challenge-pose-integration-tests"
 "$BUILD/challenge-pose-integration-tests"
 xcrun swiftc -parse-as-library -warnings-as-errors \
@@ -54,6 +56,7 @@ xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Camera/FacePose.swift" \
 	"$ROOT/Sources/Security/UnlockChallengeGate.swift" \
 	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
+	"$ROOT/Tests/Support/PupilLocatorStub.swift" \
 	"$ROOT/Tests/UnlockFlow/PoseSourceTests.swift" -o "$BUILD/pose-source-tests"
 "$BUILD/pose-source-tests"
 xcrun swiftc -parse-as-library -warnings-as-errors \
@@ -61,5 +64,6 @@ xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Camera/FacePose.swift" \
 	"$ROOT/Sources/Security/UnlockChallengeGate.swift" \
 	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
+	"$ROOT/Tests/Support/PupilLocatorStub.swift" \
 	"$ROOT/Tests/UnlockFlow/UnlockChallengeGateCountTests.swift" -o "$BUILD/unlock-challenge-gate-count-tests"
 "$BUILD/unlock-challenge-gate-count-tests"

@@ -107,6 +107,13 @@ else
 	echo "  ! no FaceEmbedding model — using landmark-geometry fallback"
 fi
 
+# MediaPipe Iris (Apache 2.0, see ThirdParty/MediaPipeIris): finds the pupil inside each
+# eye for the Follow the light movement. Optional: without it, the pixel fallback is used.
+if [ -d "$ROOT/Resources/IrisLandmarks.mlpackage" ]; then
+	xcrun coremlc compile "$ROOT/Resources/IrisLandmarks.mlpackage" "$STAGE/Contents/Resources" >/dev/null
+	echo "  ✓ IrisLandmarks.mlmodelc"
+fi
+
 # The unused legacy Liveness texture model is excluded from app bundles.
 # Lock-screen photo rejection uses the separate Spoof model below.
 
@@ -208,6 +215,7 @@ case "$GAZE_ARCHS" in
 		-framework CryptoKit \
 		-framework LocalAuthentication \
 		-framework OpenDirectory \
+		-framework FinderSync \
 		"${GAZE_MAIN_SOURCES[@]}" \
 		-o "$slice"
 		slices="$slices $slice"
@@ -231,16 +239,75 @@ case "$GAZE_ARCHS" in
 		-framework CryptoKit \
 		-framework LocalAuthentication \
 		-framework OpenDirectory \
+		-framework FinderSync \
 		"${GAZE_MAIN_SOURCES[@]}" \
 		-o "$BIN"
 	;;
 esac
+
+# The Finder Sync extension behind right-click Lock/Unlock with Gaze. Built
+# per architecture like the main binary, then merged; signed here, before
+# Gaze.app itself, so the parent signature covers an already-signed appex.
+echo "→ Building Finder Sync extension"
+APPEX="$STAGE/Contents/PlugIns/GazeFinder.appex"
+mkdir -p "$APPEX/Contents/MacOS"
+FINDER_SOURCES=("$ROOT"/Sources/FinderExtension/*.swift "$ROOT/Sources/Security/AppLockStore.swift")
+case "$GAZE_ARCHS" in
+*" "*)
+	finder_slices=""
+	for arch in $GAZE_ARCHS; do
+		slice="$STAGE_ROOT/GazeFinder-$arch"
+		xcrun swiftc \
+		-application-extension \
+		-module-name GazeFinder \
+		-parse-as-library \
+		-O -wmo \
+		-target "$arch-apple-macos${MIN_SDK_MAJOR}.0" \
+		-sdk "$SDK" \
+		${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
+		-framework Cocoa \
+		-framework FinderSync \
+		-Xlinker -e -Xlinker _NSExtensionMain \
+		"${FINDER_SOURCES[@]}" \
+		-o "$slice"
+		finder_slices="$finder_slices $slice"
+	done
+	# shellcheck disable=SC2086
+	lipo -create -output "$APPEX/Contents/MacOS/GazeFinder" $finder_slices
+	;;
+*)
+	xcrun swiftc \
+		-application-extension \
+		-module-name GazeFinder \
+		-parse-as-library \
+		-O -wmo \
+		-target "$GAZE_ARCHS-apple-macos${MIN_SDK_MAJOR}.0" \
+		-sdk "$SDK" \
+		${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} \
+		-framework Cocoa \
+		-framework FinderSync \
+		-Xlinker -e -Xlinker _NSExtensionMain \
+		"${FINDER_SOURCES[@]}" \
+		-o "$APPEX/Contents/MacOS/GazeFinder"
+	;;
+esac
+cp "$ROOT/Sources/FinderExtension/Info.plist" "$APPEX/Contents/Info.plist"
+APPEX_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$STAGE/Contents/Info.plist")"
+APPEX_BUILD="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$STAGE/Contents/Info.plist")"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APPEX_VERSION" -c "Set :CFBundleVersion $APPEX_BUILD" "$APPEX/Contents/Info.plist"
+echo "  ✓ GazeFinder.appex"
 
 if [ "${DIST:-}" = "1" ]; then
 	echo "→ Signing release with Developer ID"
 else
 	echo "→ Signing with a stable local identity"
 fi
+
+codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" \
+	--entitlements "$ROOT/Sources/FinderExtension/GazeFinder.entitlements" \
+	--identifier com.gazeunlock.Gaze.Finder "$APPEX"
+
+codesign --verify --strict "$APPEX"
 
 codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" \
 	--entitlements "$ROOT/Resources/Gaze.entitlements" \

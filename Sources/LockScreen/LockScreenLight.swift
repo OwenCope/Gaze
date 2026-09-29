@@ -184,6 +184,10 @@ final class LockScreenLight {
 	private static let brightnessKey = "glowSavedBrightness"
 
 	private var savedBrightness: Float?
+	/// The value a restore ramp is heading back to. A show() that lands mid-restore saves
+	/// this rather than the half-ramped brightness, which would otherwise become the
+	/// "original" and leave the screen too bright or too dim afterwards.
+	private var restoringTo: Float?
 	private var rampTask: Task<Void, Never>?
 	private var rampGeneration = 0
 
@@ -218,6 +222,11 @@ final class LockScreenLight {
 	private func boostBrightness() {
 		guard let fns = Self.brightnessFunctions() else { return }
 		guard CGDisplayIsAsleep(CGMainDisplayID()) == 0 else { return }
+		if savedBrightness == nil, let pending = restoringTo {
+			savedBrightness = pending
+			restoringTo = nil
+			UserDefaults.standard.set(Double(pending), forKey: Self.brightnessKey)
+		}
 		if savedBrightness == nil {
 			var current: Float = 0
 			guard fns.get(CGMainDisplayID(), &current) == 0 else { return }
@@ -248,6 +257,7 @@ final class LockScreenLight {
 			fns.set(CGMainDisplayID(), saved)
 			UserDefaults.standard.removeObject(forKey: Self.brightnessKey)
 		} else {
+			restoringTo = saved
 			startRamp(to: saved, clearingKeyOnCompletion: true)
 		}
 	}
@@ -273,6 +283,7 @@ final class LockScreenLight {
 			// re-saved it, and clearing that would strand the new boost.
 			if clearingKeyOnCompletion, self?.rampGeneration == generation {
 				UserDefaults.standard.removeObject(forKey: Self.brightnessKey)
+				self?.restoringTo = nil
 			}
 		}
 	}
@@ -312,8 +323,8 @@ final class LockScreenLight {
 	/// Fades and grows the glow in over 0.4 s, or appears instantly under Reduce Motion.
 	func show() {
 		isShowing = true
-		boostBrightness()
 		guard let screen = NSScreen.main else { return }
+		boostBrightness()
 		if window == nil { build(on: screen) }
 		guard let window, let glow = window.contentView as? EdgeGlowView else { return }
 		window.orderFrontRegardless()

@@ -10,3 +10,11 @@ enum UnlockBackendKind: String, CaseIterable, Sendable {
 	case authPlugin
 	case keystroke
 }
+
+/// Stand-in for `DetectionDistance` (`Sources/Recognition/FrameQuality.swift`), which
+/// `Preferences.swift` stores; the real one would pull in the frame-quality code.
+enum DetectionDistance: String, CaseIterable, Sendable {
+	case close
+	case standard
+	case far
+}

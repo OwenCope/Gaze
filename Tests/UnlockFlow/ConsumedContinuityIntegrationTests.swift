@@ -52,14 +52,14 @@ enum ConsumedContinuityIntegrationTests {
 		let evaluatedAt = start.advanced(by: .milliseconds(220))
 		check(RecognitionScanPacing.delay(since: start, now: evaluatedAt) == .zero,
 			"slow evaluation must not add another fixed sleep")
-		check(RecognitionScanPacing.delay(since: start, now: start.advanced(by: .milliseconds(5))) == .milliseconds(55),
+		check(RecognitionScanPacing.delay(since: start, now: start.advanced(by: .milliseconds(5))) == RecognitionScanPacing.minimumPollInterval - .milliseconds(5),
 			"fast or empty polls remain throttled instead of busy looping")
 		var paced = RecognitionFrameGate(now: start)
 		_ = paced.observe(id: 1, capturedAt: start, now: start)
 		let pacedCapture = start.advanced(by: .milliseconds(198))
 		check(paced.observe(id: 7, capturedAt: pacedCapture, now: evaluatedAt) == .fresh(continuous: true),
 			"220ms evaluation can consume continuous evidence without changing the 240ms gate")
-		check(RecognitionScanPacing.delay(since: start, now: start) == .milliseconds(60),
+		check(RecognitionScanPacing.delay(since: start, now: start) == RecognitionScanPacing.minimumPollInterval,
 			"initial polling interval is unchanged")
 		// Consumed-side gap boundary (the delivered-side boundary is pinned in ContinuityTests).
 		var exact = RecognitionFrameGate(now: start)

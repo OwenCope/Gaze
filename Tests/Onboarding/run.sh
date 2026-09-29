@@ -39,6 +39,7 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(host_target)" \
 	"$ROOT/Sources/Setup/GazeTourUnlockDemo.swift" \
 	"$ROOT/Sources/Setup/GazeTourPrivacyDemo.swift" \
 	"$ROOT/Sources/Setup/GazeTourChoiceDemo.swift" \
+	"$ROOT/Sources/Setup/GazeTourAppLockDemo.swift" \
 	"$ROOT/Sources/Setup/GazeLookingCompanion.swift" \
 	"$ROOT/ThirdParty/TourKit/TourKit.swift" \
 	"$ROOT/Sources/Setup/SetupHowStep.swift" \

@@ -96,22 +96,21 @@ struct GlareCue: Sendable {
 		var glareTotal = 0
 		var lumaSum: Float = 0
 		let facePixels = (maxX - minX) * (maxY - minY)
-		pixels.data.withUnsafeBufferPointer { bytes in
-			for y in minY..<maxY {
-				let gy = min(grid - 1, (y - minY) * grid / (maxY - minY))
-				for x in minX..<maxX {
-					let offset = (y * pixels.width + x) * 4
-					let r = Float(bytes[offset])
-					let g = Float(bytes[offset + 1])
-					let b = Float(bytes[offset + 2])
-					let luma = 0.299 * r + 0.587 * g + 0.114 * b
-					lumaSum += luma / 255
-					guard luma >= 235 else { continue }
-					guard max(r, max(g, b)) - min(r, min(g, b)) <= 10 else { continue }
-					glareTotal += 1
-					let gx = min(grid - 1, (x - minX) * grid / (maxX - minX))
-					cells[gy * grid + gx] += 1
-				}
+		let bytes = pixels.bytes
+		for y in minY..<maxY {
+			let gy = min(grid - 1, (y - minY) * grid / (maxY - minY))
+			for x in minX..<maxX {
+				let offset = (y * pixels.width + x) * 4
+				let r = Float(bytes[offset])
+				let g = Float(bytes[offset + 1])
+				let b = Float(bytes[offset + 2])
+				let luma = 0.299 * r + 0.587 * g + 0.114 * b
+				lumaSum += luma / 255
+				guard luma >= 235 else { continue }
+				guard max(r, max(g, b)) - min(r, min(g, b)) <= 10 else { continue }
+				glareTotal += 1
+				let gx = min(grid - 1, (x - minX) * grid / (maxX - minX))
+				cells[gy * grid + gx] += 1
 			}
 		}
 		guard lumaSum / Float(facePixels) >= Self.minimumFaceLuma else { return (0, 0) }
@@ -131,11 +130,22 @@ struct GlareCue: Sendable {
 	private struct RGBAImage {
 		let width: Int
 		let height: Int
-		let data: [UInt8]
+		/// The bitmap context that owns the pixel memory. The bytes were previously
+		/// copied into an Array on every frame; they are only ever read, so the
+		/// context is retained instead and read in place.
+		let context: CGContext
+
+		/// Read-only view of the RGBA bytes, row-packed at `width * 4`.
+		var bytes: UnsafeBufferPointer<UInt8> {
+			guard let data = context.data else { return .init(start: nil, count: 0) }
+			return .init(
+				start: data.assumingMemoryBound(to: UInt8.self), count: width * height * 4)
+		}
 	}
 
-	/// Renders `image` scaled by `scale` into an RGBA byte array. One render per frame;
+	/// Renders `image` scaled by `scale` into an RGBA byte buffer. One render per frame;
 	/// at the 160 px cap that is ~25k pixels, well under a millisecond of pixel work.
+	/// The bytes are read in place from the retained context — no per-frame copy.
 	private static func downsampledRGBA(_ image: CGImage, scale: CGFloat) -> RGBAImage? {
 		let width = max(1, Int((CGFloat(image.width) * scale).rounded()))
 		let height = max(1, Int((CGFloat(image.height) * scale).rounded()))
@@ -151,10 +161,9 @@ struct GlareCue: Sendable {
 		else { return nil }
 		context.interpolationQuality = .medium
 		context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-		guard let data = context.data else { return nil }
-		let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
-		return RGBAImage(
-			width: width, height: height,
-			data: Array(UnsafeBufferPointer(start: bytes, count: width * height * 4)))
+		// The context owns the pixel memory; RGBAImage retains it and reads the
+		// bytes in place rather than copying them into an Array per frame.
+		guard context.data != nil else { return nil }
+		return RGBAImage(width: width, height: height, context: context)
 	}
 }

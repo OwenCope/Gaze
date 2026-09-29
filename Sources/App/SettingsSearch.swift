@@ -56,6 +56,54 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			section: "unlockSection"
 		),
 		SettingsSearchItem(
+			id: "unlock-attempts",
+			title: "Unlock Attempts",
+			subtitle: "Recent unlocks, and photos of people who couldn’t unlock",
+			keywords: ["attempts", "photo", "intruder", "history", "failed", "log"],
+			pane: "face",
+			section: "unlockAttemptsSection"
+		),
+		SettingsSearchItem(
+			id: "detection-distance",
+			title: "Detection distance",
+			subtitle: "How far away Gaze can recognise you",
+			keywords: ["distance", "far", "close", "range", "lean"],
+			pane: "face",
+			section: "unlockSection"
+		),
+		SettingsSearchItem(
+			id: "app-lock",
+			title: "App Lock",
+			subtitle: "Apps you choose ask for your face before they open",
+			keywords: ["lock", "apps", "face", "mask", "password"],
+			pane: "apps",
+			section: "appLockSection"
+		),
+		SettingsSearchItem(
+			id: "app-lock-list",
+			title: "Locked Apps",
+			subtitle: "Add or remove apps that need your face",
+			keywords: ["lock", "locked", "apps", "face", "add", "remove"],
+			pane: "apps",
+			section: "appLockListSection"
+		),
+		SettingsSearchItem(
+			id: "app-lock-relock",
+			title: "Lock again",
+			subtitle: "When a locked app asks for your face again",
+			keywords: ["lock", "relock", "apps", "quit", "quitting", "background", "face"],
+			pane: "apps",
+			section: "appLockOptionsSection"
+		),
+		SettingsSearchItem(
+			id: "app-lock-finder",
+			title: "Lock from Finder",
+			subtitle: "Right-click an app and choose Lock with Gaze",
+			keywords: ["finder", "right-click", "right click", "contextual", "menu", "extension", "lock", "apps"],
+			pane: "apps",
+			section: "appLockOptionsSection"
+		),
+		SettingsSearchItem(
 			id: "camera-permission",
 			title: "Camera",
 			subtitle: "Permission for Gaze to see you",
@@ -140,6 +188,14 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			title: "Ask for a password before quitting",
 			subtitle: "Tamper protection for the running app",
 			keywords: ["quit", "tamper", "password", "protection"],
+			pane: "general",
+			section: "behaviourSection"
+		),
+		SettingsSearchItem(
+			id: "menu-bar-icon",
+			title: "Show in menu bar",
+			subtitle: "Hide or show the Gaze icon in the menu bar",
+			keywords: ["menu bar", "icon", "hide", "status"],
 			pane: "general",
 			section: "behaviourSection"
 		),

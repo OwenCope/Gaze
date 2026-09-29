@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import CoreVideo
 import Observation
@@ -56,6 +57,17 @@ struct RecognitionTestView: View {
 
 	@State private var pose: FacePose = .zero
 
+	/// Smoothed pupil offsets for the eyes readout: pixel-based, then Vision's
+	/// landmark value for comparison. Nil until the first measurable frame.
+	@State private var pupilPixel: Double?
+	@State private var pupilVision: Double?
+	@State private var eyeReadInFlight = false
+	/// The spoken eye check: which step it is on, and the raw readings per step.
+	@State private var eyeCheckStep: EyeCheckStep?
+	@State private var eyeCheckReadings: [EyeCheckStep: [(pixel: Double?, vision: Double?)]] = [:]
+	@State private var eyeCheckResult: String?
+	@State private var speech = AVSpeechSynthesizer()
+
 	/// One label per face in view, so the test can be run with a friend beside the owner.
 	@State private var faceLabels: [FaceLabel] = []
 	@State private var frameSize: CGSize = .zero
@@ -100,9 +112,11 @@ struct RecognitionTestView: View {
 		.preferredColorScheme(.dark)
 		.task {
 			AppActivation.bringToFront()
+			IrisLocator.warmUp()
 			// No enrollment means no capture: opening this test must not prompt for
 			// camera access. The setup button owns the path forward instead.
 			guard store.isEnrolled else { return }
+			guard !ForegroundCameraClaim.shared.appLockIsScanning else { return }
 			await camera.start(pinnedDeviceID: store.pinnedCameraID)
 			await runRecognition()
 		}
@@ -111,6 +125,17 @@ struct RecognitionTestView: View {
 			AppActivation.returnToBackgroundIfIdle()
 		}
 		.onChange(of: camera.frameID) { _, _ in updateMeasurements() }
+		.onChange(of: ForegroundCameraClaim.shared.appLockIsScanning) { _, scanning in
+			if scanning {
+				camera.stop()
+			} else {
+				Task {
+					guard store.isEnrolled else { return }
+					await camera.start(pinnedDeviceID: store.pinnedCameraID)
+					await runRecognition()
+				}
+			}
+		}
 		.onChange(of: camera.state) { _, state in
 			guard state != .running else { return }
 			matched = false
@@ -151,6 +176,7 @@ struct RecognitionTestView: View {
 		case .nod: return .nod
 		case .blink: return .blink
 		case .openMouth: return .openMouth
+		case .lookLeft, .lookRight: return .resting
 		}
 	}
 
@@ -209,10 +235,18 @@ struct RecognitionTestView: View {
 						.multilineTextAlignment(.center)
 				}.font(.callout).foregroundStyle(Theme.secondaryLabel).padding(24)
 			}
+		} else if ForegroundCameraClaim.shared.appLockIsScanning {
+			ZStack {
+				Theme.surface
+				Text("Paused while App Lock checks your face")
+					.multilineTextAlignment(.center)
+			}.font(.callout).foregroundStyle(Theme.secondaryLabel).padding(24)
 		} else if camera.state == .running {
 			CameraPreview(controller: camera)
 				.overlay { faceBoxOverlay }
-				.overlay(alignment: .bottomTrailing) { lockVerdictPill.padding(14) }
+				// A tuning tool, not part of the test: it crowded the status pill and cost a
+				// model run per frame. `defaults write com.gazeunlock.Gaze showEyeReadout -bool YES`.
+				.overlay(alignment: .bottomTrailing) { if Self.showsEyeReadout { eyesRow.padding(14) } }
 		} else {
 			ZStack {
 				Theme.surface
@@ -273,18 +307,6 @@ struct RecognitionTestView: View {
 		}
 	}
 
-	/// The lock-screen verdict, on the camera next to the recognition pill.
-	private var lockVerdictPill: some View {
-		HStack(spacing: 8) {
-			Circle().fill(lockWillUnlock ? Theme.faceID : Color.white.opacity(0.5)).frame(width: 8, height: 8)
-			Text("At the lock screen: \(lockVerdict)").font(.callout.weight(.semibold)).foregroundStyle(.white)
-		}
-		.padding(.horizontal, 12).padding(.vertical, 7)
-		.background(.black.opacity(0.55), in: Capsule())
-		.background(.ultraThinMaterial, in: Capsule())
-		.accessibilityElement(children: .combine)
-	}
-
 	private func eyeOpenness(_ lm: VNFaceLandmarks2D) -> Float? {
 		func openness(_ region: VNFaceLandmarkRegion2D?) -> Float? {
 			guard let p = region?.normalizedPoints, p.count >= 4 else { return nil }
@@ -314,26 +336,136 @@ struct RecognitionTestView: View {
 		if case .failed(let reason) = camera.state { return reason }
 		if camera.state == .denied { return "Camera access is off" }
 		if camera.state == .idle { return store.isEnrolled ? "Starting camera…" : "Not enrolled" }
-		if camera.lastFrameCapturedAt == nil { return "Waiting for camera frames…" }
+		if camera.lastFrameCapturedAt == nil { return "Getting ready…" }
 		if !store.isEnrolled { return "Not enrolled" }
 		// The reason, not just the fact. This window exists to explain why recognition is or
 		// is not happening, and "No face" over a picture of your own face — which is what a
 		// second face in the background produced — is the least useful thing it could say.
 		if camera.faceMissing { return camera.absence?.summary ?? "No face" }
 		if canChallenge && !challenge.isBaselineReady { return "Scanning. Hold still." }
-		return matched ? "Recognised" : "Not recognised"
+		// One pill says it all: recognised and would unlock, or the reason the lock
+		// screen would still refuse. A second pill beside it collided on narrow windows
+		// and repeated "Not recognised" while the first was still starting up.
+		guard matched else { return "Not recognised" }
+		return lockWillUnlock ? "Recognised" : lockVerdict
 	}
 
 	private func updateMeasurements() {
 		guard store.isEnrolled, !camera.faceMissing, let sample = camera.sample,
 			FrameQuality.isUsable(sample) else {
 			clearMatch()
+			pupilPixel = nil
+			pupilVision = nil
 			challenge.reset()
 			return
 		}
 		pose = sample.pose
 		updateBlink(sample)
 		challenge.consume(sample)
+		guard Self.showsEyeReadout else { return }
+		// The eye readout runs the iris model off the main thread, one frame at a time;
+		// frames that arrive while it is busy are skipped rather than queued.
+		guard !eyeReadInFlight else { return }
+		eyeReadInFlight = true
+		let rawVision = LivenessChallenge.gazeOffset(sample.landmarks)
+		Task.detached(priority: .utility) {
+			let rawPixel = PupilLocator.horizontalOffset(sample)
+			await MainActor.run {
+				eyeReadInFlight = false
+				pupilPixel = Self.smooth(pupilPixel, rawPixel)
+				pupilVision = Self.smooth(pupilVision, rawVision)
+				if let step = eyeCheckStep { eyeCheckReadings[step, default: []].append((rawPixel, rawVision)) }
+			}
+		}
+	}
+
+	/// Exponential moving average that holds its value through unmeasurable frames.
+	private static func smooth(_ old: Double?, _ fresh: Double?) -> Double? {
+		guard let fresh, fresh.isFinite else { return old }
+		guard let old else { return fresh }
+		return 0.35 * fresh + 0.65 * old
+	}
+
+	/// Live pupil readout on the preview: bright dot is the pixel locator, faint
+	/// dot is Vision's landmark value. Mirrored like the preview itself (the
+	/// preview layer flips horizontally, so image +x shows on screen left).
+	private static var showsEyeReadout: Bool { UserDefaults.standard.bool(forKey: "showEyeReadout") }
+
+	@ViewBuilder private var eyesRow: some View {
+		if canChallenge {
+			HStack(spacing: 8) {
+				Text("Eyes").font(.caption).foregroundStyle(.white.opacity(0.7))
+				ZStack {
+					Capsule().fill(.white.opacity(0.2)).frame(width: 120, height: 4)
+					if let vision = pupilVision {
+						Circle().fill(.white.opacity(0.45)).frame(width: 7, height: 7)
+							.offset(x: Self.dotX(vision))
+					}
+					if let pixel = pupilPixel {
+						Circle().fill(.white).frame(width: 7, height: 7)
+							.offset(x: Self.dotX(pixel))
+					}
+				}.frame(width: 120)
+				Text(pupilPixel.map { String(format: "%+.2f", $0) } ?? "—")
+					.font(.caption).monospacedDigit().foregroundStyle(.white)
+				Button(eyeCheckStep != nil ? "Checking…" : (eyeCheckResult ?? "Check eyes")) { runEyeCheck() }
+					.buttonStyle(.plain)
+					.font(.caption.weight(.semibold)).monospacedDigit()
+					.foregroundStyle(.white)
+					.disabled(eyeCheckStep != nil)
+			}
+			.padding(.horizontal, 12).padding(.vertical, 7)
+			.background(.black.opacity(0.55), in: Capsule())
+			.background(.ultraThinMaterial, in: Capsule())
+			.accessibilityElement(children: .combine)
+			.accessibilityLabel("Pupil offset")
+			.accessibilityValue(pupilPixel.map { String(format: "%+.2f", $0) } ?? "No reading")
+		}
+	}
+
+	enum EyeCheckStep: String, CaseIterable { case middle, left, right }
+
+	/// Talks the person through looking at the middle, left edge and right edge,
+	/// since they cannot watch the readout while looking away, then shows the
+	/// averages and writes the raw readings to /tmp/gaze-eyes.csv.
+	private func runEyeCheck() {
+		guard eyeCheckStep == nil else { return }
+		eyeCheckReadings = [:]
+		eyeCheckResult = nil
+		Task { @MainActor in
+			let prompts: [(EyeCheckStep, String)] = [
+				(.middle, "Keep your head still and look at the middle of the screen."),
+				(.left, "Now look at the left edge of the screen."),
+				(.right, "Now look at the right edge of the screen."),
+			]
+			for (step, line) in prompts {
+				speech.speak(AVSpeechUtterance(string: line))
+				try? await Task.sleep(for: .seconds(1.8))
+				eyeCheckStep = step
+				try? await Task.sleep(for: .seconds(2.5))
+				eyeCheckStep = nil
+			}
+			speech.speak(AVSpeechUtterance(string: "Done. You can look back."))
+			func mean(_ step: EyeCheckStep, _ pick: ((pixel: Double?, vision: Double?)) -> Double?) -> Double? {
+				let values = (eyeCheckReadings[step] ?? []).compactMap(pick)
+				return values.isEmpty ? nil : values.reduce(0, +) / Double(values.count)
+			}
+			func show(_ v: Double?) -> String { v.map { String(format: "%+.2f", $0) } ?? "—" }
+			eyeCheckResult = EyeCheckStep.allCases.map { step in
+				"\(step.rawValue.prefix(1).uppercased()) \(show(mean(step, \.pixel)))"
+			}.joined(separator: "  ")
+			var csv = "step,pixel,vision\n"
+			for step in EyeCheckStep.allCases {
+				for r in eyeCheckReadings[step] ?? [] {
+					csv += "\(step.rawValue),\(r.pixel.map { String($0) } ?? ""),\(r.vision.map { String($0) } ?? "")\n"
+				}
+			}
+			try? csv.write(toFile: "/tmp/gaze-eyes.csv", atomically: true, encoding: .utf8)
+		}
+	}
+
+	private static func dotX(_ value: Double) -> CGFloat {
+		-min(max(value / 0.25, -1), 1) * 56
 	}
 
 	/// One inference at a time, at most 10Hz. The actor keeps both neural passes off

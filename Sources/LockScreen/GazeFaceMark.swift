@@ -21,7 +21,10 @@ enum GazeFaceMotion: Equatable {
 		case .success: self = .accepted
 		case .notRecognised, .spoofRejected: self = .rejected
 		case .challenge(_, let symbol, let horizontal, let vertical, _, _):
-			if horizontal < 0 { self = .turnLeft }
+			// Look at the light: the head stays still, so the face must not demo a turn.
+			// The light at the screen edge and the chevron carry the cue.
+			if symbol == "eye.fill", horizontal != 0 { self = .resting }
+			else if horizontal < 0 { self = .turnLeft }
 			else if horizontal > 0 { self = .turnRight }
 			else if vertical > 0 { self = .nod }
 			else if symbol == "eye.fill" { self = .blink }

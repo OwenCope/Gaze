@@ -56,22 +56,22 @@ struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 	let identifier: String
 	let threshold: Float
 
-	private let model: MLModel
+	private let slot: ModelSlot<MLModel>
 	private let inputName: String
 	private let side: Int
 	private let imageInput: Bool
 
 	init?() {
-		guard
-			let url = Bundle.main.url(forResource: "Liveness", withExtension: "mlmodelc"),
-			let model = try? MLModel(contentsOf: url)
-		else { return nil }
+		guard let url = Bundle.main.url(forResource: "Liveness", withExtension: "mlmodelc") else { return nil }
+		let slot = ModelSlot<MLModel> { try? MLModel(contentsOf: url) }
+		// Validate from this first load; the instance stays resident in the slot.
+		guard let model = slot.withModel({ $0 }) else { return nil }
 
 		let inputs = model.modelDescription.inputDescriptionsByName
 
 		if let image = inputs.first(where: { $0.value.type == .image })?.value,
 			let constraint = image.imageConstraint {
-			self.model = model
+			self.slot = slot
 			self.inputName = image.name
 			self.side = constraint.pixelsWide
 			self.imageInput = true
@@ -80,7 +80,7 @@ struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 		} else if let arr = inputs.first(where: { $0.value.multiArrayConstraint != nil })?.value,
 			let constraint = arr.multiArrayConstraint, constraint.shape.count == 4 {
 			// Legacy MiniFAS-family path (unused): [1, 3, S, S].
-			self.model = model
+			self.slot = slot
 			self.inputName = arr.name
 			self.side = constraint.shape[3].intValue
 			self.imageInput = false
@@ -95,6 +95,7 @@ struct CoreMLLiveness: LivenessDetector, @unchecked Sendable {
 	}
 
 	func score(_ sample: FaceSample) -> Float? {
+		guard let model = slot.withModel({ $0 }) else { return nil }
 		if imageInput {
 			guard
 				let crop = FaceAligner.contextCrop(sample, side: side, margin: Liveness.cropMargin),

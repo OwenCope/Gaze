@@ -54,7 +54,7 @@ struct NotchSettingsSection: View {
 					.frame(width: 330)
 					.accessibilityLabel("Material")
 				}
-					if settings.notchStyle == .semiLiquidGlass {
+					if settings.notchStyle != .normal {
 						RowDivider(inset: Theme.rowInset)
 						NotchAdjustmentRow(
 							title: "Transparency",
@@ -125,11 +125,7 @@ struct NotchSettingsSection: View {
 	}
 
 	private func materialTitle(_ style: Preferences.NotchStyle) -> String {
-		switch style {
-		case .normal: "Solid"
-		case .semiLiquidGlass: "Frosted glass"
-		case .liquidGlass: "Liquid Glass"
-		}
+		style.title
 	}
 
 	private var styleFooter: String {

@@ -50,6 +50,7 @@ struct GazeApp: App {
 	private var store: FaceEnrollmentStore { AppServices.shared.store }
 	private var lockout: LockoutManager { AppServices.shared.lockout }
 	private let presentsSettingsAtLaunch: Bool
+	@StateObject private var menuBarVisibility = MenuBarVisibility.shared
 
 	init() {
 		// Same-bundle foreground handoff: a `--settings` (or bare) launch while this
@@ -69,7 +70,9 @@ struct GazeApp: App {
 	}
 
 	var body: some Scene {
-		MenuBarExtra {
+		// Only while the setting says so: flipping "Show in menu bar" removes or
+		// re-adds the icon without relaunching, via MenuBarVisibility below.
+		MenuBarExtra(isInserted: $menuBarVisibility.isVisible) {
 			MenuBarContent(store: store, lockout: lockout)
 		} label: {
 			GazeStatusItemLabel()
@@ -93,6 +96,9 @@ struct GazeApp: App {
 							.padding(10).frame(maxWidth: .infinity).background(.bar)
 					}
 				}
+				// Registers the Settings opener outside the menu bar label, so
+				// reopening Gaze still opens Settings while the icon is hidden.
+				.background(SettingsOpenerSetup())
 		}
 		.defaultLaunchBehavior(presentsSettingsAtLaunch ? .presented : .suppressed)
 		// `.contentMinSize`, not `.contentSize`: the view states a floor and an ideal, and
@@ -300,8 +306,19 @@ final class AppServices {
 			: "UI review · Automatic locking and unlocking are off for this run"
 	}
 
-	let store = FaceEnrollmentStore()
+	let store: FaceEnrollmentStore = {
+		let store = FaceEnrollmentStore()
+		#if PRODUCT_CAPTURE
+		// Screenshots show a stand-in face, never the owner's photo or name.
+		if ProductCaptureDemo.isOn { store.loadProductCaptureDemoFace() }
+		#endif
+		return store
+	}()
 	let lockout = LockoutManager()
+	/// App Lock's persisted list. The state machine below holds the only
+	/// in-memory unlock state; Settings and the URL handler keep their own
+	/// store instances, which agree through UserDefaults.
+	let appLockStore = AppLockStore()
 
 	/// Stub until the global fill shortcut is wired up; always false for now.
 	var isAutofillShortcutRegistered = false
@@ -310,7 +327,12 @@ final class AppServices {
 	private var lockWatcher: LockWatcher?
 	private var presenceWatcher: PresenceWatcher?
 	private var lockScreenShoot: LockScreenShoot?
+	private var appLockPreview: AppLockShield?
 	private var browserApprovals: GazeBrowserApproval?
+	private var appLockMachine: AppLockStateMachine?
+	private var appLockWatcher: AppLockWatcher?
+	private var appLockShield: AppLockShield?
+	private var appLockRecognizer: AppLockRecognizer?
 
 	private init() {}
 
@@ -319,6 +341,25 @@ final class AppServices {
 	/// Launch with `--shoot-lockscreen`. Separate from the developer preview, which cycles
 	/// the panel's phases over the desktop and then hides it: that is for watching the
 	/// animation, this is for framing one picture, and it holds until Escape.
+	/// `--ui-review --app-lock-preview=<bundle id>` shows the App Lock shield over that
+	/// running app with no camera, for looking at the design. `--app-lock-preview-success`
+	/// plays the unlock after two seconds.
+	func runAppLockPreviewIfRequested() {
+		guard Self.isUIReview,
+			let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--app-lock-preview=") })
+		else { return }
+		let bundleID = String(argument.dropFirst("--app-lock-preview=".count))
+		let shield = AppLockShield(machine: AppLockStateMachine(store: AppLockStore()))
+		appLockPreview = shield
+		shield.show(for: bundleID)
+		if CommandLine.arguments.contains("--app-lock-preview-success") {
+			Task { @MainActor in
+				try? await Task.sleep(for: .seconds(2))
+				shield.unlockSucceeded()
+			}
+		}
+	}
+
 	func runLockScreenShootIfRequested() {
 		guard !Self.isUIReview else { return }
 		guard CommandLine.arguments.contains("--shoot-lockscreen") else { return }
@@ -350,6 +391,40 @@ final class AppServices {
 		} else {
 			presenceWatcher?.stop()
 			presenceWatcher = nil
+		}
+	}
+
+	/// Starts or stops App Lock to match the launch policy and the setting.
+	///
+	/// The watcher, shield and recognizer share one state machine, so an
+	/// unlock lasts across shield shows until the "Lock again" option says
+	/// otherwise. Only the normal launch policy runs it: review, scan-only
+	/// and browser-only modes never cover other apps with a shield.
+	///
+	/// Idempotent like `syncPresenceWatcher`: a running stack is left alone,
+	/// and stopping drops the in-memory unlocks with it — turning App Lock
+	/// off removes every shield, so nothing may stay unlocked behind it.
+	func syncAppLock() {
+		let shouldRun = Self.executionPolicy == .normal && appLockStore.isEnabled
+		if shouldRun {
+			guard appLockWatcher == nil else { return }
+			let machine = AppLockStateMachine(store: appLockStore)
+			let watcher = AppLockWatcher(store: appLockStore, machine: machine)
+			let shield = AppLockShield(machine: machine)
+			shield.attach(to: watcher)
+			let recognizer = AppLockRecognizer(store: store, machine: machine)
+			recognizer.attach(to: shield)
+			watcher.start()
+			appLockMachine = machine
+			appLockWatcher = watcher
+			appLockShield = shield
+			appLockRecognizer = recognizer
+		} else {
+			appLockWatcher?.stop()
+			appLockWatcher = nil
+			appLockShield = nil
+			appLockRecognizer = nil
+			appLockMachine = nil
 		}
 	}
 
@@ -434,10 +509,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 	private var invisibleWindowSweep: Timer?
 
-	func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+	/// The Finder extension's `gaze://app-lock/toggle` link. Each URL still goes
+	/// through face or password authorisation inside AppLockURLAction; the
+	/// click alone changes nothing.
+	func application(_ application: NSApplication, open urls: [URL]) {
 		MainActor.assumeIsolated {
-			guard let openSettings = AppActivation.openSettings else { return true }
-			openSettings()
+			guard urls.contains(where: { AppLockURLAction.bundleID(from: $0) != nil }) else { return }
+			AppActivation.bringToFront(userInitiated: true)
+			Task { @MainActor in
+				let store = AppLockStore()
+				for url in urls { _ = await AppLockURLAction.perform(url: url, store: store) }
+			}
+		}
+	}
+
+	func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {		MainActor.assumeIsolated {
+			if let openSettings = AppActivation.openSettings {
+				openSettings()
+				return false
+			}
+			// No live view holds `openWindow`: the menu bar icon is hidden and no
+			// window has been shown since launch. Restore the icon — the person
+			// asked for the app, and an app that cannot be opened is worse than
+			// an icon back in the menu bar — then open Settings once its label
+			// has registered the opener.
+			Preferences.shared.showsMenuBarIcon = true
+			AppActivation.bringToFront(userInitiated: true)
+			DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+				MainActor.assumeIsolated {
+					AppActivation.openSettings?()
+				}
+			}
 			return false
 		}
 	}
@@ -448,12 +550,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 			// Created now rather than at the first dark scan, so a brightness boost left
 			// behind by a quit mid-scan is put back as soon as Gaze opens again.
 			_ = LockScreenLight.shared
+			// Load the face and anti-spoof models once, in the background, so the first
+			// scan after launch (lock screen or App Lock) doesn't stop to load them.
+			let embedder = AppServices.shared.store.embedder
+			Task.detached(priority: .utility) {
+				embedder.warmUp()
+				SpoofDetector.shared?.warmUp()
+				IrisLocator.warmUp()
+			}
 			StartupTiming.measure(label: "tamper-guard") { TamperGuard.shared.start() }
 			StartupTiming.measure(label: "unlock-triggers") { AppServices.shared.startUnlockTrigger() }
+			StartupTiming.measure(label: "app-lock") { AppServices.shared.syncAppLock() }
 			// Looks for a new release shortly after launch, then daily. See
 			// `startScheduledChecks` for why this is not left to the button in Settings.
 			StartupTiming.measure(label: "update-scheduling") { ReleaseUpdateChecker.shared.startScheduledChecks() }
 			StartupTiming.measure(label: "screenshot-mode") { AppServices.shared.runLockScreenShootIfRequested() }
+			AppServices.shared.runAppLockPreviewIfRequested()
 			StartupTiming.measure(label: "invisible-window-sweep") { self.startInvisibleWindowSweep() }
 			// Native TipKit guidance, normal launches only: review, scan-only and
 			// browser-only modes neither configure TipKit nor mutate tip history.
@@ -595,20 +707,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: - Menu bar
 
-private struct GazeStatusItemLabel: View {
+/// Whether the menu bar icon is currently shown, following `showsMenuBarIcon`.
+///
+/// The `MenuBarExtra` scene above exists only while this is true, so flipping the
+/// Settings switch removes or re-adds the icon without relaunching. A shared object
+/// rather than `@State` on the App: nothing else can reach into the App struct to
+/// flip it when the preference changes, and `applicationShouldHandleReopen` reads
+/// the same value outside any view.
+@MainActor
+final class MenuBarVisibility: ObservableObject {
+	static let shared = MenuBarVisibility()
+
+	/// Publishes only real changes. SwiftUI writes the `isInserted` binding back
+	/// while it rebuilds scenes, and `@Published` announces every write, even an
+	/// equal one: that rebuilt the App body, which wrote the binding again, until
+	/// opening Settings overflowed the stack and Gaze crashed.
+	var isVisible: Bool {
+		get { visible }
+		set {
+			guard newValue != visible else { return }
+			objectWillChange.send()
+			visible = newValue
+		}
+	}
+
+	private var visible = Preferences.shared.showsMenuBarIcon
+
+	private var observer: NSObjectProtocol?
+
+	private init() {
+		observer = NotificationCenter.default.addObserver(
+			forName: .gazeMenuBarVisibilityChanged, object: nil, queue: .main
+		) { [weak self] _ in
+			MainActor.assumeIsolated {
+				self?.isVisible = Preferences.shared.showsMenuBarIcon
+			}
+		}
+	}
+}
+
+/// Stores the Settings-opening closure wherever a live view holds `openWindow`.
+///
+/// On both the menu bar label and the Settings window itself: with the icon hidden
+/// there is no label, and reopening Gaze (Spotlight, Finder, Dock) must still open
+/// Settings rather than silently doing nothing.
+private struct SettingsOpenerSetup: View {
 	@Environment(\.openWindow) private var openWindow
 
+	var body: some View {
+		Color.clear
+			.frame(width: 0, height: 0)
+			.accessibilityHidden(true)
+			.onAppear {
+				AppActivation.openSettings = {
+					AppActivation.bringToFront(userInitiated: true)
+					openWindow(id: "settings")
+				}
+				SettingsNavigator.shared.presentSettings = AppActivation.openSettings
+			}
+	}
+}
+
+private struct GazeStatusItemLabel: View {
 	var body: some View {
 		Image(nsImage: GazeBrand.menuBarIcon)
 			.renderingMode(.template)
 			.accessibilityLabel("Gaze")
-		.onAppear {
-			AppActivation.openSettings = {
-				AppActivation.bringToFront(userInitiated: true)
-				openWindow(id: "settings")
-			}
-			SettingsNavigator.shared.presentSettings = AppActivation.openSettings
-		}
+			.background(SettingsOpenerSetup())
 	}
 }
 

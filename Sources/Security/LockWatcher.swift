@@ -1,5 +1,8 @@
 import AppKit
+import CoreVideo
 import Foundation
+import IOKit
+import IOKit.pwr_mgt
 import Observation
 import os
 
@@ -40,6 +43,9 @@ final class LockWatcher {
 	private var observers: [NSObjectProtocol] = []
 	private(set) var isWatching = false
 	private(set) var isLocked = false
+	/// Whether the screen saver is currently running. While it covers the screen,
+	/// scanning would light the camera with no panel visible.
+	private var screenSaverRunning = false
 
 	private let capsule = NotchCapsuleController()
 	/// Checks the window server while the Mac is locked, in case the unlock notification
@@ -55,6 +61,23 @@ final class LockWatcher {
 	/// the unlock was ours. A match alone is not a confirmed Gaze unlock, and learning
 	/// from anything less would let a near-miss write itself into the vault.
 	private var pendingLearnedPrint: (print: Faceprint, faceID: UUID)?
+	/// When the current attempt began, for unlock timing and durations.
+	private var attemptStartedAt: ContinuousClock.Instant?
+	private var cameraRunningAt: ContinuousClock.Instant?
+	private var firstFrameAt: ContinuousClock.Instant?
+	private var firstMatchAt: ContinuousClock.Instant?
+	private var passwordSubmittedAt: ContinuousClock.Instant?
+	/// When the movement prompt was shown, for unlock timing bookkeeping.
+	private var movementPresentedAt: ContinuousClock.Instant?
+	/// Seconds from the movement prompt appearing to it being completed.
+	private var movementDuration: TimeInterval?
+	/// The prompt text shown for the movement challenge.
+	private var movementPrompt: String?
+	/// The last face frame seen this lock, kept for the attempts log only.
+	private var lastFacePixelBuffer: CVPixelBuffer?
+	/// Whether this lock already filed a closed-without-unlocking attempt. One
+	/// per lock: retries must not each file one.
+	private var closedAttemptLogged = false
 
 	/// How long to keep looking after the screen locks before giving up.
 	///
@@ -70,13 +93,22 @@ final class LockWatcher {
 	/// before they had registered it happening — and fast enough that the animation reads
 	/// as a glitch. Requiring the match to hold means a deliberate look unlocks and a
 	/// glance does not.
-	private static let requiredMatchDuration: TimeInterval = 2.0
+	///
+	/// 0.8 s, down from 2 s: people who turn movements off chose speed. It still has to
+	/// be a steady look, every frame of it still passes the photo and screen checks, and a
+	/// face merely passing through the frame breaks the hold and starts it again.
+	private static let requiredMatchDuration: TimeInterval = 0.8
 
 	/// The hold when a movement challenge is configured. The challenge itself is the
 	/// proof of presence, so the hold can be shorter and the unlock feel sooner — but
 	/// only on that path. With the challenge off, the full hold above is all that stands
 	/// between a match and the password, and it stays.
-	private static let requiredMatchDurationWithChallenge: TimeInterval = 1.2
+	private static let requiredMatchDurationWithChallenge: TimeInterval = 0.8
+
+	/// How long a face must match before the movement is asked for. The full hold above
+	/// still has to complete before the password goes in; this only starts the movement
+	/// sooner, so the hold and the movement run at the same time.
+	private static let challengeLead: Duration = .milliseconds(200)
 
 	/// How long the opened padlock stays before the panel goes home.
 	///
@@ -94,6 +126,21 @@ final class LockWatcher {
 	/// than it once was: the camera restarts itself after a wake now, so a device that
 	/// is genuinely not ready gets a second chance without costing every unlock 700 ms.
 	private static let wakeSettle = Duration.milliseconds(450)
+
+	/// Shorter settle after opening the lid. The full settle above exists so the key
+	/// press or Escape that woke the Mac is taken before the input snapshot; opening
+	/// the lid involves no key press, so there is nothing to let pass.
+	private static let lidOpenSettle = Duration.milliseconds(150)
+
+	/// Whether the lid is currently open. Desktops report no clamshell state and read
+	/// false here, so they always keep the full settle.
+	private static func lidOpenedRecently() -> Bool {
+		let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+		guard service != IO_OBJECT_NULL else { return false }
+		defer { IOObjectRelease(service) }
+		guard let state = IORegistryEntryCreateCFProperty(service, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Bool else { return false }
+		return !state
+	}
 
 	/// How long to wait for the Mac to actually unlock before giving up on it.
 	private static let unlockGracePeriod: TimeInterval = 3.0
@@ -172,6 +219,21 @@ final class LockWatcher {
 				MainActor.assumeIsolated { self?.displaysSlept() }
 			})
 
+		// The screen saver covers everything, so a lock reported while it runs must
+		// not start a scan. Dismissing it starts one only if a password is required.
+		observers.append(
+			centre.addObserver(
+				forName: .init("com.apple.screensaver.didstart"), object: nil, queue: .main
+			) { [weak self] _ in
+				MainActor.assumeIsolated { self?.screenSaverStarted() }
+			})
+		observers.append(
+			centre.addObserver(
+				forName: .init("com.apple.screensaver.didstop"), object: nil, queue: .main
+			) { [weak self] _ in
+				MainActor.assumeIsolated { self?.screenSaverStopped() }
+			})
+
 		Self.logger.notice("Watching for screen lock and wake.")
 	}
 
@@ -179,6 +241,16 @@ final class LockWatcher {
 		if let diagnosticID { LockScanDiagnostics.shared.cancel(for: diagnosticID) }
 		submissionID = nil
 		didSubmitPassword = false
+		attemptStartedAt = nil
+		cameraRunningAt = nil
+		firstFrameAt = nil
+		firstMatchAt = nil
+		passwordSubmittedAt = nil
+		movementPresentedAt = nil
+		movementDuration = nil
+		movementPrompt = nil
+		lastFacePixelBuffer = nil
+		closedAttemptLogged = false
 		attempt?.cancel()
 		attempt = nil
 		attemptID = nil
@@ -190,6 +262,7 @@ final class LockWatcher {
 		LockScreenLight.shared.hide()
 		isWatching = false
 		lastWakeTrigger = nil
+		screenSaverRunning = false
 		for token in observers {
 			DistributedNotificationCenter.default().removeObserver(token)
 			NSWorkspace.shared.notificationCenter.removeObserver(token)
@@ -201,7 +274,23 @@ final class LockWatcher {
 
 	private func screenLocked() {
 		guard Self.screenIsLocked() else { return }
+		// Warm the models now, while the camera is still off, so the first scan does
+		// not stall loading them mid-loop. Off the main actor, in parallel with the
+		// attempt below; warmUp reloads them if they were unloaded while idle.
+		Task.detached(priority: .userInitiated) { [embedder = store.embedder] in
+			embedder.warmUp()
+			SpoofDetector.shared?.warmUp()
+			IrisLocator.warmUp()
+		}
 		isLocked = true
+		closedAttemptLogged = false
+		lastFacePixelBuffer = nil
+		// The screen saver covers the panel, so a lock reported while it runs is
+		// not a moment anyone can see or answer. Dismissing it starts the scan.
+		guard !screenSaverRunning else {
+			Self.logger.notice("Screen locked with the screen saver running; not scanning until it's dismissed.")
+			return
+		}
 		// An idle Mac usually locks as its display turns off. Scanning then found the
 		// person sitting there and asked for a movement on a black screen, which timed out
 		// and counted as a miss again and again. The display waking starts the scan instead.
@@ -216,14 +305,55 @@ final class LockWatcher {
 	/// without counting anything; waking the display starts again.
 	private func displaysSlept() {
 		lastWakeTrigger = nil
+		// Nobody can see it, and the brightness it boosted should come back down.
+		LockScreenLight.shared.hide()
 		pointerRetry?.cancel()
 		pointerRetry = nil
 		guard attempt != nil else { return }
 		Self.logger.notice("Display turned off during a scan; stopping until it wakes.")
+		logAttemptTiming(outcome: "display-slept")
+		recordClosedWithoutUnlocking()
 		attempt?.cancel()
 		attempt = nil
 		attemptID = nil
 		capsule.hide()
+	}
+
+	/// The screen saver started and covers everything. Stop like the display
+	/// going dark: nobody can see the panel, so there is nothing to answer.
+	private func screenSaverStarted() {
+		screenSaverRunning = true
+		LockScreenLight.shared.hide()
+		pointerRetry?.cancel()
+		pointerRetry = nil
+		guard attempt != nil else { return }
+		Self.logger.notice("Screen saver started; not scanning until it's dismissed.")
+		logAttemptTiming(outcome: "screen-saver-started")
+		recordClosedWithoutUnlocking()
+		attempt?.cancel()
+		attempt = nil
+		attemptID = nil
+		capsule.hide()
+	}
+
+	/// The screen saver was dismissed. Scan only if a password is actually
+	/// required now; otherwise the camera stays off.
+	private func screenSaverStopped() {
+		screenSaverRunning = false
+		guard Self.screenIsLocked() else { return }
+		guard !Self.displaysAreAsleep() else { return }
+		isLocked = true
+		// The key or mouse that dismissed it must not count as input, same as wake.
+		beginAttempt(trigger: "Screen saver dismissed", settle: Self.wakeSettle)
+	}
+
+	/// Whether the screen saver engine is running, in case its start
+	/// notification was never delivered.
+	private static func screenSaverIsRunning() -> Bool {
+		guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.ScreenSaver.Engine"
+			|| !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.ScreenSaver.Engine").isEmpty
+		else { return false }
+		return true
 	}
 
 	private static func displaysAreAsleep() -> Bool {
@@ -255,7 +385,25 @@ final class LockWatcher {
 		lastWakeTrigger = Date()
 
 		isLocked = true
-		beginAttempt(trigger: "Woke to a locked screen", settle: Self.wakeSettle)
+		// The wake arrived while the screen saver still covers everything.
+		guard !screenSaverRunning else {
+			Self.logger.notice("Woke with the screen saver running; not scanning until it's dismissed.")
+			return
+		}
+		// Opening the lid involves no key press, so when the lid is open and nothing
+		// was typed or clicked to wake the Mac, the shorter settle is enough before
+		// the input snapshot is taken.
+		let settle: Duration
+		if Self.lidOpenedRecently(),
+			CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown) > 1.0,
+			CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown) > 1.0 {
+			settle = Self.lidOpenSettle
+			Self.logger.notice("Woke with the lid open and no recent input; using the shorter settle.")
+		} else {
+			settle = Self.wakeSettle
+			Self.logger.notice("Woke via key or mouse; using the full settle.")
+		}
+		beginAttempt(trigger: "Woke to a locked screen", settle: settle)
 	}
 
 	/// Everything both triggers do. Shared so the two cannot drift apart.
@@ -265,6 +413,19 @@ final class LockWatcher {
 	///   a wake, because it is not — asking too early returns a camera that reports
 	///   running and delivers black frames for the first second.
 	private func beginAttempt(trigger: String, settle: Duration = .zero) {
+		// Fallback in case the screen saver's start notification never arrived.
+		if Self.screenSaverIsRunning() { screenSaverRunning = true }
+		guard !screenSaverRunning else {
+			Self.logger.notice("\(trigger, privacy: .public) with the screen saver running; not scanning until it's dismissed.")
+			return
+		}
+		// A wake can arrive without a prior lock notification, so warm here too, in
+		// parallel with the camera start. Off the main actor; a no-op if already warm.
+		Task.detached(priority: .userInitiated) { [embedder = store.embedder] in
+			embedder.warmUp()
+			SpoofDetector.shared?.warmUp()
+			IrisLocator.warmUp()
+		}
 		guard UnlockExecutionPolicy.current.permitsScanning(passwordReplayEnabled: PasswordReplaySafety.isEnabled,
 			keystrokeSelected: Preferences.shared.unlockBackend == .keystroke) else { return }
 		guard submissionID == nil, Self.submissionBudget.maySubmit, !Self.manualInputObserved else { return }
@@ -306,6 +467,14 @@ final class LockWatcher {
 		let identifier = UUID()
 		attemptID = identifier
 		diagnosticID = identifier
+		attemptStartedAt = .now
+		cameraRunningAt = nil
+		firstFrameAt = nil
+		firstMatchAt = nil
+		passwordSubmittedAt = nil
+		movementPresentedAt = nil
+		movementDuration = nil
+		movementPrompt = nil
 		LockScanDiagnostics.shared.begin(identifier)
 		attempt = Task {
 			defer {
@@ -315,9 +484,46 @@ final class LockWatcher {
 					self.attemptID = nil
 				}
 			}
+			// A screen saver that asks for a password locks the session a moment before
+			// it reports starting, so the lock alone raced it and the camera light came
+			// on under the saver. Wait that moment out, with the camera still off.
+			if trigger == "Screen locked" {
+				try? await Task.sleep(for: .milliseconds(600))
+				if Self.screenSaverIsRunning() { self.screenSaverRunning = true }
+				guard !Task.isCancelled, !self.screenSaverRunning else {
+					Self.logger.notice("Screen saver took over the lock; not scanning until it's dismissed.")
+					return
+				}
+			}
+			// Keep the display awake while looking. The lock screen dims and sleeps the
+			// display on its own short timer, which could cut a scan off mid-movement.
+			// Held only for this attempt, so an ignored lock screen still sleeps.
+			var displayAssertion = IOPMAssertionID(0)
+			let holdsDisplay = IOPMAssertionCreateWithName(
+				kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
+				IOPMAssertionLevel(kIOPMAssertionLevelOn),
+				"Gaze is checking for your face" as CFString,
+				&displayAssertion) == kIOReturnSuccess
+			defer { if holdsDisplay { IOPMAssertionRelease(displayAssertion) } }
+			// The camera starts now, alongside the settle, instead of after it. Starting a
+			// session takes about as long as the settle itself, so running them one after
+			// the other cost every lid-open unlock roughly half a second. The frames that
+			// arrive during the settle are the dark ones it exists to skip, and the scan
+			// loop only begins after it, so nothing looks at them.
+			var early: (camera: CameraController, started: Task<Void, Never>)?
 			if settle > .zero {
+				let allowExternal = Preferences.shared.allowExternalCamera
+				let available = CameraDevice.candidates(allowExternal: allowExternal).map(\.uniqueID)
+				if let pinned = self.store.unlockCamera(allowExternal: allowExternal, available: available)?.cameraID,
+					!pinned.isEmpty {
+					let camera = CameraController(accessScope: .lockScreen)
+					early = (camera, Task { await camera.start(pinnedDeviceID: pinned) })
+				}
 				try? await Task.sleep(for: settle)
-				guard !Task.isCancelled else { return }
+				guard !Task.isCancelled else {
+					early?.camera.stop()
+					return
+				}
 			}
 			// Taken after the settle, so the key press or Escape that woke the Mac, or
 			// came with opening the lid, does not read as someone typing a password.
@@ -327,7 +533,9 @@ final class LockWatcher {
 			// still stops the second.
 			for retry in 0..<2 {
 				self.cameraFailed = false
-				await self.attemptUnlock(inputSnapshot: inputSnapshot, identifier: identifier)
+				await self.attemptUnlock(inputSnapshot: inputSnapshot, identifier: identifier,
+					prestarted: retry == 0 ? early : nil)
+				if retry == 0 { early = nil }
 				guard self.cameraFailed, retry == 0, !Task.isCancelled, self.isLocked else { break }
 				Self.logger.notice("Camera failed; restarting it once.")
 				try? await Task.sleep(for: .seconds(1))
@@ -387,6 +595,9 @@ final class LockWatcher {
 				isLocked = false
 				submissionID = nil
 				didSubmitPassword = false
+				logAttemptTiming(outcome: "unverified")
+				recordClosedWithoutUnlocking()
+				lastFacePixelBuffer = nil
 				attempt?.cancel()
 				attempt = nil
 				attemptID = nil
@@ -417,9 +628,18 @@ final class LockWatcher {
 
 		guard didSubmitPassword else {
 			// Unlocked by other means. Nothing to celebrate — just get out of the way.
+			logAttemptTiming(outcome: "other")
+			recordClosedWithoutUnlocking()
+			lastFacePixelBuffer = nil
 			capsule.hide()
 			return
 		}
+		let unlockDuration = attemptStartedAt.map(Self.seconds(since:))
+		let steps = attemptSteps()
+		logAttemptTiming(outcome: "unlocked")
+		UnlockAttemptLog.shared.record(.unlocked, duration: unlockDuration, steps: steps)
+		lastFacePixelBuffer = nil
+		closedAttemptLogged = false
 		didSubmitPassword = false
 		lockout.recordSuccess()
 		// Ours, confirmed: this is the only moment learning may happen. The print is
@@ -435,6 +655,60 @@ final class LockWatcher {
 		// is the last beat of the sequence and the only one the user is still looking at.
 		capsule.update(phase: .unlocked)
 		capsule.hide(after: Self.unlockAnimationDuration)
+	}
+
+	/// The scan saw a face but the Mac opened some other way, or the display went
+	/// dark first. Filed with the last face frame seen, if there is one.
+	private func recordClosedWithoutUnlocking() {
+		guard !closedAttemptLogged, let buffer = lastFacePixelBuffer else { return }
+		closedAttemptLogged = true
+		UnlockAttemptLog.shared.record(.closedWithoutUnlocking, photo: buffer)
+	}
+
+	/// One timing line per attempt, when it ends. Measurement only: nothing here
+	/// is read by any branch, so unlock behaviour is identical either way.
+	private func logAttemptTiming(outcome: String) {
+		guard let start = attemptStartedAt else { return }
+		func ms(_ instant: ContinuousClock.Instant?) -> String {
+			guard let instant else { return "-" }
+			let parts = start.duration(to: instant).components
+			let whole: Int64 = parts.seconds * 1_000
+			let fraction: Int64 = parts.attoseconds / 1_000_000_000_000_000
+			return String(whole + fraction) + "ms"
+		}
+		let line = "outcome=\(outcome) camera=\(ms(self.cameraRunningAt)) firstFrame=\(ms(self.firstFrameAt))"
+			+ " firstMatch=\(ms(self.firstMatchAt)) submitted=\(ms(self.passwordSubmittedAt))"
+		Self.logger.notice("timing attempt ended \(line, privacy: .public)")
+		attemptStartedAt = nil
+		cameraRunningAt = nil
+		firstFrameAt = nil
+		firstMatchAt = nil
+		passwordSubmittedAt = nil
+		movementPresentedAt = nil
+		movementDuration = nil
+		movementPrompt = nil
+	}
+
+	/// The unlock split into its stages, for the Unlock Attempts list.
+	private func attemptSteps() -> UnlockAttempt.Steps? {
+		guard let start = attemptStartedAt else { return nil }
+		func between(_ a: ContinuousClock.Instant?, _ b: ContinuousClock.Instant?) -> TimeInterval? {
+			guard let a, let b, a <= b else { return nil }
+			let parts = a.duration(to: b).components
+			return Double(parts.seconds) + Double(parts.attoseconds) / 1_000_000_000_000_000_000
+		}
+		return UnlockAttempt.Steps(
+			camera: between(start, cameraRunningAt),
+			recognise: between(cameraRunningAt, firstMatchAt),
+			check: between(firstMatchAt, passwordSubmittedAt),
+			macOS: between(passwordSubmittedAt, .now),
+			movement: movementDuration,
+			movementPrompt: movementPrompt)
+	}
+
+	private static func seconds(since start: ContinuousClock.Instant) -> TimeInterval {
+		let parts = start.duration(to: .now).components
+		return Double(parts.seconds) + Double(parts.attoseconds) / 1_000_000_000_000_000_000
 	}
 
 	/// Asks the window server whether the screen is locked, right now.
@@ -456,7 +730,21 @@ final class LockWatcher {
 
 	// MARK: - Attempt
 
-	private func attemptUnlock(inputSnapshot: LockScreenInputSnapshot, identifier: UUID) async {
+	private func attemptUnlock(inputSnapshot: LockScreenInputSnapshot, identifier: UUID,
+		prestarted: (camera: CameraController, started: Task<Void, Never>)? = nil) async {
+		// Any early return below must not leave the early-started camera running.
+		var adoptedPrestarted = false
+		defer {
+			if !adoptedPrestarted, let prestarted {
+				prestarted.camera.stop()
+				// Its start may still be in flight; stop again once it lands so a session
+				// that finished starting after the first stop doesn't stay on.
+				Task { @MainActor in
+					await prestarted.started.value
+					prestarted.camera.stop()
+				}
+			}
+		}
 		// Whatever ends the scan — an unlock, a rejection, the lockout, a camera that
 		// died — the edge light goes out with it.
 		SceneBrightness.reset()
@@ -522,10 +810,16 @@ final class LockWatcher {
 		let warmUp = Task.detached(priority: .userInitiated) {
 			embedder.warmUp()
 			SpoofDetector.shared?.warmUp()
+			IrisLocator.warmUp()
 		}
-		let camera = CameraController(accessScope: .lockScreen)
+		let camera = prestarted?.camera ?? CameraController(accessScope: .lockScreen)
+		adoptedPrestarted = true
 		let cameraRequestedAt = ContinuousClock.now
-		await camera.start(pinnedDeviceID: pinnedCamera)
+		if let prestarted {
+			await prestarted.started.value
+		} else {
+			await camera.start(pinnedDeviceID: pinnedCamera)
+		}
 		await warmUp.value
 		defer { camera.stop() }
 
@@ -537,6 +831,7 @@ final class LockWatcher {
 			Self.logger.error("Camera unavailable: \(String(describing: camera.state))")
 			return
 		}
+		cameraRunningAt = .now
 		// The panel drops as soon as the camera is on, not when its first frame arrives,
 		// so it never lags a second or more behind the camera light.
 		capsule.update(phase: .scanning)
@@ -622,6 +917,12 @@ final class LockWatcher {
 		var tooBlurred = 0
 		var largestFace: CGFloat = 0
 		var bestQuality: Float = 0
+		/// The most recent frame-quality rejection this scan, so a search that ends
+		/// without unlocking can say why. Measurement only.
+		var lastRejection: FrameQuality.Rejection?
+		/// Whether this scan already filed an attempt record, so the search-end
+		/// fallback does not file a second one.
+		var recordedAttempt = false
 
 		Self.logger.notice(
 			"""
@@ -680,6 +981,7 @@ final class LockWatcher {
 			case .fresh(let continuous):
 				if shownAt == nil {
 					report(.scanning)
+					firstFrameAt = .now
 					let elapsed = cameraRequestedAt.duration(to: .now).components
 					let milliseconds = elapsed.seconds * 1_000 + elapsed.attoseconds / 1_000_000_000_000_000
 					Self.logger.notice("First fresh camera frame ready after \(milliseconds)ms; analyzed=\(camera.analyzedFrames) expired=\(camera.expiredFrames).")
@@ -699,6 +1001,9 @@ final class LockWatcher {
 				report(.notRecognized)
 				Self.logger.notice("Challenge not answered in time; treating as a rejection.")
 				lockout.recordFailure()
+				UnlockAttemptLog.shared.record(.notRecognised,
+					photo: camera.sample?.pixelBuffer, reason: .movementTimedOut)
+				recordedAttempt = true
 				StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
 				updateCapsule("notRecognised", .notRecognised)
 				challenge?.next()
@@ -713,7 +1018,7 @@ final class LockWatcher {
 			// The screen is the only lamp a locked Mac has. Checked before the face, since
 			// in a dark enough room there is no face to find until the light is on.
 			if Preferences.shared.screenGlowInDark, !LockScreenLight.shared.isShowing,
-				let brightness = SceneBrightness.current(), brightness < 0.12 {
+				SceneBrightness.isDark() {
 				LockScreenLight.shared.show()
 			}
 			guard !camera.faceMissing, var sample = camera.sample else {
@@ -727,6 +1032,7 @@ final class LockWatcher {
 				continue
 			}
 			lastFaceAt = Date()
+		lastFacePixelBuffer = sample.pixelBuffer
 
 
 			// A beat after a rejection before looking again, so the panel has time to say
@@ -759,7 +1065,9 @@ final class LockWatcher {
 				rejectionHold.reset()
 				resetMovementGuidance(reason: "frame quality")
 				qualityRejects += 1
-				switch FrameQuality.rejection(sample) {
+				let qualityRejection = FrameQuality.rejection(sample)
+				lastRejection = qualityRejection
+				switch qualityRejection {
 				case .tooSmall: tooSmall += 1
 				case .tooBlurred:
 					tooBlurred += 1
@@ -767,8 +1075,10 @@ final class LockWatcher {
 					// the person refusing to hold still. A second of it is enough to ask.
 					let since = blurredSince ?? Date()
 					blurredSince = since
+					// Only in a dim room: in daylight a blurred face is just movement.
 					if Preferences.shared.screenGlowInDark, !LockScreenLight.shared.isShowing,
-						Date().timeIntervalSince(since) >= 1 {
+						Date().timeIntervalSince(since) >= 1,
+						let brightness = SceneBrightness.current(), brightness < 0.25 {
 						LockScreenLight.shared.show()
 					}
 				default: break
@@ -891,6 +1201,8 @@ final class LockWatcher {
 				if rejectionHold.consume(capturedAt: sampleCapturedAt, required: .seconds(Self.rejectAfter)) {
 					report(.notRecognized)
 					lockout.recordFailure()
+					UnlockAttemptLog.shared.record(.unknownFace, photo: sample.pixelBuffer, reason: .differentPerson)
+					recordedAttempt = true
 					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
 					updateCapsule("notRecognised", .notRecognised)
 					Self.logger.notice("Not recognised (score \(result.score)); will try again.")
@@ -903,7 +1215,9 @@ final class LockWatcher {
 			}
 			rejectionHold.reset()
 
-			// Remember the matched frame for learning, but only a full-face match —
+		if firstMatchAt == nil { firstMatchAt = .now }
+
+		// Remember the matched frame for learning, but only a full-face match —
 			// a mask-path print lives in the same space but describes half a face,
 			// and learned prints must stay comparable with the originals.
 			if !result.viaUpperFace, let matchedPrint = result.matchedPrint {
@@ -925,6 +1239,8 @@ final class LockWatcher {
 					// ever said no.
 					Self.logger.notice("Match rejected by anti-spoof: \(reason, privacy: .public) (\(String(format: "%.3f", score), privacy: .public)).")
 					lockout.recordFailure()
+					UnlockAttemptLog.shared.record(.spoofRejected, photo: sample.pixelBuffer, reason: .photoOrScreen)
+					recordedAttempt = true
 					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed, score: Double(score))
 					updateCapsule("spoofRejected", .spoofRejected)
 					challenge?.next()
@@ -957,10 +1273,17 @@ final class LockWatcher {
 			let heldMatch = matchingHold.consume(faceID: face.id, now: sampleCapturedAt,
 				required: .seconds(movementCount == .none
 					? Self.requiredMatchDuration : Self.requiredMatchDurationWithChallenge))
+			// Ask for the movement once the face has matched briefly, instead of after the
+			// whole hold. The hold keeps counting while the person moves, and the final gate
+			// below still needs the full continuous hold, the movement and anti-spoof, so
+			// nothing gets easier: the two waits just overlap instead of adding up. The
+			// prompt still only ever appears for a face that already matched.
+			let readyToAsk = movementCount != .none && matchingHold.consume(faceID: face.id,
+				now: sampleCapturedAt, required: Self.challengeLead)
 			if !challengeGate.isPresented && !challengeGate.isVerified {
 				challenge?.prepareBaseline(sample)
 			}
-			guard heldMatch || challengeGate.isPresented else { continue }
+			guard heldMatch || readyToAsk || challengeGate.isPresented else { continue }
 
 			// The movement challenge, if one was asked for.
 			//
@@ -978,6 +1301,7 @@ final class LockWatcher {
 						return
 					}
 					challengeGate.present(at: .now, frameID: sampleFrameID)
+					movementPresentedAt = .now
 					report(.movement)
 					let hint = challenge.guidanceHint
 					// Outward prompts carry the gate's progress in two-movement mode ("· 1 of 2"),
@@ -1017,6 +1341,10 @@ final class LockWatcher {
 					challenge.next()
 					continue
 				}
+				if let presented = movementPresentedAt {
+					movementDuration = Self.seconds(since: presented)
+					movementPrompt = challenge.action.prompt
+				}
 			}
 			guard heldMatch, challengeGate.isVerified else { continue }
 
@@ -1054,6 +1382,7 @@ final class LockWatcher {
 				return
 			}
 			didSubmitPassword = true
+			passwordSubmittedAt = .now
 			report(.submissionPending)
 			let receiptID = UUID()
 			submissionID = receiptID
@@ -1091,8 +1420,25 @@ final class LockWatcher {
 			Search ended. ticks=\(ticks) withFace=\(framesWithFace) \
 			qualityRejected=\(qualityRejects) (small=\(tooSmall) blurred=\(tooBlurred)) \
 			largestFace=\(largestFace) bestQuality=\(bestQuality) best=\(bestScore) \
-			lastAbsence=\(lastAbsence, privacy: .public)
-			""")
+		lastAbsence=\(lastAbsence, privacy: .public)
+		""")
+		// The scan gave up without unlocking and nothing else filed it: say why, from
+		// the most recent frame-quality rejection, so the attempt is explainable.
+		if !recordedAttempt, !didSubmitPassword {
+			// A face that was seen clearly but never matched gets no reason: nothing
+			// in the frame explains it, and guessing would mislead.
+			let reason: UnlockAttempt.Reason?
+			if framesWithFace == 0 {
+				reason = .noFace
+			} else {
+				switch lastRejection {
+				case .tooSmall: reason = .tooFar
+				case .tooBlurred: reason = .tooDark
+				case .invalidMeasurements, nil: reason = nil
+				}
+			}
+			UnlockAttemptLog.shared.record(.notRecognised, photo: lastFacePixelBuffer, reason: reason)
+		}
 		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .idle)
 
 		// Back to the padlock rather than vanishing — the Mac is still locked, and the

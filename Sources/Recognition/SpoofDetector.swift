@@ -24,7 +24,7 @@ struct SpoofDetector: @unchecked Sendable {
 	/// Shared instance: loading the model is expensive and was previously done per scan.
 	static let shared: SpoofDetector? = SpoofDetector()
 
-	private let model: VNCoreMLModel
+	private let slot: ModelSlot<VNCoreMLModel>
 	private let side: Int
 	/// The shipped `Spoof.mlmodel` is still the Roboflow *object detector* (boxes plus
 	/// labels, trained on whole frames). Reading it as a classifier returned nil on every
@@ -39,7 +39,14 @@ struct SpoofDetector: @unchecked Sendable {
 			let ml = try? MLModel(contentsOf: url),
 			let vn = try? VNCoreMLModel(for: ml)
 		else { return nil }
-		self.model = vn
+		self.slot = ModelSlot(
+			load: {
+				guard let ml = try? MLModel(contentsOf: url),
+					let vn = try? VNCoreMLModel(for: ml)
+				else { return nil }
+				return vn
+			},
+			initial: vn)
 		self.side = ml.modelDescription.inputDescriptionsByName.values.first(where: {
 			$0.type == .image
 		})?.imageConstraint?.pixelsWide ?? 224
@@ -53,6 +60,8 @@ struct SpoofDetector: @unchecked Sendable {
 	/// "Spoof" classification confidence for the face crop, 0…1 (nil when unevaluable).
 	/// Runs one throwaway request so the first matched frame doesn't pay for loading the model.
 	func warmUp() {
+		slot.preload()
+		guard let model = slot.withModel({ $0 }) else { return }
 		var buffer: CVPixelBuffer?
 		guard CVPixelBufferCreate(kCFAllocatorDefault, side, side, kCVPixelFormatType_32BGRA, nil, &buffer) == kCVReturnSuccess,
 			let buffer else { return }
@@ -63,6 +72,7 @@ struct SpoofDetector: @unchecked Sendable {
 
 	func spoofConfidence(_ sample: FaceSample) -> Float? {
 		if isDetector { return detectedSpoofConfidence(sample) }
+		guard let model = slot.withModel({ $0 }) else { return nil }
 		guard let crop = FaceAligner.contextCrop(sample, side: side) else { return nil }
 		let request = VNCoreMLRequest(model: model)
 		request.imageCropAndScaleOption = .scaleFill
@@ -78,6 +88,7 @@ struct SpoofDetector: @unchecked Sendable {
 	/// seen). Full frame because that is what the detector was trained and measured on
 	/// (see `AntiSpoofGate.spoofRejectThreshold`), and the tell usually sits outside the face.
 	private func detectedSpoofConfidence(_ sample: FaceSample) -> Float? {
+		guard let model = slot.withModel({ $0 }) else { return nil }
 		let request = VNCoreMLRequest(model: model)
 		request.imageCropAndScaleOption = .scaleFill
 		let handler = VNImageRequestHandler(cvPixelBuffer: sample.pixelBuffer, options: [:])

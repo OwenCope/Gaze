@@ -5,6 +5,7 @@ BUILD="$(mktemp -d "${TMPDIR:-/tmp}/gaze-recognition-tests.XXXXXX")"
 trap 'rm -rf "$BUILD"' EXIT
 xcrun swiftc -O -parse-as-library -warnings-as-errors -module-cache-path "${CLANG_MODULE_CACHE_PATH:-$BUILD/modules}" \
 	"$ROOT/Sources/Camera/FacePose.swift" \
+	"$ROOT/Sources/Recognition/ModelResidency.swift" \
 	"$ROOT/Sources/Recognition/FaceEmbedder.swift" \
 	"$ROOT/Sources/Recognition/FaceAligner.swift" \
 	"$ROOT/Sources/Recognition/FaceTemplateMatcher.swift" \

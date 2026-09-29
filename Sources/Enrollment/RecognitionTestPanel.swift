@@ -73,11 +73,16 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 										.animation(reducedMotion || previewReduceMotion ? nil : .smooth(duration: 0.25), value: readout.instruction)
 								}
 								.frame(maxWidth: .infinity, alignment: .leading)
-								Button("Try another", action: next)
-									.gazeButton(.standard, size: .regular).disabled(!readout.canChallenge)
-									// Never truncated: the card gives the label its full width first.
-									.fixedSize()
-									.accessibilityLabel("Try another movement")
+								// Only offered once there is a movement to swap; a greyed-out
+								// button beside "look at the camera" read as broken.
+								if readout.canChallenge {
+									Button("Try another", action: next)
+										.gazeButton(.standard, size: .regular)
+										// Never truncated: the card gives the label its full width first.
+										.fixedSize()
+										.accessibilityLabel("Try another movement")
+										.transition(.opacity)
+								}
 							}
 							Divider().overlay(Theme.separator)
 							matchMeter
@@ -120,7 +125,8 @@ struct RecognitionTestPanel<CameraContent: View, CompanionContent: View>: View {
 			minHeight: 600, idealHeight: 700, maxHeight: .infinity)
 	}
 
-	private var isRecognised: Bool { !readout.isCollectingBaseline && readout.matched }
+	/// Green only when the lock screen would unlock; a blocked match keeps the grey dot.
+	private var isRecognised: Bool { !readout.isCollectingBaseline && readout.matched && readout.status == "Recognised" }
 
 	/// The verdict, on the camera: a dot and a word, on a dark glass pill.
 	private var statusPill: some View {

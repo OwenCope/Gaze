@@ -66,7 +66,8 @@ struct RenderTiming {
 }
 
 enum RecognitionScanPacing {
-	static let minimumPollInterval: Duration = .milliseconds(60)
+	// About one camera frame at 30 fps, so no fresh frame waits a whole extra tick.
+	static let minimumPollInterval: Duration = .milliseconds(33)
 
 	/// Recognition work counts toward the interval instead of adding another sleep.
 	static func delay(since previousPoll: ContinuousClock.Instant, now: ContinuousClock.Instant) -> Duration {

@@ -285,7 +285,7 @@ struct OnboardingTests {
 	static func checkExpressions() {
 		precondition(GazeExpressionLesson.scanning.explanation(movementCount: 1).contains("one short movement."))
 		precondition(GazeExpressionLesson.scanning.explanation(movementCount: 2).contains("two short movements."))
-		let motions: [GazeFaceMotion] = [.resting, .scanning, .turnLeft, .turnRight, .nod, .blink, .openMouth, .accepted, .rejected]
+		let motions: [GazeFaceMotion] = [.resting, .scanning, .turnLeft, .turnRight, .nod, .blink, .openMouth, .resting, .accepted, .rejected]
 		precondition(GazeExpressionLesson.allCases.map(\.motion) == motions)
 		precondition(GazeExpressionLesson.waiting.previous == nil)
 		precondition(GazeExpressionLesson.retry.next == nil)

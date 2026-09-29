@@ -103,8 +103,11 @@ enum ContinuityTests {
 		sample.quality = 0.09
 		check(FrameQuality.rejection(sample) == .tooBlurred, "Quality floor unchanged")
 		sample.quality = 0.7
-		sample.boundingBox.size.height = 0.17
-		check(FrameQuality.rejection(sample) == .tooSmall, "Size floor unchanged")
+		// Default detection distance: faces must fill 14% of the frame height.
+		sample.boundingBox.size.height = 0.13
+		check(FrameQuality.rejection(sample) == .tooSmall, "Default size floor rejects a smaller face")
+		sample.boundingBox.size.height = 0.15
+		check(FrameQuality.rejection(sample) == nil, "Default size floor accepts a face above it")
 		print("PASS: \(checks) evidence continuity and frame validity checks; synthetic inputs only.")
 	}
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum GazeExpressionLesson: String, CaseIterable, Identifiable {
-	case waiting, scanning, turnLeft, turnRight, nod, blink, openMouth, success, retry
+	case waiting, scanning, turnLeft, turnRight, nod, blink, openMouth, followLight, success, retry
 	var id: String { rawValue }
 	var title: String {
 		switch self {
@@ -12,6 +12,7 @@ enum GazeExpressionLesson: String, CaseIterable, Identifiable {
 		case .nod: "Nod"
 		case .blink: "Blink"
 		case .openMouth: "Open mouth"
+		case .followLight: "Follow the light"
 		case .success: "Verified"
 		case .retry: "Not verified"
 		}
@@ -25,6 +26,7 @@ enum GazeExpressionLesson: String, CaseIterable, Identifiable {
 		case .nod: "Lower your chin a little, then return to your starting position. You don’t need to look up."
 		case .blink: "Close both eyes briefly, then open them. Gaze only blinks when it’s asking you to."
 		case .openMouth: "Open your mouth briefly, then relax. Keep your face toward the camera."
+		case .followLight: "A light glides out from the middle of the screen. Follow it with your eyes and keep your head still."
 		case .success: "Gaze recognised you. The smile means your face check passed—there’s no movement to copy."
 		case .retry: "Gaze couldn’t confirm it’s you. Use your password or Touch ID, if available."
 		}
@@ -38,6 +40,7 @@ enum GazeExpressionLesson: String, CaseIterable, Identifiable {
 		case .nod: .nod
 		case .blink: .blink
 		case .openMouth: .openMouth
+		case .followLight: .resting
 		case .success: .accepted
 		case .retry: .rejected
 		}
@@ -137,7 +140,7 @@ struct GazeExpressionGuide: View {
 	private var lessonMenu: some View {
 		Menu {
 			Section("Waiting") { choices([.waiting, .scanning]) }
-			Section("Movement prompts") { choices([.turnLeft, .turnRight, .nod, .blink, .openMouth]) }
+			Section("Movement prompts") { choices([.turnLeft, .turnRight, .nod, .blink, .openMouth, .followLight]) }
 			Section("Results") { choices([.success, .retry]) }
 		} label: {
 			Text("\(lesson.index + 1) of \(GazeExpressionLesson.allCases.count)")

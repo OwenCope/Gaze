@@ -10,7 +10,8 @@
     "spoof-detector",
     "setup-art",
     "credit-portraits",
-    "app-icon"
+    "app-icon",
+    "iris-landmarks"
   ],
   "artifacts": [
     {
@@ -360,7 +361,7 @@
         ]
       },
       "provenance": {
-        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files — tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png — as screenshots/renders of their own machine and app with no third-party content; owner confirms (2026-09-21, release-clearance session) they created 28 of the 30 files themselves, screenshots and renders of their own machine and app with no third-party content. The two exceptions are NOT first-party and NOT cleared: Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are a widely-used wallpaper the owner did not create, of unestablished provenance; the owner knowingly accepts the risk of redistributing them, including in a public repository, carried in the owner's name. Owner decision (2026-09-27, 0.1.1 release): tour images re-encoded at smaller sizes and re-recorded by bytes; Resources/Art/tour-backdrop.png, the backdrop behind the setup and tour cards, is recorded like backdrop.png as a wallpaper the owner did not create, of unestablished provenance, shipped as a known accepted risk carried in the owner's name. Resources/Art/setup-camera-prompt.png (2026-09-27) is a screenshot taken by the owner on their own Mac of macOS's camera permission prompt for Gaze, shown in setup so the page matches what the user will see. Resources/Art/setup-accessibility.png (2026-09-27) is the owner's own screenshot of System Settings on their Mac, with the list of other apps removed. Resources/Art/setup-password.png (2026-09-27) is the owner's screenshot of Gaze's own Settings Unlocking section.",
+        "summary": "Existing screenshots and derivative rounded assets are documented in the referenced provenance manifests. tour-general/notch/unlock/security.png are cropped photographs of the app's own Settings views produced by Tools/ProductCapture/export-tour-shots.py; the manifest's nativeSHA256 values match the bytes recorded here. tour-how-unlock.png is rendered from app code and lockscreen-base.png by Tools/OnboardingArt/render-unlock-tour.sh. These records identify sources and bytes; they do not establish redistribution grants. Owner confirms (2026-09-20, release-clearance session) first-party authorship of five files \u2014 tour-general.png, tour-how-unlock.png, tour-notch.png, tour-security.png, tour-unlock.png \u2014 as screenshots/renders of their own machine and app with no third-party content; owner confirms (2026-09-21, release-clearance session) they created 28 of the 30 files themselves, screenshots and renders of their own machine and app with no third-party content. The two exceptions are NOT first-party and NOT cleared: Resources/Art/backdrop.png and Resources/Art/lockscreen-base.png are a widely-used wallpaper the owner did not create, of unestablished provenance; the owner knowingly accepts the risk of redistributing them, including in a public repository, carried in the owner's name. Owner decision (2026-09-27, 0.1.1 release): tour images re-encoded at smaller sizes and re-recorded by bytes; Resources/Art/tour-backdrop.png, the backdrop behind the setup and tour cards, is recorded like backdrop.png as a wallpaper the owner did not create, of unestablished provenance, shipped as a known accepted risk carried in the owner's name. Resources/Art/setup-camera-prompt.png (2026-09-27) is a screenshot taken by the owner on their own Mac of macOS's camera permission prompt for Gaze, shown in setup so the page matches what the user will see. Resources/Art/setup-accessibility.png (2026-09-27) is the owner's own screenshot of System Settings on their Mac, with the list of other apps removed. Resources/Art/setup-password.png (2026-09-27) is the owner's screenshot of Gaze's own Settings Unlocking section.",
         "evidenceRefs": [
           "build.sh:131-134",
           "Tools/OnboardingArt/manifest.json",
@@ -543,6 +544,55 @@
       },
       "clearance": "cleared",
       "notes": "Script-output question (Tools/Scripts/make_icon_mark.swift white-on-transparent keyhole vs icon.json 'Smoked glass face' layer) remains unverified; the owner's first-party confirmation is authoritative."
+    },
+    {
+      "id": "iris-landmarks",
+      "kind": "ml-model",
+      "description": "MediaPipe Iris landmark model. Finds the iris centre inside each eye for the Follow the light movement (Sources/Recognition/IrisLocator.swift). Compiled by build.sh into IrisLandmarks.mlmodelc. Optional: without it the pixel pupil search is used.",
+      "repoPaths": [
+        "Resources/IrisLandmarks.mlpackage"
+      ],
+      "bundledAs": "Contents/Resources/IrisLandmarks.mlmodelc",
+      "byteIdentity": {
+        "files": [
+          {
+            "path": "Resources/IrisLandmarks.mlpackage/Manifest.json",
+            "bytes": 617,
+            "sha256": "6524ccef69b5dafff6282fc1dc8e78cb84f6574ba29b75b729cdd5d9bbb1eac3"
+          },
+          {
+            "path": "Resources/IrisLandmarks.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+            "bytes": 141906,
+            "sha256": "0283c694dec635e23e2c17eff26d51b62be1bd5cf953ef6cbdf2c49168ca2596"
+          },
+          {
+            "path": "Resources/IrisLandmarks.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+            "bytes": 1325790,
+            "sha256": "4bf30cd2b9560619c6f107445f54915edb873e138586ddbdfa753df8e378a383"
+          }
+        ]
+      },
+      "provenance": {
+        "summary": "Google MediaPipe Iris landmark model (google-ai-edge/mediapipe, mediapipe/modules/iris_landmark/iris_landmark.tflite), as ported to PyTorch weights irislandmarks.pth by cedriclmenard/irislandmarks.pytorch, converted to Core ML on 2026-09-29 with coremltools 9.0 / torch 2.14.0 (ImageType 64x64 RGB, scale 1/255). Parity with the PyTorch weights checked on the conversion input: max iris difference 0.05 px.",
+        "evidenceRefs": [
+          "ThirdParty/MediaPipeIris/SOURCE.md",
+          "https://github.com/cedriclmenard/irislandmarks.pytorch",
+          "https://github.com/google-ai-edge/mediapipe/tree/master/mediapipe/modules/iris_landmark"
+        ],
+        "status": "converted-from-published-weights"
+      },
+      "license": {
+        "summary": "MediaPipe is Apache License 2.0 (repository licence, checked 2026-09-29 via the GitHub API). The PyTorch port is Apache License 2.0 (LICENSE copied to ThirdParty/MediaPipeIris/LICENSE). Apache 2.0 permits redistribution in the app bundle with the licence and notice included.",
+        "grant": "Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0)",
+        "evidenceRefs": [
+          "ThirdParty/MediaPipeIris/LICENSE",
+          "https://github.com/google-ai-edge/mediapipe/blob/master/LICENSE"
+        ],
+        "redistributionScope": [
+          "bundled-app-distribution"
+        ]
+      },
+      "clearance": "cleared"
     }
   ]
 }

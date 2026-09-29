@@ -179,7 +179,11 @@ final class FaceEnrollmentStore {
 	/// so enrolments recorded under the base identifier keep comparing.
 	var embedder: any FaceEmbedder {
 		AdjustedThresholdEmbedder(
-			base: baseEmbedder, offset: Preferences.shared.recognitionSensitivity.thresholdOffset)
+			base: baseEmbedder,
+			// Far detection accepts smaller faces, whose prints are noisier, so it asks
+			// for a slightly closer match.
+			offset: Preferences.shared.recognitionSensitivity.thresholdOffset
+				+ Preferences.shared.detectionDistance.thresholdOffset)
 	}
 
 	var isEnrolled: Bool { !faces.isEmpty }
@@ -354,8 +358,11 @@ final class FaceEnrollmentStore {
 	func learn(_ print: Faceprint, for faceID: UUID) {
 		guard let index = faces.firstIndex(where: { $0.id == faceID }) else { return }
 		guard print.source == faces[index].embedder else { return }
-		guard let original = try? FaceTemplateMatcher(templates: [faces[index].prints], embedder: embedder)
-			.bestMatch(to: print), original.score >= embedder.matchThreshold + 0.05 else { return }
+		// Anchored to the standard threshold, not the sensitivity-adjusted one, so a
+		// Relaxed setting can never teach Gaze a weaker print of the face.
+		let anchor = max(baseEmbedder.matchThreshold, embedder.matchThreshold) + 0.05
+		guard let original = try? FaceTemplateMatcher(templates: [faces[index].prints], embedder: baseEmbedder)
+			.bestMatch(to: print), original.score >= anchor else { return }
 		guard !faces[index].learnedPrints.contains(where: { embedder.similarity(print, $0) > 0.97 }) else { return }
 		var updated = faces[index]
 		updated.learnedPrints.append(print)

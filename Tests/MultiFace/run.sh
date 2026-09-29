@@ -23,6 +23,7 @@ while cmp -s "$OUT/A.jpg" "$OUT/B.jpg" && [ "$tries" -lt 3 ]; do
 done
 
 xcrun swiftc -warnings-as-errors ${SDK_FLAGS[@]+"${SDK_FLAGS[@]}"} -target "$(host_target)" \
+	"$ROOT/Sources/Recognition/ModelResidency.swift" \
 	"$ROOT/Sources/Recognition/FaceEmbedder.swift" \
 	"$ROOT/Sources/Recognition/FaceAligner.swift" \
 	"$ROOT/Tests/MultiFace/main.swift" \

@@ -6,5 +6,6 @@ trap 'rm -rf "$BUILD"' EXIT
 xcrun swiftc -parse-as-library -warnings-as-errors \
 	"$ROOT/Sources/Camera/FacePose.swift" \
 	"$ROOT/Sources/Recognition/LivenessChallenge.swift" \
+	"$ROOT/Tests/Support/PupilLocatorStub.swift" \
 	"$ROOT/Tests/HeadPose/Tests.swift" -o "$BUILD/tests"
 "$BUILD/tests" "$@"

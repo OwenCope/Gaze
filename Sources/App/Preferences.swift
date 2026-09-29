@@ -28,8 +28,8 @@ final class Preferences {
 
 		var title: String {
 			switch self {
-			case .normal: return "Normal"
-			case .semiLiquidGlass: return "Semi Liquid Glass"
+			case .normal: return "Solid"
+			case .semiLiquidGlass: return "Frosted glass"
 			case .liquidGlass: return "Liquid Glass"
 			}
 		}
@@ -142,6 +142,15 @@ final class Preferences {
 			}
 		}
 
+		/// The name under each step of the Settings slider.
+		var shortTitle: String {
+			switch self {
+			case .none: return "None"
+			case .one: return "One"
+			case .two: return "Two"
+			}
+		}
+
 		/// Missing or invalid stored values fall back to `.two`, so installations
 		/// that predate this setting keep their current behaviour.
 		static func resolve(stored: Any?) -> UnlockMovementCount {
@@ -166,6 +175,15 @@ final class Preferences {
 			}
 		}
 
+		/// The name under each step of the Settings slider.
+		var shortTitle: String {
+			switch self {
+			case .relaxed: return "Relaxed"
+			case .standard: return "Standard"
+			case .strict: return "Strict"
+			}
+		}
+
 		/// Added to the embedder's match threshold. Relaxed helps in dim rooms;
 		/// strict is harder to fool.
 		var thresholdOffset: Float {
@@ -176,6 +194,7 @@ final class Preferences {
 			}
 		}
 	}
+
 
 	private enum Key {
 		static let appTheme = "appTheme"
@@ -191,7 +210,11 @@ final class Preferences {
 		static let requireBuiltInCamera = "requireBuiltInCamera"
 		static let allowExternalCamera = "allowExternalCamera"
 		static let unlockMovementCount = "unlockMovementCount"
+		static let lookMovement = "lookMovement"
+		static let disabledMovements = "disabledMovements"
 		static let recognitionSensitivity = "recognitionSensitivity"
+		static let detectionDistance = "detectionDistance"
+		static let showsMenuBarIcon = "showsMenuBarIcon"
 		static let unlockBackend = "unlockBackend"
 		static let pausedUntil = "pausedUntil"
 		static let walkAwayLock = "walkAwayLock"
@@ -309,9 +332,33 @@ final class Preferences {
 		didSet { defaults.set(unlockMovementCount.rawValue, forKey: Key.unlockMovementCount) }
 	}
 
+	/// Whether "Look at the light" is one of the movements Gaze picks from. On by default.
+	var lookMovement: Bool {
+		didSet { defaults.set(lookMovement, forKey: Key.lookMovement) }
+	}
+
+	/// Movements Gaze may not ask for, as LivenessChallenge.Movement raw values
+	/// ("turn", "nod", "blink", "openMouth", "followLight"). Empty means all.
+	var disabledMovements: Set<String> {
+		didSet { defaults.set(Array(disabledMovements).sorted(), forKey: Key.disabledMovements) }
+	}
+
 	/// Strictness of the lock-screen face match; existing installations default to standard.
 	var recognitionSensitivity: RecognitionSensitivity {
 		didSet { defaults.set(recognitionSensitivity.rawValue, forKey: Key.recognitionSensitivity) }
+	}
+
+	/// How far away Gaze can recognise a face; existing installations default to standard.
+	var detectionDistance: DetectionDistance {
+		didSet { defaults.set(detectionDistance.rawValue, forKey: Key.detectionDistance) }
+	}
+
+	/// Whether Gaze keeps its icon in the menu bar. On by default.
+	var showsMenuBarIcon: Bool {
+		didSet {
+			defaults.set(showsMenuBarIcon, forKey: Key.showsMenuBarIcon)
+			NotificationCenter.default.post(name: .gazeMenuBarVisibilityChanged, object: nil)
+		}
 	}
 
 	var unlockBackend: UnlockBackendKind {
@@ -386,9 +433,16 @@ final class Preferences {
 		allowExternalCamera = defaults.object(forKey: Key.allowExternalCamera) as? Bool ?? false
 		unlockMovementCount = UnlockMovementCount.resolve(
 			stored: defaults.object(forKey: Key.unlockMovementCount))
+		lookMovement = defaults.object(forKey: Key.lookMovement) as? Bool ?? true
+		disabledMovements = Set(defaults.stringArray(forKey: Key.disabledMovements)
+			?? (defaults.object(forKey: Key.lookMovement) as? Bool == false ? ["followLight"] : []))
 		recognitionSensitivity =
 			defaults.string(forKey: Key.recognitionSensitivity)
 			.flatMap(RecognitionSensitivity.init(rawValue:)) ?? .standard
+		detectionDistance =
+			defaults.string(forKey: Key.detectionDistance)
+			.flatMap(DetectionDistance.init(rawValue:)) ?? .standard
+		showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
 		unlockBackend =
 			defaults.string(forKey: Key.unlockBackend)
 			.flatMap(UnlockBackendKind.init(rawValue:)) ?? .none
@@ -417,4 +471,9 @@ final class Preferences {
 		notchHeightAdjust = defaults.double(forKey: Key.notchHeightAdjust)
 		notchWidthAdjust = defaults.double(forKey: Key.notchWidthAdjust)
 	}
+}
+
+extension Notification.Name {
+	/// Posted from `showsMenuBarIcon`'s didSet so the menu bar icon follows the setting.
+	static let gazeMenuBarVisibilityChanged = Notification.Name("GazeMenuBarVisibilityChanged")
 }

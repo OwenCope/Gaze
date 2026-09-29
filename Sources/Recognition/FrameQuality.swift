@@ -16,8 +16,14 @@ import Foundation
 enum FrameQuality {
 
 	/// Smallest face, as a fraction of frame height, worth trying to identify. Below this the
-	/// face is too far away to be someone leaning in — a bystander, not an unlock attempt.
-	static let minFaceHeight: CGFloat = 0.18
+	/// face is too far away to be an unlock attempt — a bystander, not someone leaning in.
+	/// Follows the Detection distance setting: far accepts smaller faces than the default.
+	/// Read straight from the defaults rather than `Preferences.shared`: this runs on
+	/// the camera's queue, and the preferences object belongs to the main actor.
+	static var minFaceHeight: CGFloat {
+		let raw = UserDefaults.standard.string(forKey: "detectionDistance") ?? ""
+		return (DetectionDistance(rawValue: raw) ?? .standard).minFaceHeight
+	}
 
 	/// Vision's own capture-quality floor. Its scale is roughly 0…1 and a well-framed face
 	/// sits far above this, so only motion-blurred or barely-detected faces fall under it.
@@ -58,4 +64,40 @@ enum FrameQuality {
 
 	/// Whether this frame is good enough to base an unlock decision on.
 	static func isUsable(_ sample: FaceSample) -> Bool { rejection(sample) == nil }
+}
+
+/// How far away Gaze can recognise a face.
+///
+/// Close needs the face to fill more of the frame; far accepts a smaller
+/// face and asks for a slightly closer match, since distant faces give noisier prints.
+enum DetectionDistance: String, CaseIterable, Sendable {
+	case close
+	case standard
+	case far
+
+	/// Smallest face height, as a fraction of frame height, worth identifying.
+	var minFaceHeight: CGFloat {
+		switch self {
+		case .close: return 0.20
+		case .standard: return 0.14
+		case .far: return 0.10
+		}
+	}
+
+	/// Added to the embedder's match threshold alongside the sensitivity offset.
+	var thresholdOffset: Float {
+		switch self {
+		case .close: return 0
+		case .standard: return 0
+		case .far: return 0.03
+		}
+	}
+
+	var title: String {
+		switch self {
+		case .close: return "Close"
+		case .standard: return "Default"
+		case .far: return "Far"
+		}
+	}
 }

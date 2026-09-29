@@ -8,6 +8,13 @@ import os
 /// samples never saw the dark it was meant to light.
 enum SceneBrightness {
 	private static let latest = OSAllocatedUnfairLock<(value: Float, at: ContinuousClock.Instant)?>(initialState: nil)
+	/// When the current run of dark readings began, and when this camera session's
+	/// first reading arrived.
+	private static let streak = OSAllocatedUnfairLock<(darkSince: ContinuousClock.Instant?, firstAt: ContinuousClock.Instant?)>(
+		initialState: (nil, nil))
+
+	/// Mean brightness below which the room counts as dark.
+	static let darkThreshold: Float = 0.12
 	private static let counter = OSAllocatedUnfairLock(initialState: 0)
 
 	/// Samples every fourth frame; each read touches a few thousand bytes.
@@ -18,6 +25,25 @@ enum SceneBrightness {
 		}
 		guard due, let value = FrameBrightness.mean(buffer) else { return }
 		latest.withLock { $0 = (value, time) }
+		streak.withLock { state in
+			if state.firstAt == nil { state.firstAt = time }
+			state.darkSince = value < darkThreshold ? (state.darkSince ?? time) : nil
+		}
+	}
+
+	/// Whether the room is really dark, not just a camera still waking up.
+	///
+	/// A camera's first frames are dark in any room while its exposure settles, which
+	/// turned the edge light on in bright rooms. So this ignores the first 1.5 s of a
+	/// session and then needs a full second of unbroken dark readings.
+	static func isDark(now: ContinuousClock.Instant = .now) -> Bool {
+		guard let reading = current(now: now), reading < darkThreshold else { return false }
+		return streak.withLock { state in
+			guard let firstAt = state.firstAt, let darkSince = state.darkSince else { return false }
+			let settledAt = firstAt.advanced(by: .milliseconds(1500))
+			let from = max(darkSince, settledAt)
+			return now >= from && from.duration(to: now) >= .seconds(1)
+		}
 	}
 
 	/// The most recent reading, if it is no older than a second.
@@ -28,7 +54,10 @@ enum SceneBrightness {
 		}
 	}
 
-	static func reset() { latest.withLock { $0 = nil } }
+	static func reset() {
+		latest.withLock { $0 = nil }
+		streak.withLock { $0 = (nil, nil) }
+	}
 }
 
 /// Mean brightness of a camera frame, 0 (black) to 1 (white).

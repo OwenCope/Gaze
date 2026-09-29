@@ -21,6 +21,8 @@ enum BiometricGate {
 		case storePassword = "save your Mac password"
 		case addEnrollment = "add a face"
 		case replaceAutofillIdentity = "trust the selected application with a saved autofill password"
+		case toggleAppLock = "lock or unlock an app"
+		case changeAppLock = "change App Lock"
 	}
 
 	static var isAvailable: Bool {

@@ -97,6 +97,7 @@ final class CameraController {
 	init(accessScope: CameraSessionGate.Scope = .foreground, allowsBystanders: Bool? = nil) {
 		sessionGate = CameraSessionGate(scope: accessScope)
 		capture.allowsBystanders = allowsBystanders ?? (accessScope == .lockScreen)
+		capture.fastFrames = accessScope == .lockScreen
 		for name in [AVCaptureSession.runtimeErrorNotification, AVCaptureSession.wasInterruptedNotification] {
 			observers.append(NotificationCenter.default.addObserver(forName: name, object: capture.session, queue: .main) { [weak self] _ in
 				MainActor.assumeIsolated {
@@ -235,6 +236,8 @@ private final class CameraCaptureDriver: @unchecked Sendable {
 	private let frameQueue = DispatchQueue(label: "com.gazeunlock.Gaze.capture", qos: .userInitiated)
 	private var proxy: SampleProxy?
 	var allowsBystanders = false
+	/// Smaller frames reach a first match sooner; enrolment keeps full size.
+	var fastFrames = false
 
 	func start(with device: AVCaptureDevice,
 		onSample: @escaping @Sendable (FaceSample?, FaceAbsence?, ContinuousClock.Instant) -> Void) async throws -> Bool {
@@ -262,7 +265,18 @@ private final class CameraCaptureDriver: @unchecked Sendable {
 		session.beginConfiguration()
 		defer { session.commitConfiguration() }
 
-		session.sessionPreset = .high
+		session.sessionPreset = fastFrames && session.canSetSessionPreset(.hd1280x720) ? .hd1280x720 : .high
+
+		if fastFrames {
+			// Cap the sensor at 30 fps so Vision sees lighter frames sooner.
+			do {
+				try device.lockForConfiguration()
+				defer { device.unlockForConfiguration() }
+				if device.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= 30 && 30 <= $0.maxFrameRate }) {
+					device.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
+				}
+			} catch {}
+		}
 
 		session.inputs.forEach(session.removeInput)
 		let input = try AVCaptureDeviceInput(device: device)
@@ -328,7 +342,11 @@ private final class SampleProxy: NSObject, AVCaptureVideoDataOutputSampleBufferD
 	static func candidateFaces(in faces: [VNFaceObservation], allowsBystanders: Bool) -> [VNFaceObservation] {
 		if faces.count == 1 { return faces }
 		guard allowsBystanders, faces.count > 1 else { return [] }
-		return Array(faces.sorted { $0.boundingBox.area > $1.boundingBox.area }.prefix(maximumCandidates))
+		// Faces below FrameQuality.minFaceHeight can never be used downstream
+		// (LockWatcher filters every candidate through FrameQuality.rejection before
+		// matching), so drop them before the landmark pass instead of analysing them.
+		return Array(faces.filter { $0.boundingBox.height >= FrameQuality.minFaceHeight }
+			.sorted { $0.boundingBox.area > $1.boundingBox.area }.prefix(maximumCandidates))
 	}
 
 	func captureOutput(

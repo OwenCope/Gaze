@@ -191,7 +191,8 @@ struct LandmarkEmbedder: FaceEmbedder {
 /// multi-array output. Models with a different preprocessing contract are rejected.
 ///
 /// `@unchecked` because `MLModel` is not marked `Sendable`. Copies share a lock
-/// that serializes predictions; each caller owns its crop and input tensor.
+/// that serializes predictions; each caller owns its crop, and the input tensor is
+/// a per-instance reuse buffer filled under the same lock.
 struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 	let identifier: String
 	let usesCosineSimilarity = true
@@ -201,11 +202,15 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 	/// and low-light validation are still required with the actual bundled weights.
 	let matchThreshold: Float = 0.45
 
-	private let model: MLModel
+	private let slot: ModelSlot<MLModel>
 	private let predictionLock = NSLock()
 	private let inputName: String
 	private let outputName: String
 	private let side: Int
+	/// Reuse buffers sized by `side`: one output tensor plus three planar byte planes.
+	/// Copies of the embedder share one scratch (like the lock); every access happens
+	/// under `predictionLock`, which now covers filling as well as predicting.
+	private let scratch: TensorScratch
 
 	/// Bump whenever the bundled model file changes. It becomes part of the print's
 	/// `source`, and prints with different sources never compare (similarity returns 0).
@@ -214,10 +219,10 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 	static let modelTag = "arcface-2.73"
 
 	init?() {
-		guard
-			let url = Bundle.main.url(forResource: "FaceEmbedding", withExtension: "mlmodelc"),
-			let model = try? MLModel(contentsOf: url)
-		else { return nil }
+		guard let url = Bundle.main.url(forResource: "FaceEmbedding", withExtension: "mlmodelc") else { return nil }
+		let slot = ModelSlot<MLModel> { try? MLModel(contentsOf: url) }
+		// Validate from this first load; the instance stays resident in the slot.
+		guard let model = slot.withModel({ $0 }) else { return nil }
 
 		// Models in this family take a planar [1, 3, S, S] tensor rather than an image
 		// feature, so accept a multi-array input and read the side length from its shape.
@@ -234,20 +239,23 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 			output.multiArrayConstraint != nil
 		else { return nil }
 
-		self.model = model
+		self.slot = slot
 		self.inputName = input.name
 		self.outputName = output.name
 		self.side = constraint.shape[3].intValue
+		guard let scratch = TensorScratch(side: self.side) else { return nil }
+		self.scratch = scratch
 		// Version the identifier so swapping models invalidates old enrolments rather
 		// than silently comparing prints from different feature spaces.
 		self.identifier = "coreml:\(self.side)x\(self.side):\(Self.modelTag)"
 	}
 
 	func warmUp() {
+		slot.preload()
 		guard let tensor = try? MLMultiArray(shape: [1, 3, NSNumber(value: side), NSNumber(value: side)], dataType: .float32),
 			let input = try? MLDictionaryFeatureProvider(dictionary: [inputName: MLFeatureValue(multiArray: tensor)])
 		else { return }
-		_ = try? model.prediction(from: input)
+		_ = slot.withModel { try? $0.prediction(from: input) }
 	}
 
 	func embed(_ sample: FaceSample) -> Faceprint? {
@@ -282,12 +290,20 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 	}
 
 	/// One prediction on an aligned crop: tensor in, L2-normalised print out.
+	///
+	/// Fill and prediction share `predictionLock` because the scratch tensor is reused
+	/// across frames: filling outside the lock would race the next frame's fill.
 	private func predict(_ crop: CVPixelBuffer) -> Faceprint? {
+		// Local reference: the slot lock is released before predicting, so an
+		// unload sweep never waits on a frame (and vice versa beyond a load).
+		guard let model = slot.withModel({ $0 }) else { return nil }
 		guard
-			let tensor = Self.tensor(from: crop, side: side),
-			let output = predictionLock.withLock({
-				try? model.prediction(from: try MLDictionaryFeatureProvider(
-					dictionary: [inputName: MLFeatureValue(multiArray: tensor)]))
+			let output = predictionLock.withLock({ () -> MLFeatureProvider? in
+				guard let tensor = self.fillTensor(from: crop),
+					let input = try? MLDictionaryFeatureProvider(
+						dictionary: [self.inputName: MLFeatureValue(multiArray: tensor)])
+				else { return nil }
+				return try? model.prediction(from: input)
 			}),
 			let array = output.featureValue(for: outputName)?.multiArrayValue,
 			(1...4096).contains(array.count)
@@ -304,43 +320,86 @@ struct CoreMLEmbedder: FaceEmbedder, @unchecked Sendable {
 		return Faceprint.normalized(values, source: identifier)
 	}
 
-	/// Converts a BGRA crop into the planar RGB tensor the model expects.
+	/// Converts a BGRA crop into the planar RGB tensor the model expects, reusing the
+	/// per-instance scratch tensor instead of allocating one per frame.
 	///
 	/// Two conversions matter and both are easy to get subtly wrong: the buffer is BGRA
 	/// and interleaved, while the model wants RGB in separate channel planes; and pixels
 	/// must be scaled to [-1, 1] rather than [0, 1], which is the convention this model
 	/// family is trained with. Getting either wrong yields embeddings that look valid but
 	/// match nobody.
-	private static func tensor(from buffer: CVPixelBuffer, side: Int) -> MLMultiArray? {
+	///
+	/// Original per-pixel math, preserved exactly (planar RGB, NCHW [1, 3, S, S]):
+	///   plane 0[i] = (r - 127.5) / 128.0
+	///   plane 1[i] = (g - 127.5) / 128.0
+	///   plane 2[i] = (b - 127.5) / 128.0
+	/// where r, g, b are the crop bytes at offsets 2, 1, 0 of each BGRA pixel.
+	/// The vector path computes `Float(byte) * (1/128) + (-127.5/128)` instead. 1/128
+	/// and 127.5/128 are exactly representable in binary32, the byte-to-float conversion
+	/// is exact, and scaling by a power of two is exact, so this performs the same single
+	/// rounding of the same real value as `(c - 127.5) / 128.0` — bit-identical output.
+	private func fillTensor(from buffer: CVPixelBuffer) -> MLMultiArray? {
 		guard
-			let array = try? MLMultiArray(
-				shape: [1, 3, NSNumber(value: side), NSNumber(value: side)], dataType: .float32)
-		else { return nil }
-
-		guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
+			CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
 			CVPixelBufferGetWidth(buffer) == side, CVPixelBufferGetHeight(buffer) == side,
-			CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
+			CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess
+		else { return nil }
 		defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
 
 		guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
-		let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
-		let pixels = base.assumingMemoryBound(to: UInt8.self)
+		var src = vImage_Buffer(
+			data: base, height: vImagePixelCount(side), width: vImagePixelCount(side),
+			rowBytes: CVPixelBufferGetBytesPerRow(buffer))
 
-		let out = array.dataPointer.assumingMemoryBound(to: Float32.self)
-		let plane = side * side
-
-		for y in 0..<side {
-			let row = pixels + y * rowBytes
-			for x in 0..<side {
-				let px = row + x * 4  // BGRA
-				let b = Float32(px[0]), g = Float32(px[1]), r = Float32(px[2])
-				let i = y * side + x
-				out[i] = (r - 127.5) / 128.0
-				out[plane + i] = (g - 127.5) / 128.0
-				out[2 * plane + i] = (b - 127.5) / 128.0
+		// Split the interleaved bytes into planar R, G, B. vImage channel indices are
+		// positional: byte 0 = B, byte 1 = G, byte 2 = R, byte 3 = A.
+		let plane = scratch.plane
+		var ok = true
+		for (planeIndex, channel) in [(0, 2), (1, 1), (2, 0)] {
+			var dest = vImage_Buffer(
+				data: scratch.planar + planeIndex * plane,
+				height: vImagePixelCount(side), width: vImagePixelCount(side),
+				rowBytes: side)
+			if vImageExtractChannel_ARGB8888(&src, &dest, channel, vImage_Flags(kvImageNoFlags))
+				!= kvImageNoError
+			{
+				ok = false
 			}
 		}
+		guard ok else { return nil }
 
-		return array
+		// Bytes to [-1, 1] floats, one plane at a time, straight into the tensor.
+		let out = scratch.tensor.dataPointer.assumingMemoryBound(to: Float.self)
+		var scale = Float(1.0 / 128.0)
+		var shift = Float(-127.5 / 128.0)
+		for planeIndex in 0..<3 {
+			let bytes = scratch.planar + planeIndex * plane
+			let floats = out + planeIndex * plane
+			vDSP_vfltu8(bytes, 1, floats, 1, vDSP_Length(plane))
+			vDSP_vsmsa(floats, 1, &scale, &shift, floats, 1, vDSP_Length(plane))
+		}
+
+		return scratch.tensor
+	}
+
+	/// Per-instance reuse buffers: one output tensor plus three planar byte planes,
+	/// all sized by `side` at init. Shared by copies of the embedder under its lock.
+	private final class TensorScratch: @unchecked Sendable {
+		let tensor: MLMultiArray
+		let planar: UnsafeMutablePointer<UInt8>
+		let plane: Int
+
+		init?(side: Int) {
+			let plane = side * side
+			guard plane > 0,
+				let tensor = try? MLMultiArray(
+					shape: [1, 3, NSNumber(value: side), NSNumber(value: side)], dataType: .float32)
+			else { return nil }
+			self.tensor = tensor
+			self.planar = UnsafeMutablePointer<UInt8>.allocate(capacity: 3 * plane)
+			self.plane = plane
+		}
+
+		deinit { planar.deallocate() }
 	}
 }

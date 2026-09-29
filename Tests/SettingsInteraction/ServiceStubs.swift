@@ -18,6 +18,7 @@ import SwiftUI
 @Observable @MainActor final class Preferences {
     static let shared = Preferences()
     var tamperProtection = false
+    var showsMenuBarIcon = true
 }
 
 @MainActor enum LoginItem {

@@ -251,12 +251,10 @@ enum NotchGlass {
 		min(0.96, 0.92 - 0.80 * transparency + boost)
 	}
 
-	/// Raised from 0.18. At that tint the panel was so faint you could not tell it was
-	/// there, which makes it not a style but an absence — glass you cannot see is just a
-	/// hole. Dark enough to read as a panel, light enough that the wallpaper still moves
-	/// through it.
+	/// Clearer than it was: a lower base tint so the wallpaper moves through it,
+	/// with a specular edge over the glass so it still reads as a panel.
 	static func liquidTint(boost: Double) -> Double {
-		min(0.7, 0.36 + boost)
+		min(0.55, 0.20 + boost)
 	}
 }
 
@@ -317,14 +315,10 @@ struct NotchCapsule: View {
 
 	private static var islandGap: CGFloat { IslandMetrics.gap }
 
-	/// A square with one radius on all four corners, the way Apple Pay's card drops from the
-	/// Dynamic Island.
-	///
-	/// It was a wide rectangle, which reads as a panel that happens to be detached rather
-	/// than as an object the notch handed you. Equal sides and equal corners is what makes it
-	/// a *thing*.
+	/// A rounded card hanging below the housing, the way Apple Pay's drops from the
+	/// Dynamic Island — a continuous squircle, never a wide slab.
 	private var islandShape: RoundedRectangle {
-		RoundedRectangle(cornerRadius: islandSide * 0.28, style: .continuous)
+		RoundedRectangle(cornerRadius: min(28, islandHeight * 0.32), style: .continuous)
 	}
 
 	/// One dimension, used for both.
@@ -519,8 +513,9 @@ struct NotchCapsule: View {
 				.background { earShape.fill(.ultraThinMaterial) }
 		case .liquidGlass:
 			Color.clear.glassEffect(
-				.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
+				.clear.tint(.black.opacity(liquidTint)),
 				in: earShape)
+				.overlay { liquidEdge(over: earShape) }
 		}
 	}
 
@@ -661,8 +656,9 @@ struct NotchCapsule: View {
 				.background { shape.fill(.ultraThinMaterial) }
 		case .liquidGlass:
 			Color.clear.glassEffect(
-				.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
+				.clear.tint(.black.opacity(liquidTint)),
 				in: shape)
+				.overlay { liquidEdge(over: shape) }
 		}
 	}
 
@@ -909,12 +905,19 @@ struct NotchCapsule: View {
 	private var islandBody: some View {
 		islandShape
 			.fill(islandFill)
-			.background { islandBacking }
+			.background { islandBacking.shadow(color: .black.opacity(0.35), radius: 18, y: 8) }
 			.overlay { islandShape.fill(islandGreen).blendMode(.sourceAtop) }
-			.overlay { islandShape.strokeBorder(.white.opacity(0.16), lineWidth: 1) }
-			// Softer and tighter than it was. A shadow large enough to need a lot of margin
-			// is a shadow large enough to get clipped by something.
-			.shadow(color: .black.opacity(0.42), radius: 10, y: 4)
+			.overlay { islandEdge }
+	}
+
+	/// Liquid glass gets the specular edge; Solid and Frosted get a hairline.
+	@ViewBuilder
+	private var islandEdge: some View {
+		if model.style == .liquidGlass {
+			liquidEdge(over: islandShape)
+		} else {
+			islandShape.strokeBorder(.white.opacity(0.10), lineWidth: 0.5)
+		}
 	}
 
 	/// The island's own colour, at the density the chosen style asks for.
@@ -926,7 +929,7 @@ struct NotchCapsule: View {
 			return .black.opacity(
 				NotchGlass.semiTint(transparency: model.transparency, boost: lightWallpaperBoost))
 		case .liquidGlass:
-			return .black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))
+			return .black.opacity(liquidTint)
 		}
 	}
 
@@ -976,8 +979,9 @@ struct NotchCapsule: View {
 				// it rather than just being a dark tint over a blur.
 				Color.clear
 					.glassEffect(
-						.regular.tint(.black.opacity(NotchGlass.liquidTint(boost: lightWallpaperBoost))),
+						.clear.tint(.black.opacity(liquidTint)),
 						in: shape)
+					.overlay { liquidEdge(over: shape) }
 					.mask { fade }
 			}
 		}
@@ -1016,6 +1020,24 @@ struct NotchCapsule: View {
 
 	private var glassTint: Double {
 		NotchGlass.semiTint(transparency: model.transparency, boost: lightWallpaperBoost)
+	}
+
+	/// Liquid glass follows the Transparency slider too: clearer as it rises.
+	/// Scaled rather than direct, so full transparency stays a panel, not a hole.
+	private var liquidTint: Double {
+		min(0.6, max(0, NotchGlass.liquidTint(boost: lightWallpaperBoost) * (1.2 - model.transparency)))
+	}
+
+	/// Specular edge over liquid glass, so the clearer tint still reads as a panel.
+	private func liquidEdge<S: Shape>(over shape: S) -> some View {
+		// A centred stroke clipped to the shape, so it sits inside like strokeBorder
+		// but works for the custom panel shape too.
+		shape.stroke(
+			LinearGradient(
+				colors: [.white.opacity(0.45), .white.opacity(0.08), .white.opacity(0.18)],
+				startPoint: .top, endPoint: .bottom),
+			lineWidth: 1.5)
+			.clipShape(shape)
 	}
 
 	/// Extra black mixed in when the wallpaper behind the panel is bright.

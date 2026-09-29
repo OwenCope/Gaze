@@ -32,6 +32,8 @@ final class NotchCapsuleController {
 	/// Height of the region hidden behind the physical cutout, so the glyph can be
 	/// centred in the visible part rather than in the whole window.
 	private var notchInset: CGFloat = 0
+	/// Last VoiceOver announcement, so the same challenge prompt is not read twice.
+	private var lastAnnouncedText: String?
 
 	/// One model for the panel's whole lifetime. Mutating it animates; replacing the
 	/// hosting view's root would reset the view's state and animate nothing.
@@ -85,6 +87,7 @@ final class NotchCapsuleController {
 		)
 		// After ordering in, never before: the window number does not exist until then.
 		LockScreenSpace.shared.adopt(window)
+		syncLookTarget(for: phase)
 
 		// The window itself does not fade — the panel grows out of the notch instead.
 		// Fading the window would make the part behind the cutout briefly visible as a
@@ -110,8 +113,54 @@ final class NotchCapsuleController {
 
 	func update(phase: NotchCapsuleModel.Phase) {
 		guard window != nil else { return }
+		let previous = model.phase
 		model.phase = phase
 		model.showsCaptions = Preferences.shared.showNotchCaptions
+		if phase != previous {
+			announce(phase: phase)
+		}
+		syncLookTarget(for: phase)
+	}
+
+	/// The edge light follows the look prompts and nothing else: up while an
+	/// outward look is asked for, down for every other phase. Blink shares the
+	/// look symbol but has no sideways hint, so the hint check keeps it out.
+	private func syncLookTarget(for phase: NotchCapsuleModel.Phase) {
+		if case .challenge(_, let symbol, let hintX, _, _, let isReturningToRest) = phase,
+			symbol == "eye.fill", !isReturningToRest, hintX != 0 {
+			LookTargetOverlay.shared.show(side: hintX < 0 ? .leading : .trailing)
+		} else {
+			LookTargetOverlay.shared.hide()
+		}
+	}
+
+	/// Reads the new phase for VoiceOver, if it has anything worth saying.
+	private func announce(phase: NotchCapsuleModel.Phase) {
+		let text: String?
+		switch phase {
+		case .locked:
+			text = nil
+		case .scanning:
+			text = "Looking for your face"
+		case .notRecognised:
+			text = "Face not recognised"
+		case .spoofRejected:
+			text = "That looked like a photo or a screen"
+		case .challenge(_, _, _, _, _, let isReturningToRest) where isReturningToRest:
+			text = "Now look back at the screen"
+		case .challenge(let prompt, _, _, _, _, _):
+			text = prompt.isEmpty ? nil : prompt
+		case .pending:
+			text = "Waiting for macOS"
+		case .success, .unlocked:
+			text = "Unlocked"
+		}
+		guard let text else { return }
+		// The prompt is the announcement for challenges, so the same words twice in
+		// a row mean nothing new happened — other phases always read on change.
+		if case .challenge = phase, text == lastAnnouncedText { return }
+		lastAnnouncedText = text
+		announceForVoiceOver(text)
 	}
 
 	var canPresentGuidance: Bool {
@@ -119,6 +168,7 @@ final class NotchCapsuleController {
 	}
 
 	func hide(after delay: TimeInterval = 0) {
+		LookTargetOverlay.shared.hide()
 		dismissalTask?.cancel()
 		guard let window else { return }
 		dismissalTask = Task { [weak self, weak window] in
@@ -279,4 +329,13 @@ final class NotchCapsuleController {
 	}
 
 	// No render(): the model drives the view, so there is nothing to rebuild.
+}
+
+/// Posts a VoiceOver announcement, and does nothing when VoiceOver is off.
+fileprivate func announceForVoiceOver(_ text: String) {
+	guard !text.isEmpty, NSWorkspace.shared.isVoiceOverEnabled else { return }
+	NSAccessibility.post(
+		element: NSApp as Any,
+		notification: .announcementRequested,
+		userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
 }

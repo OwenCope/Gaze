@@ -156,3 +156,11 @@ via undocumented symbols (`SLSMainConnectionID`, `SLSSpaceCreate`,
 If they are unavailable, `canPresentGuidance` is false and the current unlock flow
 refuses password submission rather than presenting an invisible movement challenge.
 The symbols can change or be removed in any macOS release.
+
+## MediaPipe Iris
+
+`Resources/IrisLandmarks.mlpackage` is Google's MediaPipe Iris landmark model
+(https://github.com/google-ai-edge/mediapipe), Copyright Google LLC, licensed under the
+Apache License 2.0. The weights come from the PyTorch port at
+https://github.com/cedriclmenard/irislandmarks.pytorch (Apache License 2.0), converted to
+Core ML for Gaze. The licence text is in `ThirdParty/MediaPipeIris/LICENSE`.

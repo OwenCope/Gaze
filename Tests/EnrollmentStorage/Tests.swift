@@ -68,8 +68,10 @@ struct AdjustedThresholdEmbedder: FaceEmbedder {
 /// Only the sensitivity FaceEnrollment reads; standard adds nothing to the threshold.
 final class Preferences: @unchecked Sendable {
 	struct Sensitivity { let thresholdOffset: Float = 0 }
+	struct Distance { let thresholdOffset: Float = 0 }
 	static let shared = Preferences()
 	let recognitionSensitivity = Sensitivity()
+	let detectionDistance = Distance()
 }
 
 /// Models SecureVault.load/store semantics — one JSON blob that is either absent
