@@ -50,4 +50,38 @@ enum Keystrokes {
 		}
 		return events
 	}
+
+	/// Wipes the focused field before the password goes in.
+	///
+	/// A Space pressed to retry lands in the password box; typing after it would prepend
+	/// it to the password. ⌘→ to the end, then ⌘⌫ back to the start — positional keys,
+	/// so layout-independent (unlike ⌘A). Real ⌘ presses, so every event stays bare.
+	static func clearFieldEvents(
+		makeSource: () -> CGEventSource? = { CGEventSource(stateID: .privateState) },
+		makeEvent: (CGEventSource, CGKeyCode, Bool) -> CGEvent? = {
+			CGEvent(keyboardEventSource: $0, virtualKey: $1, keyDown: $2)
+		}
+	) throws -> [CGEvent] {
+		let command: CGKeyCode = 0x37
+		let rightArrow: CGKeyCode = 0x7C
+		let delete: CGKeyCode = 0x33
+		guard let source = makeSource(),
+			let commandDown = makeEvent(source, command, true),
+			let rightDown = makeEvent(source, rightArrow, true),
+			let rightUp = makeEvent(source, rightArrow, false),
+			let commandUp = makeEvent(source, command, false),
+			let commandDownAgain = makeEvent(source, command, true),
+			let deleteDown = makeEvent(source, delete, true),
+			let deleteUp = makeEvent(source, delete, false),
+			let commandUpAgain = makeEvent(source, command, false)
+		else { throw PreparationError.eventUnavailable }
+
+		let events = [commandDown, rightDown, rightUp, commandUp,
+			commandDownAgain, deleteDown, deleteUp, commandUpAgain]
+		for event in events {
+			event.flags = []
+			event.setIntegerValueField(.keyboardEventAutorepeat, value: 0)
+		}
+		return events
+	}
 }

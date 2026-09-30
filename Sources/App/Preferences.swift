@@ -337,6 +337,21 @@ final class Preferences {
 		didSet { defaults.set(lookMovement, forKey: Key.lookMovement) }
 	}
 
+	/// Unlock on the first frame that matches (and passes the photo and screen check)
+	/// instead of holding the match. Chosen per movement count, since the trade-off
+	/// differs: on by default with none or one movement, off with two.
+	func instantUnlock(for count: UnlockMovementCount) -> Bool {
+		defaults.object(forKey: "instantUnlock.\(count.rawValue)") as? Bool ?? (count != .two)
+	}
+
+	func setInstantUnlock(_ on: Bool, for count: UnlockMovementCount) {
+		defaults.set(on, forKey: "instantUnlock.\(count.rawValue)")
+		instantUnlockRevision += 1
+	}
+
+	/// Bumped when an instant-unlock choice changes, so Settings redraws.
+	var instantUnlockRevision = 0
+
 	/// Movements Gaze may not ask for, as LivenessChallenge.Movement raw values
 	/// ("turn", "nod", "blink", "openMouth", "followLight"). Empty means all.
 	var disabledMovements: Set<String> {

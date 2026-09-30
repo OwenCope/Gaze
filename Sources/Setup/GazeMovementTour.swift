@@ -70,26 +70,28 @@ struct GazeMovementTour: View {
 	}
 }
 
-/// The gliding light on the follow-the-light page: a small glowing dot that moves out
-/// from the centre, left then right, while the face stays still. Under Reduce Motion it
-/// holds still on one side.
+/// The gliding light on the follow-the-light page: the lock-screen light at tour
+/// scale, gliding out from the centre on the same clock the real challenge scores
+/// against, alternating sides each pass while the face stays still. Under Reduce
+/// Motion it holds still on one side.
 private struct GazeTourFollowLight: View {
 	@Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-	/// Each leg of the trip takes about 1.2 s; the full loop is centre-left-centre-right.
-	private static let leg: TimeInterval = 1.2
+	/// The lock-screen target's 44 pt glow and 18 pt core, scaled ~0.6.
+	private static let glowDiameter: CGFloat = 26
+	private static let coreDiameter: CGFloat = 11
 	private static let travel: CGFloat = 130
 
 	var body: some View {
 		TimelineView(.animation) { timeline in
 			ZStack {
 				Circle()
-					.fill(RadialGradient(colors: [.white.opacity(0.55), .white.opacity(0.18), .clear],
-						center: .center, startRadius: 2, endRadius: 18))
-					.frame(width: 36, height: 36)
+					.fill(RadialGradient(colors: [.white.opacity(0.55), .white.opacity(0)],
+						center: .center, startRadius: 0, endRadius: Self.glowDiameter / 2))
+					.frame(width: Self.glowDiameter, height: Self.glowDiameter)
 				Circle()
 					.fill(.white)
-					.frame(width: 12, height: 12)
+					.frame(width: Self.coreDiameter, height: Self.coreDiameter)
 			}
 			.offset(x: reduceMotion ? Self.travel : Self.offset(at: timeline.date))
 		}
@@ -98,15 +100,25 @@ private struct GazeTourFollowLight: View {
 		.accessibilityHidden(true)
 	}
 
-	private static func offset(at date: Date) -> CGFloat {
-		let position = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: leg * 4) / leg
-		let index = Int(position)
-		let eased = 0.5 - 0.5 * cos(.pi * (position - CGFloat(index)))
-		switch index {
-		case 0: return -travel * eased
-		case 1: return -travel * (1 - eased)
-		case 2: return travel * eased
-		default: return travel * (1 - eased)
+	/// The lock screen's pass: rest, glide out, hold, glide back (as in
+	/// LivenessChallenge.lookTargetPosition). Copied so setup builds without it.
+	private static let period = 1.3
+	private static func position(_ t: Double) -> Double {
+		func ease(_ u: Double) -> Double { let u = min(max(u, 0), 1); return u * u * (3 - 2 * u) }
+		switch t {
+		case ..<0.1: return 0
+		case ..<0.55: return ease((t - 0.1) / 0.45)
+		case ..<0.75: return 1
+		case ..<1.2: return 1 - ease((t - 0.75) / 0.45)
+		default: return 0
 		}
+	}
+
+	private static func offset(at date: Date) -> CGFloat {
+		let elapsed = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period * 2)
+		let cycle = Int(elapsed / period)
+		let position = Self.position(elapsed - Double(cycle) * period)
+		let side: CGFloat = cycle % 2 == 0 ? -1 : 1
+		return side * travel * CGFloat(position)
 	}
 }

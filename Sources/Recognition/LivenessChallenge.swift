@@ -86,6 +86,9 @@ final class LivenessChallenge {
 	/// Eyes/mouth need a "returned to rest" beat before the action counts, so the user has to
 	/// move *into* it rather than already being there.
 	private var eyesWereOpen = false
+	/// The person's own resting eye openness, the max of the baseline frames, so
+	/// blink thresholds scale to narrow eyes instead of assuming a wide-open rest.
+	private var baselineEyeOpenness: Float = 0
 	private var mouthWasClosed = false
 	private var baselineSamples = 0
 	private var movementSamples = 0
@@ -108,10 +111,13 @@ final class LivenessChallenge {
 	// proves little. Eyes that track a moving light, in time with it, for a whole
 	// pass are hard to fake and forgiving of a few noisy frames.
 	static let lookPeriod = 1.3
-	private static let lookMinSamples = 8
-	private static let lookMinCorrelation = 0.55
-	private static let lookMinRange = 0.05
+	private static let lookMinSamples = 7
+	private static let lookMinCorrelation = 0.45
+	private static let lookMinRange = 0.03
 	private static let lookFailureLimit = 3
+	/// Total passes before giving up, so short-sample passes that never count as
+	/// failures still can't loop forever.
+	private static let lookPassLimit = 6
 
 	/// When the light started its path, set by the lock-screen overlay so the light
 	/// and the scoring share one clock. Nil elsewhere (Test Recognition, tests): the
@@ -148,21 +154,27 @@ final class LivenessChallenge {
 		z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
 		z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
 		z ^= z >> 31
-		return Double(z >> 11) / Double(1 << 53) * 2 * Double.pi
+		// Left or right, tilted at most 20 degrees. With the lid opened wide the camera
+		// looks down at the face, the upper lids cover the irises, and up-and-down eye
+		// movement all but disappears; side to side stays readable at any angle.
+		let u = Double(z >> 11) / Double(1 << 53)
+		let side = u < 0.5 ? 0.0 : Double.pi
+		let tilt = (u.truncatingRemainder(dividingBy: 0.5) * 2 - 1) * (20 * Double.pi / 180)
+		return side + tilt
 	}
 
 	/// Eyes move less up and down than side to side for the same distance on screen,
 	/// and the light travels less far vertically. The expected vertical pupil shift per
 	/// unit of horizontal one; tune from Check eyes.
 	static let lookVerticalGain = 0.5
-	private static let lookMaxCrossTalk = 0.6
+	private static let lookMaxCrossTalk = 1.0  // The light is side to side now; up-down noise shouldn't fail a pass
 
 	/// Test hook; the lock screen uses the real clock.
 	var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 	private var ownLookOrigin: TimeInterval?
 	private var lookCycle: Int?
 	private var lookCycleValid = true
-	private var lookSamples: [(x: Double, y: Double?, target: Double)] = []
+	private var lookSamples: [(x: Double, y: Double?, target: Double, elapsed: Double)] = []
 	/// This frame's vertical gaze, set by the consume entry points; nil when unmeasured.
 	private var frameGazeY: Double?
 	private var baselineGazeY: Double?
@@ -170,8 +182,14 @@ final class LivenessChallenge {
 	/// Fixes every pass's direction, for tests. Radians, 0 = screen right, counter-clockwise.
 	var lookAngleOverride: Double?
 	private var lookFailures = 0
-	private static let eyeOpen: Float = 0.22
-	private static let eyeShut: Float = 0.14
+	/// One compact line per finished look pass ("n=12 r=0.61 range=0.07 cross=0.2
+	/// spoilt=false passed=true"), so real-hardware misses can be diagnosed from the log.
+	/// Kept for the whole attempt, across passes and movement switches, for the attempt log.
+	private(set) var lookPassLog: [String] = []
+	private var lookPassCount = 0
+	private static let blinkShutFraction: Float = 0.55
+	private static let blinkOpenFraction: Float = 0.8
+	private static let blinkDropFloor: Float = 0.03
 	private static let mouthClosed: Float = 0.16
 	private static let mouthOpen: Float = 0.32
 	var isBaselineReady: Bool { baselineSamples >= 3 }
@@ -296,11 +314,13 @@ final class LivenessChallenge {
 
 	func reset() {
 		isComplete = false
+		lookPassCount = 0
 		baseYaw = nil
 		basePitch = nil
 		baseYawSource = nil
 		basePitchSource = nil
 		eyesWereOpen = false
+		baselineEyeOpenness = 0
 		mouthWasClosed = false
 		baselineSamples = 0
 		movementSamples = 0
@@ -342,7 +362,22 @@ final class LivenessChallenge {
 		nilGazeSamples = 0
 	}
 
+	/// Eyes narrower than this, in camera pixels, are too far away for the iris model to
+	/// follow reliably (measured on Owen's MacBook Air: fine near, failing a little further).
+	static let lookMinEyeWidth: Double = 32
+
+	/// Swaps Follow the light for another movement when the face is too far for it.
+	/// Checked before the prompt shows, so a far-away person never sees it at all.
+	private func avoidLookWhenFar(_ sample: FaceSample) {
+		guard action.isLook, let eyeWidth = PupilLocator.eyeWidthPixels(sample),
+			eyeWidth < Self.lookMinEyeWidth else { return }
+		lookPassLog.append("too far for Follow the light (eyes \(Int(eyeWidth)) px); switched movement")
+		action = fallbackAction()
+		reset()
+	}
+
 	func prepareBaseline(_ sample: FaceSample) {
+		avoidLookWhenFar(sample)
 		let eyes2D = action.isLook ? PupilLocator.gaze(sample) : nil
 		frameGazeY = eyes2D?.y
 		prepareBaseline(yaw: sample.pose.yaw, pitch: sample.pose.pitch,
@@ -377,7 +412,12 @@ final class LivenessChallenge {
 			guard pitch.isFinite, pitchSource != .unavailable else { invalidatePoseEvidence(); return }
 			preparePoseBaseline(pitch, source: pitchSource, axis: .pitch)
 		case .blink:
-			baselineSamples = eyes.map { $0 > Self.eyeOpen } == true ? min(3, baselineSamples + 1) : 0
+			if let e = eyes, e.isFinite, e >= 0, e > 0 {
+				baselineEyeOpenness = baselineSamples == 0 ? e : max(baselineEyeOpenness, e)
+				baselineSamples = min(3, baselineSamples + 1)
+			} else {
+				baselineSamples = 0
+			}
 			eyesWereOpen = isBaselineReady
 		case .openMouth:
 			baselineSamples = mouth.map { $0 < Self.mouthClosed } == true ? min(3, baselineSamples + 1) : 0
@@ -425,6 +465,7 @@ final class LivenessChallenge {
 	/// Feed each frame. Sets `isComplete` once the current action has been seen.
 	@discardableResult
 	func consume(_ sample: FaceSample) -> ConsumeResult {
+		avoidLookWhenFar(sample)
 		let eyes2D = action.isLook ? PupilLocator.gaze(sample) : nil
 		frameGazeY = eyes2D?.y
 		return consumeFrame(yaw: sample.pose.yaw, pitch: sample.pose.pitch,
@@ -488,11 +529,19 @@ final class LivenessChallenge {
 				mouth.map({ $0.isFinite && $0 >= 0 }) ?? true,
 				let eyes else { reset(); return ConsumeResult() }
 			if !eyesWereOpen {
-				baselineSamples = eyes > Self.eyeOpen ? baselineSamples + 1 : 0
+				if eyes > 0 {
+					baselineEyeOpenness = baselineSamples == 0 ? eyes : max(baselineEyeOpenness, eyes)
+					baselineSamples += 1
+				} else {
+					baselineSamples = 0
+				}
 				eyesWereOpen = baselineSamples >= 3
-			} else if eyes < Self.eyeShut {
+			} else if !observedMovement, eyes > baselineEyeOpenness {
+				baselineEyeOpenness = eyes
+			} else if eyes < baselineEyeOpenness * Self.blinkShutFraction,
+				baselineEyeOpenness - eyes >= Self.blinkDropFloor {
 				observedMovement = true
-			} else if observedMovement && eyes > Self.eyeOpen {
+			} else if observedMovement, eyes > baselineEyeOpenness * Self.blinkOpenFraction {
 				isComplete = true
 			}
 			return ConsumeResult()
@@ -555,6 +604,7 @@ final class LivenessChallenge {
 		guard let gaze, gaze.isFinite else {
 			nilGazeSamples += 1
 			guard nilGazeSamples >= Self.nilGazeLimit else { return ConsumeResult() }
+			lookPassLog.append("eyes unreadable for \(Self.nilGazeLimit) frames; switched movement")
 			action = fallbackAction()
 			reset()
 			return ConsumeResult()
@@ -600,21 +650,28 @@ final class LivenessChallenge {
 		let elapsed = max(0, now - origin)
 		let cycle = Int(elapsed / Self.lookPeriod)
 		if let current = lookCycle, cycle != current {
-			// A pass just finished: score it, then start collecting the next.
-			if lookCycleValid, scoreLookPass(angle: angle(forCycle: current)) {
+			// A pass just finished: score it, log it, then start collecting the next.
+			let spoilt = !lookCycleValid
+			let score = scoreLookPass(angle: angle(forCycle: current))
+			let passed = !spoilt && score.passed
+			lookPassCount += 1
+			lookPassLog.append("n=\(score.samples) r=\(String(format: "%.2f", score.correlation)) range=\(String(format: "%.2f", score.range)) cross=\(String(format: "%.2f", score.cross)) spoilt=\(spoilt) passed=\(passed)")
+			if passed {
 				observedMovement = true
 				isComplete = true
 				return ConsumeResult()
 			}
-			// Every pass that doesn't pass counts, including ones spoilt by a head turn,
-			// so it never loops forever: after a few, a different movement is asked for.
-			do {
-				lookFailures += 1
-				if lookFailures >= Self.lookFailureLimit {
-					action = fallbackAction()
-					reset()
-					return ConsumeResult()
-				}
+			// A pass with too few samples is a camera/frame shortfall, not the
+			// person failing: start the next pass without counting a failure.
+			let shortfall = !spoilt && score.samples < Self.lookMinSamples
+			// Every other non-passing pass counts, including ones spoilt by a
+			// head turn, so it never loops forever: after a few, a different
+			// movement is asked for.
+			if !shortfall { lookFailures += 1 }
+			if lookFailures >= Self.lookFailureLimit || lookPassCount >= Self.lookPassLimit {
+				action = fallbackAction()
+				reset()
+				return ConsumeResult()
 			}
 			lookSamples = []
 			lookCycleValid = true
@@ -628,7 +685,7 @@ final class LivenessChallenge {
 		}
 		if lookCycleValid {
 			let dy = frameGazeY.flatMap { y in baselineGazeY.map { y - $0 } }
-			lookSamples.append((gaze - anchor, dy, Self.lookTargetPosition(elapsed: elapsed)))
+			lookSamples.append((gaze - anchor, dy, Self.lookTargetPosition(elapsed: elapsed), elapsed))
 		}
 		return ConsumeResult()
 	}
@@ -642,31 +699,74 @@ final class LivenessChallenge {
 		return Self.lookAngle(cycle: cycle, seed: seed)
 	}
 
+	/// One finished look pass's numbers and whether it passed. Same decision as
+	/// before: fitted only when the samples allow, passing only on enough samples
+	/// with a tight positive visible fit and little off-axis movement.
+	private struct LookPassScore {
+		var passed: Bool
+		var samples: Int
+		var correlation: Double
+		var range: Double
+		/// Off-axis movement relative to on-axis (|side slope| / slope).
+		var cross: Double
+	}
+
 	/// Whether the eyes followed the light in the pass just collected.
 	///
 	/// The pupil movement is projected onto the light's direction and fitted against
 	/// the light's distance from the centre. A pass needs the fit to be tight
 	/// (correlation), the slope positive and visible (the eyes went the light's way,
 	/// far enough), and little of the movement off to the side of that direction.
-	private func scoreLookPass(angle: Double) -> Bool {
+	private func scoreLookPass(angle: Double) -> LookPassScore {
 		// Screen right is image -x for the pupils; up is +y.
 		let ex = -cos(angle), ey = sin(angle) * Self.lookVerticalGain
 		let norm = ex * ex + ey * ey
-		guard norm > 0 else { return false }
+		guard norm > 0 else { return LookPassScore(passed: false, samples: 0, correlation: 0, range: 0, cross: 0) }
 		let needsVertical = abs(sin(angle)) > 0.25
-		var along: [Double] = [], across: [Double] = [], targets: [Double] = []
+		var along: [Double] = [], across: [Double] = [], elapsed: [Double] = []
 		for sample in lookSamples {
 			guard let y = sample.y ?? (needsVertical ? nil : 0) else { continue }
 			along.append((sample.x * ex + y * ey) / norm)
 			across.append((-sample.x * ey + y * ex) / norm)
-			targets.append(sample.target)
+			elapsed.append(sample.elapsed)
 		}
-		guard along.count >= Self.lookMinSamples, let fit = Self.fit(along, targets),
-			let side = Self.fit(across, targets) else { return false }
-		let sorted = along.sorted()
-		let range = sorted[Int(Double(sorted.count - 1) * 0.9)] - sorted[Int(Double(sorted.count - 1) * 0.1)]
-		return fit.correlation >= Self.lookMinCorrelation && fit.slope > 0 && range >= Self.lookMinRange
-			&& abs(side.slope) <= Self.lookMaxCrossTalk * fit.slope
+		// From further away each frame's pupil reading jitters by a few pixels, but the
+		// light moves smoothly over half a second. A short centred average (5 frames, about
+		// a fifth of a second) cancels the jitter and keeps the movement. A still or wrong
+		// face gains nothing: its readings still don't follow the light.
+		along = Self.smoothed(along, window: 5)
+		across = Self.smoothed(across, window: 5)
+		// Eyes trail a moving light by about a tenth to a quarter of a second, and more
+		// so from further away. Score against the light as it was a moment earlier, at
+		// whichever small lag fits best.
+		let targets = [0.0, 0.08, 0.16, 0.24].map { lag in
+			elapsed.map { Self.lookTargetPosition(elapsed: max(0, $0 - lag)) }
+		}.max { a, b in
+			(Self.fit(along, a)?.correlation ?? -1) < (Self.fit(along, b)?.correlation ?? -1)
+		} ?? []
+		var correlation = 0.0, range = 0.0, cross = 0.0
+		var passed = false
+		if let fit = Self.fit(along, targets), let side = Self.fit(across, targets) {
+			let sorted = along.sorted()
+			range = sorted[Int(Double(sorted.count - 1) * 0.9)] - sorted[Int(Double(sorted.count - 1) * 0.1)]
+			correlation = fit.correlation
+			cross = fit.slope != 0 ? abs(side.slope / fit.slope) : 0
+			passed = along.count >= Self.lookMinSamples
+				&& fit.correlation >= Self.lookMinCorrelation && fit.slope > 0 && range >= Self.lookMinRange
+				&& abs(side.slope) <= Self.lookMaxCrossTalk * fit.slope
+		}
+		return LookPassScore(passed: passed, samples: along.count,
+			correlation: correlation, range: range, cross: cross)
+	}
+
+	/// Centred moving average; the ends average over what is available.
+	static func smoothed(_ values: [Double], window: Int) -> [Double] {
+		guard values.count > 2, window > 1 else { return values }
+		let half = window / 2
+		return values.indices.map { i in
+			let lo = max(0, i - half), hi = min(values.count - 1, i + half)
+			return values[lo...hi].reduce(0, +) / Double(hi - lo + 1)
+		}
 	}
 
 	/// Least-squares slope of `values` against `targets`, and their correlation.

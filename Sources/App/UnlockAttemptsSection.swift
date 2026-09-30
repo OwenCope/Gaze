@@ -1,12 +1,14 @@
 import SwiftUI
 
 /// The recent history of looks at the lock screen: what happened, how long an
-/// unlock took, and — only when asked — a photo of who couldn’t get in.
+/// unlock took, and — when asked — a photo of who was there.
 struct UnlockAttemptsSection: View {
 
 	private static let relative: RelativeDateTimeFormatter = {
 		let formatter = RelativeDateTimeFormatter()
 		formatter.unitsStyle = .full
+		// "now" rather than "in 0 seconds" for an attempt that just happened.
+		formatter.dateTimeStyle = .named
 		return formatter
 	}()
 
@@ -16,15 +18,21 @@ struct UnlockAttemptsSection: View {
 
 	var body: some View {
 		SettingsSection(title: "Unlock Attempts", footer: "Photos delete themselves after 30 days.") {
-			SettingToggle(title: "Take a photo when someone can’t unlock",
-				detail: "Photos stay on this Mac",
-				symbol: "camera.viewfinder",
-				isOn: $log.capturesPhotos)
+			SettingRow(title: "Take photos", detail: "Photos stay on this Mac",
+				symbol: "camera.viewfinder") {
+				SettingsChoiceMenu(title: "Take photos",
+					valueLabel: log.photoPolicy.title,
+					selection: $log.photoPolicy) {
+					ForEach(UnlockAttemptLog.PhotoPolicy.allCases, id: \.self) { policy in
+						Text(policy.title).tag(policy)
+					}
+				}
+			}
 
 			let recent = Array(log.attempts.prefix(10))
 			RowDivider()
 			if recent.isEmpty {
-				SettingRow(title: "No attempts yet") { EmptyView() }
+				SettingRow(title: "No attempts yet", symbol: "clock.arrow.circlepath") { EmptyView() }
 			} else {
 				// Collapsed by default: the list is for when something went wrong, not
 				// something to scroll past every time. A row like its neighbours, so the
@@ -48,9 +56,16 @@ struct UnlockAttemptsSection: View {
 				.buttonStyle(.plain)
 				.accessibilityValue(showsAttempts ? "Expanded" : "Collapsed")
 				if showsAttempts {
-					ForEach(recent) { attempt in
-						RowDivider()
-						attemptRow(attempt)
+					ForEach(AttemptGroup.allCases, id: \.self) { group in
+						let attempts = recent.filter { group.contains($0.result) }
+						if !attempts.isEmpty {
+							RowDivider()
+							groupHeader(group.title)
+							ForEach(attempts) { attempt in
+								RowDivider()
+								attemptRow(attempt)
+							}
+						}
 					}
 					RowDivider()
 					SettingRow(title: "Delete All", symbol: "trash") {
@@ -102,8 +117,42 @@ struct UnlockAttemptsSection: View {
 			}
 		} else {
 			SettingRow(title: Self.title(for: attempt), detail: Self.detail(for: attempt),
-				symbol: attempt.result == .unlocked ? "checkmark.circle" : "xmark.circle") {
+				symbol: Self.symbol(for: attempt)) {
 				EmptyView()
+			}
+		}
+	}
+
+	/// One caption per non-empty group, in the section's own caption style.
+	private func groupHeader(_ title: String) -> some View {
+		Text(title)
+			.font(Typography.caption)
+			.foregroundStyle(Theme.secondaryLabel)
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.padding(.horizontal, Theme.rowInset)
+			.padding(.vertical, 8)
+	}
+
+	/// Three groups for the ten most recent attempts. Old closedWithoutUnlocking
+	/// logs read as opened another way.
+	private enum AttemptGroup: String, CaseIterable {
+		case gaze
+		case anotherWay
+		case notUnlocked
+
+		var title: String {
+			switch self {
+			case .gaze: return "Unlocked with Gaze"
+			case .anotherWay: return "Opened another way"
+			case .notUnlocked: return "Not unlocked"
+			}
+		}
+
+		func contains(_ result: UnlockAttempt.Result) -> Bool {
+			switch result {
+			case .unlocked: return self == .gaze
+			case .openedAnotherWay, .closedWithoutUnlocking: return self == .anotherWay
+			case .notRecognised, .unknownFace, .spoofRejected, .leftLocked: return self == .notUnlocked
 			}
 		}
 	}
@@ -114,12 +163,21 @@ struct UnlockAttemptsSection: View {
 		case .notRecognised: return "Not recognised"
 		case .unknownFace: return "Unknown face"
 		case .spoofRejected: return "Photo or screen blocked"
-		case .closedWithoutUnlocking: return "Opened without unlocking"
+		case .openedAnotherWay, .closedWithoutUnlocking: return "Opened with password or Touch ID"
+		case .leftLocked: return "Left locked"
+		}
+	}
+
+	private static func symbol(for attempt: UnlockAttempt) -> String {
+		switch attempt.result {
+		case .unlocked: return "checkmark.circle"
+		case .openedAnotherWay, .closedWithoutUnlocking: return "key"
+		case .notRecognised, .unknownFace, .spoofRejected, .leftLocked: return "xmark.circle"
 		}
 	}
 
 	private static func detail(for attempt: UnlockAttempt) -> String? {
-		let when = relative.localizedString(for: attempt.date, relativeTo: Date())
+		let when = relative.localizedString(for: min(attempt.date, Date()), relativeTo: Date())
 		if attempt.result == .unlocked, let duration = attempt.duration {
 			var line = "\(when) · in \(String(format: "%.1f", duration)) s"
 			// Where the time went, so a slow unlock says which part was slow.

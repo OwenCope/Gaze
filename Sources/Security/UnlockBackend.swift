@@ -153,7 +153,9 @@ struct KeystrokeUnlockBackend: UnlockBackend {
 			isVerified: evidenceIsCurrent,
 			prepare: {
 				guard stillVerified() else { throw UnlockError.verificationRequired }
-				return try Keystrokes.passwordEvents($0)
+				// A Space pressed to retry sits in the password field; clear it first
+				// so it isn't prepended to the password.
+				return try Keystrokes.clearFieldEvents() + Keystrokes.passwordEvents($0)
 			},
 			post: { $0.post(tap: .cghidEventTap) })
 		Self.logger.notice("Password events posted; awaiting macOS screen-unlock confirmation.")

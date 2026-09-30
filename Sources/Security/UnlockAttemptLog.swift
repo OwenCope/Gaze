@@ -13,6 +13,9 @@ struct UnlockAttempt: Codable, Identifiable {
 		case notRecognised
 		case unknownFace
 		case spoofRejected
+		case openedAnotherWay
+		case leftLocked
+		/// Old logs only. Reads as openedAnotherWay in the UI.
 		case closedWithoutUnlocking
 	}
 
@@ -41,14 +44,16 @@ struct UnlockAttempt: Codable, Identifiable {
 	var steps: Steps?
 
 	struct Steps: Codable, Equatable {
-		var camera: TimeInterval?
-		var recognise: TimeInterval?
-		var check: TimeInterval?
-		var macOS: TimeInterval?
+		var camera: TimeInterval? = nil
+		var recognise: TimeInterval? = nil
+		var check: TimeInterval? = nil
+		var macOS: TimeInterval? = nil
 		/// Seconds from the movement prompt appearing to it being completed.
-		var movement: TimeInterval?
+		var movement: TimeInterval? = nil
 		/// The prompt text shown for the movement challenge.
-		var movementPrompt: String?
+		var movementPrompt: String? = nil
+		/// Per-pass Follow-the-light scores, oldest first. Optional so older logs still decode.
+		var lookPasses: [String]? = nil
 	}
 }
 
@@ -62,6 +67,22 @@ final class UnlockAttemptLog {
 
 	static let shared = UnlockAttemptLog()
 
+	/// When a look keeps its photo. Off by default.
+	enum PhotoPolicy: String, CaseIterable {
+		case off
+		case whenNotGaze
+		case always
+
+		var title: String {
+			switch self {
+			case .off: return "Off"
+			case .whenNotGaze: return "When Gaze doesn't unlock"
+			case .always: return "Every time"
+			}
+		}
+	}
+
+	private static let photoPolicyKey = "attemptPhotoPolicy"
 	private static let capturesPhotosKey = "captureAttemptPhotos"
 	private static let maxAttempts = 50
 	private static let retentionDays = 30
@@ -70,15 +91,25 @@ final class UnlockAttemptLog {
 
 	private(set) var attempts: [UnlockAttempt] = []
 	// Not observed: filling it while a row draws must not make the list draw again.
-	@ObservationIgnored private var photoCache: [String: NSImage?] = [:]
+	@ObservationIgnored private var photoCache: [String: NSImage] = [:]
 
-	/// Whether a failed look keeps a photo. Off until the person asks for it.
-	var capturesPhotos: Bool {
-		didSet { UserDefaults.standard.set(capturesPhotos, forKey: Self.capturesPhotosKey) }
+	/// When a look keeps its photo. Off until the person asks for it.
+	var photoPolicy: PhotoPolicy {
+		didSet { UserDefaults.standard.set(photoPolicy.rawValue, forKey: Self.photoPolicyKey) }
 	}
 
+	/// Whether any look keeps a photo.
+	var capturesPhotos: Bool { photoPolicy != .off }
+
 	private init() {
-		capturesPhotos = UserDefaults.standard.bool(forKey: Self.capturesPhotosKey)
+		if let raw = UserDefaults.standard.string(forKey: Self.photoPolicyKey),
+			let saved = PhotoPolicy(rawValue: raw) {
+			photoPolicy = saved
+		} else if UserDefaults.standard.bool(forKey: Self.capturesPhotosKey) {
+			photoPolicy = .whenNotGaze
+		} else {
+			photoPolicy = .off
+		}
 		// A tiny JSON read, once, so the section never flashes empty on launch.
 		// Everything heavier — photos, writes, pruning — happens off the main actor.
 		let loaded = (try? Data(contentsOf: Self.listURL()))
@@ -98,7 +129,8 @@ final class UnlockAttemptLog {
 	func record(_ result: UnlockAttempt.Result, duration: TimeInterval? = nil, steps: UnlockAttempt.Steps? = nil,
 		photo: CVPixelBuffer? = nil, reason: UnlockAttempt.Reason? = nil) {
 		let id = UUID()
-		let keepsPhoto = capturesPhotos && result != .unlocked && photo != nil
+		let keepsPhoto = photo != nil
+			&& (photoPolicy == .always || (photoPolicy == .whenNotGaze && result != .unlocked))
 		let attempt = UnlockAttempt(id: id, date: Date(), result: result, reason: reason, duration: duration,
 			photoFile: keepsPhoto ? "\(id.uuidString).jpg" : nil, steps: steps)
 		attempts.insert(attempt, at: 0)
@@ -118,6 +150,7 @@ final class UnlockAttemptLog {
 			if let frame, let file = attempt.photoFile,
 				let data = Self.jpegData(from: frame.buffer) {
 				Self.writeProtected(data, to: Self.directory().appendingPathComponent(file))
+				await MainActor.run { UnlockAttemptLog.shared.photoRevision += 1 }
 			}
 			Self.deletePhotoFiles(trimmedFiles)
 			Self.save(snapshot)
@@ -138,12 +171,19 @@ final class UnlockAttemptLog {
 	/// dictionary lookup. `NSImage` already returns nil for a file that is not
 	/// there, so no existence check is needed.
 	func photo(for attempt: UnlockAttempt) -> NSImage? {
+		// Read so a row redraws once its photo lands on disk.
+		_ = photoRevision
 		guard let file = attempt.photoFile else { return nil }
 		if let cached = photoCache[file] { return cached }
-		let loaded = NSImage(contentsOf: Self.directory().appendingPathComponent(file))
+		// Only hits are cached. The photo is written in the background, so a row drawn
+		// right after the attempt found no file yet; caching that miss hid the photo for good.
+		guard let loaded = NSImage(contentsOf: Self.directory().appendingPathComponent(file)) else { return nil }
 		photoCache[file] = loaded
 		return loaded
 	}
+
+	/// Bumped when a photo finishes writing.
+	private(set) var photoRevision = 0
 
 	// MARK: - Files
 

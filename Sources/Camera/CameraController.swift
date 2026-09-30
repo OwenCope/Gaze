@@ -53,6 +53,15 @@ struct FaceSample: @unchecked Sendable {
 @MainActor
 final class CameraController {
 
+	/// Whether the lock screen may ask for Follow the light: movements on, and it not
+	/// switched off. Read from defaults so the camera needs no Preferences.
+	static var followLightOffered: Bool {
+		let defaults = UserDefaults.standard
+		guard defaults.integer(forKey: "unlockMovementCount") > 0 || defaults.object(forKey: "unlockMovementCount") == nil
+		else { return false }
+		return !(defaults.stringArray(forKey: "disabledMovements") ?? []).contains("followLight")
+	}
+
 	enum State: Equatable {
 		case idle
 		case denied
@@ -97,7 +106,9 @@ final class CameraController {
 	init(accessScope: CameraSessionGate.Scope = .foreground, allowsBystanders: Bool? = nil) {
 		sessionGate = CameraSessionGate(scope: accessScope)
 		capture.allowsBystanders = allowsBystanders ?? (accessScope == .lockScreen)
-		capture.fastFrames = accessScope == .lockScreen
+		// 720p is quicker to scan, but it leaves the eyes too few pixels for the iris
+		// model: Follow the light only worked leaning in. Keep full size while it can be asked for.
+		capture.fastFrames = accessScope == .lockScreen && !Self.followLightOffered
 		for name in [AVCaptureSession.runtimeErrorNotification, AVCaptureSession.wasInterruptedNotification] {
 			observers.append(NotificationCenter.default.addObserver(forName: name, object: capture.session, queue: .main) { [weak self] _ in
 				MainActor.assumeIsolated {

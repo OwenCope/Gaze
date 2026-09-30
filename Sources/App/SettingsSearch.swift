@@ -108,7 +108,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			title: "Camera",
 			subtitle: "Permission for Gaze to see you",
 			keywords: ["camera", "permission", "permissions", "privacy", "allow"],
-			pane: "face",
+			pane: "security",
 			section: "permissionsSection"
 		),
 		SettingsSearchItem(
@@ -116,7 +116,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			title: "Accessibility",
 			subtitle: "Permission for Gaze to type your password",
 			keywords: ["accessibility", "permission", "permissions", "typing", "type"],
-			pane: "face",
+			pane: "security",
 			section: "permissionsSection"
 		),
 		SettingsSearchItem(
@@ -124,7 +124,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			title: "Only trust the built-in camera",
 			subtitle: "Pin recognition to the enrolled camera",
 			keywords: ["built-in", "builtin", "camera", "pin", "security", "hardening"],
-			pane: "face",
+			pane: "security",
 			section: "securitySection"
 		),
 		SettingsSearchItem(
@@ -132,23 +132,23 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			title: "Movements to unlock this Mac",
 			subtitle: "How many completed responses unlocking requires",
 			keywords: ["movement", "movements", "challenge", "challenges", "liveness"],
-			pane: "face",
-			section: "securitySection"
+			pane: "security",
+			section: "movementsSection"
 		),
 		SettingsSearchItem(
 			id: "sensitivity",
 			title: "Recognition sensitivity",
 			subtitle: "How strictly a face must match to unlock",
 			keywords: ["sensitivity", "sensitive", "threshold", "strict", "relaxed", "matching", "dim"],
-			pane: "face",
-			section: "securitySection"
+			pane: "security",
+			section: "movementsSection"
 		),
 		SettingsSearchItem(
 			id: "usb-cameras",
 			title: "Allow USB cameras",
 			subtitle: "Use a USB webcam with the lid closed",
 			keywords: ["usb", "camera", "external", "webcam", "clamshell", "lid closed", "display"],
-			pane: "face",
+			pane: "security",
 			section: "securitySection"
 		),
 		SettingsSearchItem(
@@ -156,7 +156,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			title: "Lock when I walk away",
 			subtitle: "Lock after absence is confirmed",
 			keywords: ["walk", "away", "walk-away", "walkaway", "absence", "auto-lock", "lock"],
-			pane: "face",
+			pane: "security",
 			section: "securitySection"
 		),
 		SettingsSearchItem(
@@ -164,7 +164,7 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			title: "Ask before removing a face or changing the stored password",
 			subtitle: "Ask macOS to confirm sensitive changes",
 			keywords: ["touch", "touch id", "touchid", "biometric", "confirm", "authorization"],
-			pane: "face",
+			pane: "security",
 			section: "securitySection"
 		),
 		SettingsSearchItem(

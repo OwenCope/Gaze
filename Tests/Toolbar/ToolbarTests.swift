@@ -48,7 +48,7 @@ struct ToolbarTests {
 				return view.subviews.compactMap(findControl).first
 			}
 			guard let control = findControl(host) else { fatalError("Missing toolbar") }
-			precondition(SettingsPane.toolbarPanes == [.face, .apps, .notch, .general, .about])
+			precondition(SettingsPane.toolbarPanes == [.face, .security, .apps, .notch, .general, .about])
 			precondition(control.segmentCount == SettingsPane.toolbarPanes.count && control.trackingMode == .selectOne)
 			precondition(control.selectedSegment == 0 && control.image(forSegment: 0)?.accessibilityDescription == "Unlock")
 			let initialSize = control.intrinsicContentSize

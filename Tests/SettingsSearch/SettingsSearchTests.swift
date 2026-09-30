@@ -24,11 +24,11 @@ enum SettingsSearchTests {
 		// Index shape.
 		try expect(!all.isEmpty, "index is nonempty")
 		try expect(Set(ids(all)).count == all.count, "ids are unique")
-		let panes: Set<String> = ["face", "apps", "general", "notch", "about", "credits"]
+		let panes: Set<String> = ["face", "security", "apps", "general", "notch", "about", "credits"]
 		try expect(all.allSatisfy { panes.contains($0.pane) }, "every destination is a real SettingsPane raw value")
 		try expect(Set(all.map(\.pane)) == panes, "every pane is reachable from search")
 		let sections: Set<String> = [
-			"hero", "unlockSection", "permissionsSection", "securitySection",
+			"hero", "unlockSection", "movementsSection", "permissionsSection", "securitySection",
 			"behaviourSection", "onboardingSection", "updatesSection",
 			"appearanceSection", "NotchSettingsSection", "creditsSection", "aboutSection",
 			"appLockSection", "appLockListSection", "appLockOptionsSection", "unlockAttemptsSection",

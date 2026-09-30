@@ -34,15 +34,18 @@ enum SceneBrightness {
 	/// Whether the room is really dark, not just a camera still waking up.
 	///
 	/// A camera's first frames are dark in any room while its exposure settles, which
-	/// turned the edge light on in bright rooms. So this ignores the first 1.5 s of a
+	/// turned the edge light on in bright rooms. So this ignores the first 0.9 s of a
 	/// session and then needs a full second of unbroken dark readings.
 	static func isDark(now: ContinuousClock.Instant = .now) -> Bool {
 		guard let reading = current(now: now), reading < darkThreshold else { return false }
 		return streak.withLock { state in
 			guard let firstAt = state.firstAt, let darkSince = state.darkSince else { return false }
-			let settledAt = firstAt.advanced(by: .milliseconds(1500))
+			// 0.9 s settle and 0.5 s of darkness, down from 1.5 s and 1 s: the light took
+			// 2.5 s to come on at night, most of a dark-room unlock. The camera's exposure
+			// has settled well within 0.9 s, so bright rooms still stay dark.
+			let settledAt = firstAt.advanced(by: .milliseconds(900))
 			let from = max(darkSince, settledAt)
-			return now >= from && from.duration(to: now) >= .seconds(1)
+			return now >= from && from.duration(to: now) >= .milliseconds(500)
 		}
 	}
 

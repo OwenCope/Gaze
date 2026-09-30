@@ -87,8 +87,9 @@ enum IrisLocator {
 	private static func offset(eye points: [CGPoint], in buffer: CVPixelBuffer, mirrored: Bool) -> Gaze? {
 		let xs = points.map(\.x), ys = points.map(\.y)
 		guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max(),
-			maxX - minX >= 8 else { return nil }
+			maxX - minX >= 6 else { return nil }
 		let centre = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
+		// Sized by eye width, not height, so narrow eyes still get a full-size crop.
 		let span = (maxX - minX) * cropScale
 		let crop = CGRect(x: centre.x - span / 2, y: centre.y - span / 2, width: span, height: span)
 

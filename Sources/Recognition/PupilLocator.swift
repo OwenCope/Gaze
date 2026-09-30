@@ -7,6 +7,16 @@ import Vision
 /// from the frame's pixels inside each eye outline.
 enum PupilLocator {
 
+	/// Mean eye width in camera pixels, or nil when the eyes can't be measured.
+	static func eyeWidthPixels(_ sample: FaceSample) -> Double? {
+		let width = Double(CVPixelBufferGetWidth(sample.pixelBuffer))
+		let widths = [sample.landmarks.leftEye, sample.landmarks.rightEye].compactMap { region -> Double? in
+			guard let xs = region?.normalizedPoints.map(\.x), let lo = xs.min(), let hi = xs.max() else { return nil }
+			return Double(hi - lo) * Double(sample.boundingBox.width) * width
+		}
+		return widths.isEmpty ? nil : widths.reduce(0, +) / Double(widths.count)
+	}
+
 	/// Both axes from MediaPipe Iris when it is loaded; otherwise only x, from the pixel search.
 	static func gaze(_ sample: FaceSample) -> (x: Double, y: Double?)? {
 		if let iris = IrisLocator.gaze(sample) { return (iris.x, iris.y) }

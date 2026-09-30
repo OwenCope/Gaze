@@ -28,6 +28,15 @@ same conclusion about the only route macOS leaves open: there is no API that let
 third-party app authorise a login, so the password is typed. Worth reading if you
 are here for how any of this works.
 
+### Glance — press Space to try again
+
+`Sources/Security/SpaceKeyMonitor.swift`
+
+Watching the Space key on the lock screen through IOKit HID, so a missed unlock can be
+retried without touching the password field, is adapted from **Glance** by Jonathan Zhou:
+
+<https://github.com/jonnyoo/glance> — MIT licence, © 2026 Jonathan Zhou
+
 ## Design references
 
 ### Glance — the 'Beside the camera' layout and the Dynamic Island capsule

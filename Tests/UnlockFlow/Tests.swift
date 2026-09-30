@@ -240,6 +240,12 @@ enum UnlockFlowTests {
 		for _ in 0..<4 { sample(blink, eyes: 0.1) }
 		sample(blink)
 		check(!blink.isComplete, "arriving with closed eyes is not a blink response")
+		let narrow = LivenessChallenge(action: .blink)
+		for _ in 0..<3 { sample(narrow, eyes: 0.14) }
+		sample(narrow, eyes: 0.05)
+		check(narrow.isReturningToRest, "narrow resting eyes closing counts as blink movement")
+		sample(narrow, eyes: 0.13)
+		check(narrow.isComplete, "narrow-eyed blink completes on reopening")
 		print("PASS: \(checks) unlock-flow checks; synthetic measurements only, no camera or credential access, no input posted.")
 	}
 

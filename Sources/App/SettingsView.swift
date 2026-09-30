@@ -7,9 +7,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
-	case face, apps, notch, general, about, credits
+	case face, movements, security, attempts, apps, notch, general, about, credits
 
-	static let toolbarPanes: [Self] = [.face, .apps, .notch, .general, .about]
+	static let toolbarPanes: [Self] = [.face, .security, .apps, .notch, .general, .about]
 
 	var id: String { rawValue }
 
@@ -18,6 +18,9 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		case .general: return "General"
 		case .notch: return "Notch"
 		case .face: return "Unlock"
+		case .movements: return "Movements"
+		case .security: return "Security"
+		case .attempts: return "Unlock Attempts"
 		case .apps: return "App Lock"
 		case .credits: return "Credits"
 		case .about: return "About"
@@ -29,6 +32,9 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 		case .general: return "gearshape"
 		case .notch: return "macbook"
 		case .face: return "faceid"
+		case .movements: return "figure.run"
+		case .security: return "lock.shield"
+		case .attempts: return "clock.arrow.circlepath"
 		case .apps: return "lock.app.dashed"
 		case .credits: return "heart.fill"
 		case .about: return "info.circle"
@@ -62,6 +68,12 @@ enum SettingsPane: String, CaseIterable, Hashable, Identifiable {
 			return "How the panel under the notch looks"
 		case .face:
 			return "Unlock your Mac by looking at it — and what that's allowed to do"
+		case .movements:
+			return "What Gaze asks you to do to prove you're there"
+		case .security:
+			return "Permissions, and how hard Gaze is to fool"
+		case .attempts:
+			return "Recent unlocks, and photos of people who couldn't unlock"
 		case .apps:
 			return "Apps that ask for your face before they open"
 		case .credits:
@@ -367,8 +379,14 @@ struct SettingsView: View {
 					hero.id("hero").modifier(searchDestination("hero"))
 					if store.isEnrolled { manageSection }
 					unlockSection.id("unlockSection").modifier(searchDestination("unlockSection"))
-					permissionsSection.id("permissionsSection").modifier(searchDestination("permissionsSection"))
+					UnlockAttemptsSection().id("unlockAttemptsSection").modifier(searchDestination("unlockAttemptsSection"))
+				// Movements and the security checks share a tab: both decide how hard Gaze
+				// is to fool. `movements` and `attempts` stay as `--settings-pane` aliases.
+				case .security, .movements:
+					movementsSection.id("movementsSection").modifier(searchDestination("movementsSection"))
 					securitySection.id("securitySection").modifier(searchDestination("securitySection"))
+					permissionsSection.id("permissionsSection").modifier(searchDestination("permissionsSection"))
+				case .attempts:
 					UnlockAttemptsSection().id("unlockAttemptsSection").modifier(searchDestination("unlockAttemptsSection"))
 				// Its own pane, like Screen Time or Passwords in System Settings: a switch,
 				// the list it governs, then its options. As a group at the bottom of Unlock
@@ -418,6 +436,17 @@ struct SettingsView: View {
 			// Scrolls to a search result's section after the pane switch lays out,
 			// so the anchor exists when it scrolls. Keyed by the destination rather
 			// than delayed by a fixed interval; unanimated, and cleared on arrival.
+			#if PRODUCT_CAPTURE
+			// Capture tool only: `--settings-section=<anchor>` scrolls a section into view
+			// for a screenshot. Never compiled into the shipping app.
+			.task {
+				guard ProductCaptureDemo.isOn,
+					let arg = CommandLine.arguments.first(where: { $0.hasPrefix("--settings-section=") })
+				else { return }
+				try? await Task.sleep(for: .milliseconds(600))
+				proxy.scrollTo(String(arg.dropFirst("--settings-section=".count)), anchor: .top)
+			}
+			#endif
 			.task(id: pendingSearchSection?.id) {
 				guard let target = pendingSearchSection else { return }
 				proxy.scrollTo(target.section, anchor: .top)
@@ -1155,15 +1184,20 @@ struct SettingsView: View {
 		let panel = NSOpenPanel()
 		panel.directoryURL = URL(fileURLWithPath: "/Applications")
 		panel.allowedContentTypes = [.applicationBundle]
-		panel.allowsMultipleSelection = false
+		panel.allowsMultipleSelection = true
+		panel.message = "Choose apps to lock"
 		panel.canChooseDirectories = false
 		panel.canChooseFiles = true
 		panel.begin { response in
-			guard response == .OK,
-				let url = panel.url,
-				let bundleID = Bundle(url: url)?.bundleIdentifier,
-				appLock.add(bundleID)
-			else { return }
+			guard response == .OK else { return }
+			var added = false
+			for url in panel.urls {
+				guard let bundleID = Bundle(url: url)?.bundleIdentifier,
+					appLock.add(bundleID)
+				else { continue }
+				added = true
+			}
+			guard added else { return }
 			withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
 				lockedApps = appLock.lockedBundleIDs.sorted()
 			}
@@ -1430,6 +1464,69 @@ struct SettingsView: View {
 		NSWorkspace.shared.open(url)
 	}
 
+	/// What Gaze asks you to do before it unlocks, on its own tab: it made the old
+	/// Security checks group the longest thing in Settings.
+	private var movementsSection: some View {
+		SettingsSection(title: "Movements",
+			info: "Movement verification asks for a random action each time. Password and Touch ID remain available on the lock screen.") {
+			VStack(spacing: 0) {
+				SettingRow(
+					title: "Movements to unlock this Mac",
+					detail: "Two is recommended. One is quicker.",
+					symbol: "figure.walk.motion"
+				) {
+					SettingsStepSlider(title: "Movements to unlock this Mac",
+						values: Preferences.UnlockMovementCount.allCases,
+						selection: $settings.unlockMovementCount,
+						label: \.shortTitle)
+				}
+				if settings.unlockMovementCount != .none {
+					RowDivider()
+					// The choices sit on their own line under the title, lined up with the
+					// row text: five of them beside a title crowded both.
+					VStack(alignment: .leading, spacing: 0) {
+						SettingRow(title: "Movements Gaze can ask for",
+							detail: "Picked at random each time",
+							symbol: "shuffle"
+						) { EmptyView() }
+						MovementChoices(disabled: $settings.disabledMovements)
+							.padding(.leading, Theme.rowInset + 26 + 12)
+							.padding(.bottom, 14)
+					}
+				}
+				RowDivider()
+				SettingRow(title: "Unlock on first match",
+					detail: "Skip the short steady look. Choose for each movement setting.",
+					symbol: "bolt"
+				) {
+					InstantUnlockChoices(settings: settings)
+				}
+				let instant = { _ = settings.instantUnlockRevision; return settings.instantUnlock(for: settings.unlockMovementCount) }()
+				if settings.unlockMovementCount == .none {
+					StatusLine(kind: .warning,
+						message: instant
+							? "With no movement and Unlock on first match, a good photo or video of you could unlock this Mac. The photo and screen check still runs."
+							: "Without a movement, a good photo or video is more likely to get through. The photo and screen checks still run.")
+				} else if instant {
+					StatusLine(kind: .warning,
+						message: "Unlock on first match makes a good photo or video of you more likely to get through. The movement is still asked for.")
+				}
+			}
+
+			RowDivider()
+			SettingRow(
+				title: "Recognition sensitivity",
+				detail: "Relaxed helps in dim rooms. Strict is harder to fool.",
+				symbol: "slider.horizontal.3"
+			) {
+				SettingsStepSlider(title: "Recognition sensitivity",
+					values: Preferences.RecognitionSensitivity.allCases,
+					selection: $settings.recognitionSensitivity,
+					label: \.shortTitle)
+			}
+		}
+	}
+
 	private var securitySection: some View {
 		SettingsSection(title: "Security checks", footer: securityFooter,
 			info: "Choose which checks Gaze requires before unlocking. Movement verification asks for a random action each time. Password and Touch ID remain available on the lock screen.") {
@@ -1467,45 +1564,6 @@ struct SettingsView: View {
 			}
 		}
 
-
-			RowDivider()
-			VStack(spacing: 0) {
-				SettingRow(
-					title: "Movements to unlock this Mac",
-					detail: "Two is recommended. One is quicker.",
-					symbol: "figure.walk.motion"
-				) {
-					SettingsStepSlider(title: "Movements to unlock this Mac",
-						values: Preferences.UnlockMovementCount.allCases,
-						selection: $settings.unlockMovementCount,
-						label: \.shortTitle)
-				}
-				if settings.unlockMovementCount != .none {
-					RowDivider()
-					SettingRow(title: "Movements Gaze can ask for",
-						detail: "Picked at random each time",
-						symbol: "shuffle"
-					) {
-						MovementChoices(disabled: $settings.disabledMovements)
-					}
-				}
-				if settings.unlockMovementCount == .none {
-					StatusLine(kind: .warning,
-						message: "Without a movement, a good photo or video is more likely to get through. The photo and screen checks still run.")
-				}
-			}
-
-			RowDivider()
-			SettingRow(
-				title: "Recognition sensitivity",
-				detail: "Relaxed helps in dim rooms. Strict is harder to fool.",
-				symbol: "slider.horizontal.3"
-			) {
-				SettingsStepSlider(title: "Recognition sensitivity",
-					values: Preferences.RecognitionSensitivity.allCases,
-					selection: $settings.recognitionSensitivity,
-					label: \.shortTitle)
-			}
 
 			RowDivider()
 			SettingRow(
@@ -2073,6 +2131,16 @@ private struct SettingsCreditsPane: View {
 					symbol: "checkmark.seal.fill",
 					link: nil, linkName: nil,
 					app: nil)
+
+				RowDivider()
+				creditRow(
+					name: "Jonathan Zhou",
+					detail: "The Space-to-retry approach, from Glance (MIT)",
+					symbol: "keyboard",
+					link: "https://github.com/jonnyoo/glance", linkName: "Glance on GitHub",
+					app: .init(
+						name: "Glance", what: nil,
+						icon: "app-glance", href: "https://github.com/jonnyoo/glance"))
 			}
 
 			// Plain text, not a group. An empty card with a caption under it is a group that
@@ -2833,8 +2901,8 @@ private struct TrackpadSwipeToRemove<Content: View>: View {
 	}
 }
 
-/// The movements Gaze may ask for, as toggle chips. The last one on cannot be turned
-/// off, so there is always something to ask for.
+/// The movements Gaze may ask for, as plain checkboxes on one line. The last one on
+/// cannot be turned off, so there is always something to ask for.
 private struct MovementChoices: View {
 	@Binding var disabled: Set<String>
 
@@ -2843,23 +2911,45 @@ private struct MovementChoices: View {
 		("nod", "Nod", "Nod your head"),
 		("blink", "Blink", "Blink"),
 		("openMouth", "Open mouth", "Open your mouth"),
-		("followLight", "Follow the light", "Follow a light at the edge of the screen with your eyes"),
+		("followLight", "Follow the light", "Follow a light on the screen with your eyes. Works best close to the screen."),
 	]
 
 	var body: some View {
-		HStack(spacing: 6) {
+		HStack(spacing: 18) {
 			ForEach(Self.choices, id: \.id) { choice in
 				let isOn = !disabled.contains(choice.id)
+				let isLast = isOn && Self.choices.count - disabled.count == 1
 				Toggle(choice.title, isOn: Binding(
 					get: { isOn },
 					set: { on in
 						if on { disabled.remove(choice.id) }
-						else if Self.choices.count - disabled.count > 1 { disabled.insert(choice.id) }
+						else if !isLast { disabled.insert(choice.id) }
 					}))
+				.toggleStyle(.checkbox)
+				// Not disabled: a greyed tick reads as "off". Unticking the last one just
+				// doesn't take.
+				.help(isLast ? "At least one movement stays on" : choice.detail)
+			}
+		}
+		.font(Typography.row)
+	}
+}
+
+/// Unlock on first match, chosen separately for each movement setting.
+private struct InstantUnlockChoices: View {
+	@Bindable var settings: Preferences
+
+	var body: some View {
+		HStack(spacing: 6) {
+			ForEach(Preferences.UnlockMovementCount.allCases, id: \.self) { count in
+				let _ = settings.instantUnlockRevision
+				Toggle(count.shortTitle, isOn: Binding(
+					get: { settings.instantUnlock(for: count) },
+					set: { settings.setInstantUnlock($0, for: count) }))
 					.toggleStyle(.button)
 					.buttonBorderShape(.capsule)
 					.controlSize(.small)
-					.help(choice.detail)
+					.help("Unlock on first match when movements are set to \(count.shortTitle)")
 			}
 		}
 		.fixedSize()
