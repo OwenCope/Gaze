@@ -9,7 +9,7 @@
 # only accepts notarized apps, which is why this is a separate tap.
 cask "gaze" do
   version "0.1.10"
-  sha256 "db96dfd68e5fa163699e3d032451d5393783b42e8b2b826243cf9e478c5514ad"
+  sha256 "c03ac80ab49e3f36c8ce1f98a6f22ab37a7e01ea6388848d8a8fc527c9e0f4a2"
 
   url "https://github.com/OwenCope/Gaze/releases/download/v#{version}/Gaze.dmg"
   name "Gaze"
