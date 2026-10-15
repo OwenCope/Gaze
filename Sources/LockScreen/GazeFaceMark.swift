@@ -112,23 +112,7 @@ struct GazeFaceMark: View {
 		.scaleEffect(1.18)
 		.accessibilityElement(children: .ignore)
 		.accessibilityHidden(false)
-		.accessibilityLabel(accessibilityLabel)
-	}
-
-	/// The VoiceOver label for the mark. Challenge prompts already carry the movement
-	/// progress suffix ("· 1 of 2"), so the count is announced with the instruction.
-	var accessibilityLabel: String {
-		switch phase {
-		case .challenge(let prompt, _, _, _, _, _): prompt
-		case .scanning: "Looking for your face"
-		case .pending: "Waiting for macOS"
-		case .success: "Face verified"
-		case .notRecognised: "Face not recognised. Try again."
-		case .spoofRejected: "Face rejected. Use your password."
-		case .unavailable(let message): message
-		case .locked: "Locked"
-		case .unlocked: "Unlocked"
-		}
+		.accessibilityLabel(phase.markAccessibilityLabel)
 	}
 }
 

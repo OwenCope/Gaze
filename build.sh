@@ -43,13 +43,50 @@ if [ "${DIST:-}" != "1" ] && [ -d "$SIGNING_REFERENCE" ]; then
 	fi
 fi
 
+# A checkout under ~/Documents (or any folder iCloud Drive syncs) has new directories
+# stamped with com.apple.FinderInfo and com.apple.fileprovider.fpfs#P by the file
+# provider, asynchronously. codesign reads those as "resource fork, Finder information,
+# or similar detritus" and refuses the bundle — and the message names the bundle rather
+# than the attribute, so it reads as a broken build instead of a stray xattr.
+#
+# Clearing once is not enough. The provider is watching this tree, which has just been
+# rewritten file by file, and it re-stamps a directory while a recursive clear is still
+# walking the rest of it — so a clear early in the script has worn off by the time
+# signing happens. Clear immediately before each sign instead, and retry for the case
+# where the stamp lands in the gap anyway.
+#
+# com.apple.provenance survives the clear and is harmless; codesign ignores it.
+gaze_codesign() {
+	local target="${*: -1}" attempt
+	for attempt in 1 2 3; do
+		xattr -cr "$target" 2>/dev/null || true
+		codesign "$@" && return 0
+		sleep 0.25
+	done
+	return 1
+}
+
 # Built aside and swapped in at the end, rather than deleted and rebuilt in place.
 #
 # In-place rebuilds leave a window where the bundle exists but its executable does not,
 # and the Dock draws a prohibitory sign over the icon for as long as that lasts —
 # intermittently, depending on when you happen to look.
+#
+# Staged in the temporary directory, not beside the output, which is where this used to
+# put it. Beside the output is inside the checkout, and a checkout under ~/Documents
+# sits in a folder iCloud Drive syncs: the file provider stamps every directory it
+# watches being created with com.apple.FinderInfo, and codesign reads that as
+# "resource fork, Finder information, or similar detritus" and refuses the bundle. It
+# re-stamps as quickly as it can be cleared — a clear immediately before signing still
+# lost, three attempts running — so signing inside a managed folder does not work at
+# all, and no amount of retrying changes that.
+#
+# TMPDIR is on the same volume as the output, so the swap at the end is still a rename
+# and the app is still never on disk half-built. On the unlikely chance TMPDIR is set
+# to another volume, the move degrades to a copy: slower, and no longer atomic, but the
+# result is the same app.
 mkdir -p "$(dirname "$APP")"
-STAGE_ROOT="$(mktemp -d "$(dirname "$APP")/.staging-Gaze.XXXXXX")"
+STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/.staging-Gaze.XXXXXX")"
 trap 'rm -rf "$STAGE_ROOT"' EXIT
 STAGE="$STAGE_ROOT/Gaze.app"
 BIN="$STAGE/Contents/MacOS/Gaze"
@@ -104,14 +141,28 @@ elif [ -d "$ROOT/Resources/FaceEmbedding.mlpackage" ]; then
 	xcrun coremlc compile "$ROOT/Resources/FaceEmbedding.mlpackage" "$STAGE/Contents/Resources" >/dev/null
 	echo "  ✓ FaceEmbedding.mlmodelc"
 else
-	echo "  ! no FaceEmbedding model — using landmark-geometry fallback"
+	echo "  ! no FaceEmbedding model — falling back to landmark-geometry embedding"
+	echo "    Recognition is markedly weaker, and the fallback lives in a different"
+	echo "    feature space, so any face already enrolled against the Core ML embedder"
+	echo "    is ignored and the user has to enrol again."
 fi
 
 # MediaPipe Iris (Apache 2.0, see ThirdParty/MediaPipeIris): finds the pupil inside each
 # eye for the Follow the light movement. Optional: without it, the pixel fallback is used.
-if [ -d "$ROOT/Resources/IrisLandmarks.mlpackage" ]; then
+#
+# The prebuilt branch comes first, as it does for FaceEmbedding above. A checkout whose
+# IrisLandmarks.mlpackage is a stub — carrying only Manifest.json, with the real
+# Data/com.apple.CoreML tree absent — made coremlc abort here, and the only recourse was
+# to move the stub out of the way by hand for every build.
+if [ -d "$ROOT/Resources/IrisLandmarks.mlmodelc" ]; then
+	echo "→ Using prebuilt iris landmark model"
+	cp -R "$ROOT/Resources/IrisLandmarks.mlmodelc" "$STAGE/Contents/Resources/"
+	echo "  ✓ IrisLandmarks.mlmodelc (prebuilt)"
+elif [ -d "$ROOT/Resources/IrisLandmarks.mlpackage" ]; then
 	xcrun coremlc compile "$ROOT/Resources/IrisLandmarks.mlpackage" "$STAGE/Contents/Resources" >/dev/null
 	echo "  ✓ IrisLandmarks.mlmodelc"
+else
+	echo "  ! no iris landmark model — Follow the light falls back to pupil detection by pixel"
 fi
 
 # The unused legacy Liveness texture model is excluded from app bundles.
@@ -211,7 +262,11 @@ GAZE_ARCHS="${GAZE_ARCHS:-arm64 x86_64}"
 case "$GAZE_ARCHS" in
 *" "*)
 	echo "→ Compiling universal (SDK: $(basename "$SDK"), $GAZE_ARCHS)"
-	slices=""
+	# An array, not a space-joined string. The slices live under the repo, and a checkout
+	# whose path contains a space — "Default Project", for one — was cut into pieces by
+	# the unquoted expansion below, so lipo reported "file not found" twice and refused
+	# to build anything.
+	slices=()
 	for arch in $GAZE_ARCHS; do
 		slice="$STAGE_ROOT/Gaze-$arch"
 		xcrun swiftc \
@@ -232,10 +287,9 @@ case "$GAZE_ARCHS" in
 		${APP_INTENTS_FLAGS[@]+"${APP_INTENTS_FLAGS[@]}"} \
 		"${GAZE_MAIN_SOURCES[@]}" \
 		-o "$slice"
-		slices="$slices $slice"
+		slices+=("$slice")
 	done
-	# shellcheck disable=SC2086
-	lipo -create -output "$BIN" $slices
+	lipo -create -output "$BIN" "${slices[@]}"
 	;;
 *)
 	echo "→ Compiling (SDK: $(basename "$SDK"), $GAZE_ARCHS)"
@@ -269,7 +323,10 @@ mkdir -p "$APPEX/Contents/MacOS"
 FINDER_SOURCES=("$ROOT"/Sources/FinderExtension/*.swift "$ROOT/Sources/Security/AppLockStore.swift")
 case "$GAZE_ARCHS" in
 *" "*)
-	finder_slices=""
+	# An array, for the same reason the main binary's slices are: the staging directory
+	# lives under the repo, and a checkout path containing a space was split by the
+	# unquoted expansion below.
+	finder_slices=()
 	for arch in $GAZE_ARCHS; do
 		slice="$STAGE_ROOT/GazeFinder-$arch"
 		xcrun swiftc \
@@ -285,10 +342,9 @@ case "$GAZE_ARCHS" in
 		-Xlinker -e -Xlinker _NSExtensionMain \
 		"${FINDER_SOURCES[@]}" \
 		-o "$slice"
-		finder_slices="$finder_slices $slice"
+		finder_slices+=("$slice")
 	done
-	# shellcheck disable=SC2086
-	lipo -create -output "$APPEX/Contents/MacOS/GazeFinder" $finder_slices
+	lipo -create -output "$APPEX/Contents/MacOS/GazeFinder" "${finder_slices[@]}"
 	;;
 *)
 	xcrun swiftc \
@@ -319,7 +375,7 @@ for arch in $GAZE_ARCHS; do PAM_ARCH_FLAGS+=(-arch "$arch"); done
 xcrun clang -bundle -O2 -Wall -Werror "${PAM_ARCH_FLAGS[@]}" -isysroot "$SDK" \
 	-mmacosx-version-min="${MIN_SDK_MAJOR}.0" -lpam -framework Security -framework CoreFoundation \
 	"$ROOT/Sources/PAM/pam_gaze.c" -o "$STAGE/Contents/Resources/pam_gaze.so"
-codesign --force --sign "$IDENTITY" "$STAGE/Contents/Resources/pam_gaze.so"
+gaze_codesign --force --sign "$IDENTITY" "$STAGE/Contents/Resources/pam_gaze.so"
 echo "  ✓ pam_gaze.so"
 
 # Shortcuts metadata, normally made by Xcode. Optional: a failure here only costs
@@ -355,13 +411,13 @@ else
 	echo "→ Signing with a stable local identity"
 fi
 
-codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" \
+gaze_codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" \
 	--entitlements "$ROOT/Sources/FinderExtension/GazeFinder.entitlements" \
 	--identifier com.gazeunlock.Gaze.Finder "$APPEX"
 
 codesign --verify --strict "$APPEX"
 
-codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" \
+gaze_codesign --force "${SIGNING_FLAGS[@]}" --sign "$IDENTITY" \
 	--entitlements "$ROOT/Resources/Gaze.entitlements" \
 	--identifier com.gazeunlock.Gaze "$STAGE"
 

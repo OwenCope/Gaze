@@ -160,7 +160,7 @@
     {
       "id": "setup-art",
       "kind": "image-set",
-      "description": "Setup artwork, screenshots, clips, rounded variants and generated companion illustrations copied from Resources/Art into the app bundle.",
+      "description": "Setup artwork, screenshots, clips, rounded variants and generated companion illustrations copied from Resources/Art into the app bundle, together with the native unlock animation clips and their resting frames in both colours.",
       "repoPaths": [
         "Resources/Art"
       ],
@@ -361,6 +361,46 @@
             "path": "Resources/Art/tour-unlock.png",
             "bytes": 332978,
             "sha256": "9cb480e54280c3e04a977e4d1ba8451415498b4cc39bfdece454076d352ec461"
+          },
+          {
+            "path": "Resources/Art/unlock-native-failure-blue.mp4",
+            "bytes": 987166,
+            "sha256": "4e8dbca134c5b6c6147b000c1d8555c96104902e98d9c16082fdda27a0713048"
+          },
+          {
+            "path": "Resources/Art/unlock-native-failure-green.mp4",
+            "bytes": 496550,
+            "sha256": "897cf7b744666c264818bfc41ef64a90211a309583f279e68e35990f8e1bed64"
+          },
+          {
+            "path": "Resources/Art/unlock-native-idle-blue.mp4",
+            "bytes": 356661,
+            "sha256": "5faebcb28cdc19b4fe097971dc804773cb33b0be9ef29675684af60ce428a803"
+          },
+          {
+            "path": "Resources/Art/unlock-native-idle-green.mp4",
+            "bytes": 364456,
+            "sha256": "4b2d20b7d71069c40278bd83834553203086cb8c764dcfd090e7b0815736edbc"
+          },
+          {
+            "path": "Resources/Art/unlock-native-static-blue.png",
+            "bytes": 9171,
+            "sha256": "abf19bf4bb031d99b4090c7b2cb0456b391e70f6822ccafcc88ce6db1d48ca2d"
+          },
+          {
+            "path": "Resources/Art/unlock-native-static-green.png",
+            "bytes": 13366,
+            "sha256": "29217dbc4b761437efee83414bcf68ec65d21d6adc41a9d99686e9f28ede3d95"
+          },
+          {
+            "path": "Resources/Art/unlock-native-success-blue.mp4",
+            "bytes": 758069,
+            "sha256": "58aa232e28be84748fc497486bd083b91442b3495904a89a976511fdb20513e2"
+          },
+          {
+            "path": "Resources/Art/unlock-native-success-green.mp4",
+            "bytes": 457662,
+            "sha256": "73d5e342316b526bba29ee231caab6a6c18ae59dee575715c9c192346a3e4d39"
           }
         ]
       },

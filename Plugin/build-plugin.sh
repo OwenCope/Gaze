@@ -78,16 +78,20 @@ CLANG_FLAGS=(
 )
 if [ "${DIST:-}" = "1" ]; then
 	echo "→ Compiling universal (SDK: $(basename "$SDK"), arm64 + x86_64)"
-	SLICE_DIR="$(mktemp -d "$ROOT/build/.slices-Gaze.XXXXXX")"
+	# Temp rather than under the repo: a checkout inside a folder iCloud Drive syncs has
+	# its directories stamped with com.apple.FinderInfo by the file provider, which
+	# codesign then refuses as detritus. See the same note in ../build.sh.
+	SLICE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/.slices-Gaze.XXXXXX")"
 	trap 'rm -rf "$SLICE_DIR"' EXIT
-	slices=""
+	# An array rather than a space-joined string: the unquoted expansion below split any
+	# path containing a space, so lipo found no inputs.
+	slices=()
 	for target in $(release_targets); do
 		slice="$SLICE_DIR/Gaze-${target%%-*}"
 		xcrun clang "${CLANG_FLAGS[@]}" -target "$target" -o "$slice"
-		slices="$slices $slice"
+		slices+=("$slice")
 	done
-	# shellcheck disable=SC2086
-	lipo -create -output "$BIN" $slices
+	lipo -create -output "$BIN" "${slices[@]}"
 	rm -rf "$SLICE_DIR"
 	trap - EXIT
 else

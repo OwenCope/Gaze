@@ -76,6 +76,19 @@ final class LockScreenShoot {
 			// from the same prompts, symbols and hints LockWatcher presents, so a recording can
 			// show what the panel asks of you rather than only the scan and the result.
 			let movements = CommandLine.arguments.contains("--shoot-movements")
+			// `--shoot-rejected` ends on the failure beat rather than the tick, so the
+			// rejected animation can be photographed the same way the accepted one is —
+			// without it the harness only ever shows a successful unlock.
+			let rejected = CommandLine.arguments.contains("--shoot-rejected")
+			// The real watcher goes straight from waiting to open — `.unlocked`, with no
+			// `.success` in between — so the accepted animation has to be photographable in
+			// that phase too, not only in the one the harness used to end on.
+			let unlocked = CommandLine.arguments.contains("--shoot-unlocked")
+			// `.pending` is the beat a real scan sits in while macOS is slow to answer, and
+			// it is the only phase that introduces a caption over a mark that was already
+			// sitting still. The other flags all jump straight to a result, so nothing else
+			// photographs that arrival — which is exactly the moment worth photographing.
+			let pending = CommandLine.arguments.contains("--shoot-pending")
 			repeat {
 				capsule.update(phase: .locked)
 				try? await Task.sleep(for: .seconds(movements ? 1.5 : 2))
@@ -95,7 +108,11 @@ final class LockScreenShoot {
 						}
 					}
 				}
-				capsule.update(phase: .success)
+				if pending {
+					capsule.update(phase: .pending)
+				} else {
+					capsule.update(phase: rejected ? .notRecognised : (unlocked ? .unlocked : .success))
+				}
 				try? await Task.sleep(for: .seconds(loops ? 3 : 3600))
 			} while loops && !Task.isCancelled
 		}

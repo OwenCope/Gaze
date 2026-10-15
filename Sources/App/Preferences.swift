@@ -125,6 +125,22 @@ final class Preferences {
 		}
 	}
 
+	/// The colour of the native unlock animation.
+	///
+	/// Two, not a free picker: they are the two sets of clips that ship, and an option
+	/// that names a colour the app cannot draw is worse than no option at all.
+	enum UnlockAnimationColour: String, CaseIterable, Sendable {
+		case blue
+		case green
+
+		var title: String {
+			switch self {
+			case .blue: return "Blue"
+			case .green: return "Green"
+			}
+		}
+	}
+
 	/// How many completed movement responses Mac unlock asks for.
 	///
 	/// Two is the default for new and existing users. One is quicker and two asks
@@ -212,6 +228,8 @@ final class Preferences {
 		static let allowExternalCamera = "allowExternalCamera"
 		static let approveAdminPrompts = "approveAdminPrompts"
 		static let unlockMovementCount = "unlockMovementCount"
+		static let nativeUnlockAnimation = "nativeUnlockAnimation"
+		static let unlockAnimationColour = "unlockAnimationColour"
 		static let lookMovement = "lookMovement"
 		static let disabledMovements = "disabledMovements"
 		static let recognitionSensitivity = "recognitionSensitivity"
@@ -464,6 +482,20 @@ final class Preferences {
 		didSet { defaults.set(glyphPlacement.rawValue, forKey: Key.glyphPlacement) }
 	}
 
+	/// Whether the lock-screen panel plays the bundled native unlock animation instead
+	/// of drawing its own head.
+	///
+	/// On by default: the native clips are what a person expects an unlock to look like,
+	/// and the drawn head is still there the moment this is switched off.
+	var nativeUnlockAnimation: Bool {
+		didSet { defaults.set(nativeUnlockAnimation, forKey: Key.nativeUnlockAnimation) }
+	}
+
+	/// Which set of native unlock clips to play.
+	var unlockAnimationColour: UnlockAnimationColour {
+		didSet { defaults.set(unlockAnimationColour.rawValue, forKey: Key.unlockAnimationColour) }
+	}
+
 	var appTheme: AppTheme {
 		didSet { defaults.set(appTheme.rawValue, forKey: Key.appTheme) }
 	}
@@ -533,6 +565,18 @@ final class Preferences {
 		glyphPlacement =
 			defaults.string(forKey: Key.glyphPlacement)
 			.flatMap(GlyphPlacement.init(rawValue:)) ?? .centred
+		// Read as an NSNumber, not a Bool: `defaults.bool` answers false for a key that
+		// has simply never been written, which would silently switch the animation off
+		// for every installation that predates the setting.
+		if let storedNative = defaults.object(forKey: Key.nativeUnlockAnimation) as? NSNumber,
+			CFGetTypeID(storedNative) == CFBooleanGetTypeID() {
+			nativeUnlockAnimation = storedNative.boolValue
+		} else {
+			nativeUnlockAnimation = true
+		}
+		unlockAnimationColour =
+			defaults.string(forKey: Key.unlockAnimationColour)
+			.flatMap(UnlockAnimationColour.init(rawValue:)) ?? .blue
 		appTheme =
 			defaults.string(forKey: Key.appTheme)
 			.flatMap(AppTheme.init(rawValue:)) ?? .system

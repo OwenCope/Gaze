@@ -319,6 +319,7 @@ final class AppLockShield {
 		let host = NSHostingView(rootView: AppLockShieldView(
 			appName: appName,
 			icon: icon,
+			animationColour: Preferences.shared.unlockAnimationColour,
 			status: status,
 			onUsePassword: { [weak self] in self?.authenticateWithPassword() },
 			onLookAgain: { [weak self] in self?.lookAgain() },
@@ -387,6 +388,9 @@ private struct AppLockShieldView: View {
 
 	let appName: String
 	let icon: NSImage
+	/// Captured when the shield is built, the same way the panel captures it, so the
+	/// mark here is the mark the lock screen plays.
+	let animationColour: Preferences.UnlockAnimationColour
 	let status: AppLockShieldStatus
 	let onUsePassword: () -> Void
 	let onLookAgain: () -> Void
@@ -408,6 +412,31 @@ private struct AppLockShieldView: View {
 	private var primary: Color { colorScheme == .dark ? .white : Color(white: 0.11) }
 	private var secondary: Color { colorScheme == .dark ? .white.opacity(0.62) : .black.opacity(0.55) }
 
+	/// True when the native animation has art to play in this colour.
+	///
+	/// Checked rather than assumed, because the dark pad behind the mark is only right
+	/// when there is a clip to composite onto it: a build without the art falls back to
+	/// the drawn head, which needs no pad and gets none.
+	private var usesNativeMark: Bool {
+		NativeUnlockAssets.isAvailable(colour: animationColour)
+	}
+
+	/// The same mark the lock-screen panel plays, so locking an app behind Gaze looks
+	/// like Gaze unlocking it rather than like a separate feature.
+	///
+	/// Every phase the shield sets has a clip — `.scanning` and `.locked` to the idle
+	/// loop, `.notRecognised` to the failure beat, `.success` to the tick — so the
+	/// caption underneath still says what the mark is showing.
+	@ViewBuilder
+	private var shieldMark: some View {
+		if usesNativeMark {
+			NotchFaceMark(phase: status.phase, usesNativeAnimation: true,
+				colour: animationColour, active: true)
+		} else {
+			GazeFaceMark(phase: status.phase, active: true)
+		}
+	}
+
 	var body: some View {
 		GeometryReader { geometry in
 		ZStack {
@@ -417,8 +446,16 @@ private struct AppLockShieldView: View {
 			VStack(spacing: 0) {
 				// The face is the page; the app is named on it the way the App Lock
 				// header badges Gaze's icon with a lock.
-				GazeFaceMark(phase: status.phase, active: true)
+				shieldMark
 					.frame(width: 96, height: 96)
+					// The clips are white ink on black and composite with `.screen`,
+					// which needs a dark ground — over the light page it would erase the
+					// mark instead of drawing it. This pad gives them the ground the notch
+					// panel has; on the dark page it is the page's own colour, so it is
+					// there for the blend and invisible as a shape.
+					.background {
+						if usesNativeMark { Circle().fill(colorScheme == .dark ? ground : .black) }
+					}
 					.overlay(alignment: .bottomTrailing) {
 						Image(nsImage: icon)
 							.resizable()

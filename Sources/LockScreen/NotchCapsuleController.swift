@@ -68,6 +68,8 @@ final class NotchCapsuleController {
 		model.style = Preferences.shared.notchStyle
 		model.shape = Preferences.shared.panelShape
 		model.glyphPlacement = Preferences.shared.glyphPlacement
+		model.usesNativeAnimation = Preferences.shared.nativeUnlockAnimation
+		model.animationColour = Preferences.shared.unlockAnimationColour
 		model.transparency = Preferences.shared.notchTransparency
 		model.showsCaptions = Preferences.shared.showNotchCaptions
 
@@ -124,6 +126,11 @@ final class NotchCapsuleController {
 		let previous = model.phase
 		model.phase = phase
 		model.showsCaptions = Preferences.shared.showNotchCaptions
+		// Re-read here as well as on show: the mark is what the animation setting
+		// changes, and a setting that only applied to the next lock screen would be
+		// one you had to lock twice to see.
+		model.usesNativeAnimation = Preferences.shared.nativeUnlockAnimation
+		model.animationColour = Preferences.shared.unlockAnimationColour
 		if phase != previous {
 			announce(phase: phase)
 		}

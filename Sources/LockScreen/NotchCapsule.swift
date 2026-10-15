@@ -158,6 +158,25 @@ final class NotchCapsuleModel {
 		/// to "is this Mac locked", and that question has an answer the whole time. It stays
 		/// put and changes at the one moment its answer changes.
 		var showsLockChip: Bool { true }
+
+		/// What the mark in the panel announces to VoiceOver.
+		///
+		/// On the phase rather than on either mark, because there are two marks — the drawn
+		/// head and the native unlock animation — and they must say the same thing. One
+		/// statement of it is what stops them drifting.
+		var markAccessibilityLabel: String {
+			switch self {
+			case .challenge(let prompt, _, _, _, _, _): prompt
+			case .scanning: "Looking for your face"
+			case .pending: "Waiting for macOS"
+			case .success: "Face verified"
+			case .notRecognised: "Face not recognised. Try again."
+			case .spoofRejected: "Face rejected. Use your password."
+			case .unavailable(let message): message
+			case .locked: "Locked"
+			case .unlocked: "Unlocked"
+			}
+		}
 	}
 
 	var phase: Phase = .scanning
@@ -170,6 +189,13 @@ final class NotchCapsuleModel {
 	var shape: Preferences.PanelShape = .attached
 	/// Mirrors `Preferences.glyphPlacement`.
 	var glyphPlacement: Preferences.GlyphPlacement = .centred
+	/// Mirrors `Preferences.nativeUnlockAnimation`, captured when the panel is shown.
+	///
+	/// Display only: it chooses which mark the panel draws, never whether Gaze checks a
+	/// face or unlocks.
+	var usesNativeAnimation = true
+	/// Mirrors `Preferences.unlockAnimationColour`, captured when the panel is shown.
+	var animationColour: Preferences.UnlockAnimationColour = .blue
 	var transparency: Double = 0.3
 	/// Mirrors `Preferences.showNotchCaptions`, captured when the panel is shown.
 	/// Display only: captions reserve space only when enabled.
@@ -387,13 +413,35 @@ struct NotchCapsule: View {
 			endPoint: .bottom)
 	}
 
+	/// Whether the phase is drawn as the resting bar rather than the dropped panel.
+	///
+	/// Normally this is just `phase.isCompact`, and every geometry decision below reads
+	/// it here rather than the phase, so there is one answer to "which shape is drawn".
+	///
+	/// The one exception is the unlock. `.unlocked` collapses immediately in the drawn-head
+	/// design because the padlock opening is the only thing left to say, and it says it
+	/// from the bar — but the watcher keeps the panel alive for three seconds after the
+	/// unlock (`LockWatcher.unlockAnimationDuration`), and the native animation has
+	/// something worth showing for those three seconds: the tick. With it on, the panel
+	/// stays dropped and plays that clip before retracting.
+	///
+	/// Guarded on the clips actually being in the bundle: a build without them falls
+	/// straight through to the old behaviour rather than holding a panel open on an
+	/// animation it cannot play.
+	private var isCompactPhase: Bool {
+		guard model.phase == .unlocked, model.usesNativeAnimation,
+			NativeUnlockAssets.isAvailable(colour: model.animationColour)
+		else { return model.phase.isCompact }
+		return false
+	}
+
 	/// How far the top corners flare out into the screen edge.
 	///
 	/// Grows with the panel rather than being fixed. Collapsed, the panel is hidden behind
 	/// the physical cutout and a flare there would put two curves on screen that belong to
 	/// nothing; as it drops, the flare opens with it so the join is always the width of the
 	/// thing it is joining.
-	private var usesCompactBar: Bool { isIsland || model.phase.isCompact }
+	private var usesCompactBar: Bool { isIsland || isCompactPhase }
 
 	// MARK: - Ear flank (Connected + Beside the camera)
 
@@ -456,18 +504,34 @@ struct NotchCapsule: View {
 	///
 	/// Same titles the island carries: the prompt without its " · N of M" step suffix,
 	/// which the flank has no room for — the island splits that half into a subtitle.
+	///
+	/// `.scanning` and `.success` are the two it did *not* carry, and that omission is what
+	/// moved the mark. The flank measured its width from whatever sentence was in hand, so
+	/// a plain rejection — the first words an unchallenged scan ever sees — had to grow the
+	/// silhouette underneath the mark by ~146pt at the very moment the failure animation
+	/// began. A scan with a movement prompt had no such jump, because the prompt had
+	/// already widened the bar: exactly the asymmetry between the two paths.
+	///
+	/// Everything but the closed padlock now speaks, so the bar opens once when the attempt
+	/// starts and no later caption can ask it to move again.
 	private var earCaption: String? {
 		guard model.showsCaptions else { return nil }
 		switch model.phase {
 		case .challenge(let prompt, _, _, _, _, _) where !prompt.isEmpty:
 			let parts = prompt.components(separatedBy: " · ")
 			return parts.count > 1 ? parts.dropLast().joined(separator: " · ") : prompt
+		case .scanning:
+			return "Looking for you"
+		case .pending:
+			return NotchCapsuleModel.Phase.pendingCaption
 		case .notRecognised:
 			return NotchCapsuleModel.Phase.notRecognisedCaption
 		case .spoofRejected:
 			return NotchCapsuleModel.Phase.spoofRejectedCaption
 		case .unavailable(let message):
 			return message
+		case .success, .unlocked:
+			return "Unlocked"
 		default:
 			return nil
 		}
@@ -481,11 +545,18 @@ struct NotchCapsule: View {
 		return min(Self.textWidth(caption, size: 12, weight: .semibold), EarFlankMetrics.maxCaptionWidth)
 	}
 
-	/// The face-side flank widens only to carry a message: resting width plus the
-	/// measured words and the gap between face and text. No words, no widening.
+	/// The face-side flank widens only to carry a message: resting width plus the reserved
+	/// words and the gap between face and text. No words, no widening.
+	///
+	/// Reserved at the *longest* message the flank can carry rather than measured from the
+	/// one in hand, so the silhouette is one number for the whole attempt. Sizing it to the
+	/// sentence made the bar itself the thing that moved: each caption's length became a
+	/// different silhouette, and the mark's neighbours grew and shrank under it. The text
+	/// still hugs its own measure inside that slot, so short words look natural — it is only
+	/// the black behind them that stops changing.
 	private var earFaceFlankWidth: CGFloat {
 		guard earCaption != nil else { return EarFlankMetrics.flank }
-		return EarFlankMetrics.flank + 6 + earMessageWidth
+		return EarFlankMetrics.flank + 6 + EarFlankMetrics.maxCaptionWidth
 	}
 
 	private var isEarUnlocked: Bool {
@@ -503,7 +574,8 @@ struct NotchCapsule: View {
 	}
 
 	private var earFace: some View {
-		GazeFaceMark(phase: model.phase, active: model.isExpanded && !model.phase.isCompact)
+		NotchFaceMark(phase: model.phase, usesNativeAnimation: model.usesNativeAnimation,
+			colour: model.animationColour, active: model.isExpanded && !isCompactPhase)
 			.frame(width: EarFlankMetrics.faceSize, height: EarFlankMetrics.faceSize)
 	}
 
@@ -538,11 +610,20 @@ struct NotchCapsule: View {
 			// The physical cutout itself: reserved space, never drawn over.
 			Spacer(minLength: 0)
 				.frame(width: cutoutWidth)
+			// The mark keeps the same place whether or not there are words beside it.
+			//
+			// It sat centred in the captionless slot and *led* the row when there were
+			// words, so the padding that centres it disappeared the moment a message
+			// arrived and took the mark 12pt sideways with it. A rejection is the one thing
+			// that brings words to this flank — `.scanning` and `.success` carry none — so
+			// it was the rejected animation that jumped while the accepted one sat still.
+			//
+			// The inset below is exactly the centring the captionless branch gets for free,
+			// stated rather than derived, so the two agree.
 			if let caption = earCaption {
-				// The message rides in the face-side flank, which widens to carry it.
-				// It cannot sit in the middle: that space is the camera housing itself.
 				HStack(spacing: 6) {
 					earFace
+						.padding(.leading, (EarFlankMetrics.flank - EarFlankMetrics.faceSize) / 2)
 					Text(caption)
 						.font(.system(size: 12, weight: .semibold))
 						.foregroundStyle(.white)
@@ -584,7 +665,17 @@ struct NotchCapsule: View {
 		}
 	}
 
-	private var isDynamicSuccess: Bool { model.phase == .success }
+	/// The island's celebratory state.
+	///
+	/// `.unlocked` joins it only when the native animation is on: the island's resting
+	/// capsule is too small for the tick to read, so it grows for the unlock exactly as it
+	/// already grows for `.success`. Without the clips, `.unlocked` stays the resting
+	/// capsule it has always been.
+	private var isDynamicSuccess: Bool {
+		model.phase == .success
+			|| (model.phase == .unlocked && model.usesNativeAnimation
+				&& NativeUnlockAssets.isAvailable(colour: model.animationColour))
+	}
 
 	private var isDynamicUnlocked: Bool {
 		model.phase == .success || model.phase == .unlocked
@@ -718,7 +809,8 @@ struct NotchCapsule: View {
 			} else {
 				Spacer(minLength: 0)
 			}
-			GazeFaceMark(phase: model.phase, active: model.isExpanded && !model.phase.isCompact)
+			NotchFaceMark(phase: model.phase, usesNativeAnimation: model.usesNativeAnimation,
+				colour: model.animationColour, active: model.isExpanded && !isCompactPhase)
 				.frame(width: DynamicIslandMetrics.activeFaceSize, height: DynamicIslandMetrics.activeFaceSize)
 				.scaleEffect(isDynamicExpanded ? 1
 					: DynamicIslandMetrics.restingFaceSize / DynamicIslandMetrics.activeFaceSize)
@@ -865,7 +957,7 @@ struct NotchCapsule: View {
 			value: expanded)
 		.animation(
 			reduceMotion ? nil : NotchAnimation.feedback,
-			value: [String(describing: model.phase.isCompact), model.phase.captionText ?? ""].joined(separator: "|"))
+			value: [String(describing: isCompactPhase), model.phase.captionText ?? ""].joined(separator: "|"))
 		.symbolEffectsRemoved(reduceMotion)
 	}
 
@@ -1134,7 +1226,7 @@ struct NotchCapsule: View {
 	/// and no more, and its corners round *within* that band, which is what the radius floor
 	/// is for.
 	private var currentHeight: CGFloat {
-		model.phase.isCompact ? restingBarHeight : height
+		isCompactPhase ? restingBarHeight : height
 	}
 
 	/// The bar that carries the padlock: the housing's height plus a single point.
@@ -1168,7 +1260,7 @@ struct NotchCapsule: View {
 		// Collapsing the width as well means the bar slides in behind the cutout and there is
 		// nothing left on screen to pop when the window goes.
 		guard expanded else { return cutoutWidth }
-		return model.phase.isCompact ? compactBarWidth : width
+		return isCompactPhase ? compactBarWidth : width
 	}
 
 	/// The bar at rest: the housing plus a short ear either side.
@@ -1193,12 +1285,21 @@ struct NotchCapsule: View {
 	///
 	/// The ear flank and the dynamic island carry their captions inline, so neither
 	/// uses the drop.
-	private var showsDrop: Bool { !model.phase.isCompact }
+	private var showsDrop: Bool { !isCompactPhase }
 
+	/// Vertical room the challenge caption needs in the drop — held whether or not a
+	/// caption is currently showing.
+	///	///
+	/// Reserving it on the caption's *presence* is what made the mark change size and
+	/// position the instant a prompt cleared, which is the same instant the unlock animation
+	/// begins: the tick appeared larger and lower than the face that had just been there, so
+	/// the whole mark seemed to jump. The band is now always held, so the mark is one size in
+	/// every phase of the drop and only the caption fades in and out beneath it.
+	private static let captionBand: CGFloat = 28
 	private var glyphSide: CGFloat {
 		model.shape == .island
 			? min(islandWidth, islandHeight) * 0.62
-			: min(width, max(0, visibleHeight - (showsChallengeCaption ? 28 : 0))) * 0.68
+			: min(width, max(0, visibleHeight - Self.captionBand)) * 0.68
 	}
 
 	/// Sits high in the drop, where the panel is still dark enough to carry it.
@@ -1208,11 +1309,12 @@ struct NotchCapsule: View {
 			// under — it is a panel in its own right.
 			return notchInset + Self.islandGap + (islandHeight - glyphSide) / 2
 		}
-		return notchInset + max(6, (visibleHeight - glyphSide - (showsChallengeCaption ? 26 : 0)) / 2)
+		return notchInset + max(6, (visibleHeight - glyphSide - Self.captionBand) / 2)
 	}
 
 	private var content: some View {
-		GazeFaceMark(phase: model.phase, active: model.isExpanded && !model.phase.isCompact)
+		NotchFaceMark(phase: model.phase, usesNativeAnimation: model.usesNativeAnimation,
+			colour: model.animationColour, active: model.isExpanded && !isCompactPhase)
 			.frame(width: glyphSide, height: glyphSide)
 	}
 }

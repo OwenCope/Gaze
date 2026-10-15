@@ -272,6 +272,14 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			section: "NotchSettingsSection"
 		),
 		SettingsSearchItem(
+			id: "unlock-animation",
+			title: "Native unlock animation",
+			subtitle: "The Face ID mark that scans and ticks, and its colour",
+			keywords: ["animation", "unlock animation", "native", "face id", "faceid", "tick", "colour", "color", "blue", "green", "mark", "glyph"],
+			pane: "notch",
+			section: "NotchSettingsSection"
+		),
+		SettingsSearchItem(
 			id: "about",
 			title: "About Gaze",
 			subtitle: "What this app is, and what it isn't",

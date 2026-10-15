@@ -68,6 +68,8 @@ struct NotchSettingsSection: View {
 
 		sizeControls
 
+		unlockAnimationControls
+
 		SettingsSection(title: "Expressions") {
 			SettingToggle(
 				title: "Show captions",
@@ -85,6 +87,44 @@ struct NotchSettingsSection: View {
 				settings.glyphPlacement = .centred
 			}
 		}
+	}
+
+	/// The mark the panel draws, rather than the panel itself.
+	///
+	/// Its own section rather than a row inside Appearance: the panel's shape, material and
+	/// size are about the object, and this is about what plays inside it — and the colour
+	/// only means anything once the animation is on, so it appears when it can be used.
+	private var unlockAnimationControls: some View {
+		SettingsSection(title: "Unlock animation", info: animationFooter) {
+			SettingToggle(
+				title: "Native unlock animation",
+				detail: "The Face ID mark: scanning while Gaze looks, a tick when the Mac opens.",
+				symbol: "faceid",
+				isOn: $settings.nativeUnlockAnimation)
+
+			if settings.nativeUnlockAnimation {
+				RowDivider(inset: Theme.rowInset)
+				SettingRow(title: "Colour") {
+					Picker("Colour", selection: $settings.unlockAnimationColour) {
+						ForEach(Preferences.UnlockAnimationColour.allCases, id: \.self) { colour in
+							Text(colour.title).tag(colour)
+						}
+					}
+					.pickerStyle(.segmented)
+					.labelsHidden()
+					.controlSize(.large)
+					.frame(width: 330)
+					.accessibilityLabel("Colour")
+				}
+			}
+		}
+	}
+
+	private var animationFooter: String {
+		guard settings.nativeUnlockAnimation else {
+			return "The animated head Gaze drew before, in place of the clips."
+		}
+		return "Plays on the lock screen, and in the preview above."
 	}
 
 	private var sizeControls: some View {
@@ -154,6 +194,8 @@ private struct NotchAppearancePreview: View {
 		model.shape = settings.panelShape
 		model.style = settings.notchStyle
 		model.glyphPlacement = settings.panelShape != .attached ? .centred : settings.glyphPlacement
+		model.usesNativeAnimation = settings.nativeUnlockAnimation
+		model.animationColour = settings.unlockAnimationColour
 		model.transparency = settings.notchTransparency
 		model.showsCaptions = settings.showNotchCaptions
 		model.phase = Self.previewPhase(for: settings.panelShape)
@@ -190,13 +232,18 @@ private struct NotchAppearancePreview: View {
 		.onChange(of: settings.glyphPlacement) { _, _ in syncAppearance() }
 		.onChange(of: settings.notchTransparency) { _, _ in syncAppearance() }
 		.onChange(of: settings.showNotchCaptions) { _, _ in syncAppearance() }
+		.onChange(of: settings.nativeUnlockAnimation) { _, _ in syncAppearance() }
+		.onChange(of: settings.unlockAnimationColour) { _, _ in syncAppearance() }
 		.onAppear { syncAppearance(); model.isExpanded = true }
 		.onDisappear { model.isExpanded = false }
 	}
 
 	private var previewDescription: String {
 		let appearance = model.glyphPlacement == .ear ? "Mark on the ear" : model.style.title
-		return "\(model.shape.title), \(appearance). Simulated appearance; camera off."
+		let animation = model.usesNativeAnimation
+			? "Native unlock animation, \(model.animationColour.title)"
+			: "The drawn head"
+		return "\(model.shape.title), \(appearance). \(animation). Simulated appearance; camera off."
 	}
 
 	/// Always the dropped, scanning panel. At rest every shape is the same small bar by the
@@ -210,6 +257,8 @@ private struct NotchAppearancePreview: View {
 		model.phase = Self.previewPhase(for: settings.panelShape)
 		model.style = settings.notchStyle
 		model.glyphPlacement = settings.panelShape != .attached ? .centred : settings.glyphPlacement
+		model.usesNativeAnimation = settings.nativeUnlockAnimation
+		model.animationColour = settings.unlockAnimationColour
 		model.transparency = settings.notchTransparency
 		model.showsCaptions = settings.showNotchCaptions
 	}
