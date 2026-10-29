@@ -121,7 +121,12 @@ struct GazeFaceDrawing: View {
 	let motion: GazeFaceMotion
 	var material = GazeCompanionMaterial.charcoal
 	var bodyOpacity = 1.0
-	private var featureColor: Color { material == .pearl ? Color(white: 0.10) : .white }
+	private var featureColor: Color {
+		material == .pearl ? Color(white: 0.10) : .white
+	}
+	private var successMarkOpacity: Double { min(1, max(0, pose.expression)) }
+	private var failDim: Double { min(1, max(0, -pose.expression)) }
+	private var resolvedBodyOpacity: Double { bodyOpacity * (1 - 0.45 * failDim) }
 
 	var body: some View {
 		GeometryReader { geometry in
@@ -129,20 +134,16 @@ struct GazeFaceDrawing: View {
 			let shell = RoundedRectangle(cornerRadius: side * 0.36, style: .continuous)
 			ZStack {
 				shell
-					.fill(LinearGradient(colors: material == .pearl
-						? [Color(white: 0.95), Color(white: 0.865), Color(white: 0.90)]
-						: material == .ink
-							? [Color(white: 0.144), Color(white: 0.0624), Color(white: 0.096)]
-							: [Color(white: 0.30), Color(white: 0.13), Color(white: 0.20)],
+					.fill(LinearGradient(colors:
+						[Color(white: 0.06), Color(white: 0.03), Color(white: 0.05)],
 						startPoint: .topLeading, endPoint: .bottomTrailing))
 					.padding(side * 0.045)
-					.opacity(bodyOpacity)
+					.opacity(resolvedBodyOpacity)
 				shell
-					.strokeBorder(LinearGradient(colors: [.white.opacity(0.48), .white.opacity(0.03), .white.opacity(0.20)],
-						startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: max(0.5, side * 0.015))
+					.strokeBorder(featureColor.opacity(0.55), lineWidth: max(0.5, side * 0.015))
 					.padding(side * 0.045)
 				Ellipse()
-					.fill(.white.opacity(0.20))
+					.fill(featureColor.opacity(0.20))
 					.frame(width: side * 0.23, height: side * 0.06)
 					.blur(radius: side * 0.035)
 					.rotationEffect(.degrees(-35))
@@ -152,17 +153,28 @@ struct GazeFaceDrawing: View {
 					eye(side: side, trailing: true)
 				}
 				.offset(x: side * 0.10 * (pose.turn + pose.gaze), y: side * (0.09 + pose.nod * 0.045 - pose.mouthOpen * 0.09))
+				.opacity(1 - successMarkOpacity * 0.6)
 				GazeExpressionCurve(curvature: pose.expression)
 					.stroke(featureColor, style: StrokeStyle(lineWidth: side * (pose.expression > 0 ? 0.044 : 0.032), lineCap: .round))
 					.frame(width: side * 0.23, height: side * 0.15)
-					.opacity(abs(pose.expression))
+					.opacity(abs(pose.expression) * (1 - successMarkOpacity))
 					.offset(x: side * 0.10 * pose.turn, y: side * (0.27 + max(0, pose.expression) * 0.035))
 				Capsule()
 					.fill(featureColor)
 					.frame(width: side * 0.16, height: side * 0.19)
 					.scaleEffect(x: 0.5 + pose.mouthOpen * 0.5, y: max(0.01, pose.mouthOpen))
-					.opacity(pose.mouthOpen)
+					.opacity(pose.mouthOpen * (1 - successMarkOpacity))
 					.offset(y: side * 0.27)
+				// Success end-state: green checkmark in circle, held.
+				ZStack {
+					Circle()
+						.strokeBorder(featureColor, lineWidth: side * 0.045)
+					GazeCheckmark()
+						.stroke(featureColor, style: StrokeStyle(lineWidth: side * 0.05, lineCap: .round, lineJoin: .round))
+						.padding(side * 0.26)
+				}
+				.frame(width: side * 0.62, height: side * 0.62)
+				.opacity(successMarkOpacity)
 			}
 			.frame(width: side, height: side)
 			.scaleEffect(1 + pose.breath * 0.014)
@@ -185,6 +197,16 @@ struct GazeFaceDrawing: View {
 			.rotationEffect(angle)
 			.frame(width: side * 0.125, height: side * 0.25)
 			.shadow(color: featureColor.opacity(0.18), radius: side * 0.035)
+	}
+}
+
+private struct GazeCheckmark: Shape {
+	func path(in rect: CGRect) -> Path {
+		var path = Path()
+		path.move(to: CGPoint(x: rect.minX + rect.width * 0.24, y: rect.midY + rect.height * 0.02))
+		path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.45, y: rect.maxY - rect.height * 0.24))
+		path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.22, y: rect.minY + rect.height * 0.26))
+		return path
 	}
 }
 

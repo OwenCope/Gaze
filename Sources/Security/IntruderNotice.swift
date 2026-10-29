@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// Tells the owner that someone else tried to unlock the Mac, once they're back.
@@ -50,12 +52,18 @@ final class IntruderNotice {
 			? "1 try at \(time) while you were away. See it in Gaze."
 			: "\(tries) tries while you were away, starting at \(time). See them in Gaze."
 		// UNNotificationAttachment moves its file, so it gets a copy.
-		if let photo, FileManager.default.fileExists(atPath: photo.path) {
+		// Only a photo that decodes is attached: a missing or unreadable one shows as a
+		// grey tile with a spinner that never resolves, so post without it instead.
+		if let photo, Self.isReadableJPEG(photo) {
 			let copy = FileManager.default.temporaryDirectory
 				.appendingPathComponent("gaze-intruder-\(UUID().uuidString).jpg")
-			if (try? FileManager.default.copyItem(at: photo, to: copy)) != nil,
-				let attachment = try? UNNotificationAttachment(identifier: "photo", url: copy) {
-				content.attachments = [attachment]
+			if (try? FileManager.default.copyItem(at: photo, to: copy)) != nil {
+				if let attachment = try? UNNotificationAttachment(identifier: "photo", url: copy,
+					options: [UNNotificationAttachmentOptionsTypeHintKey: UTType.jpeg.identifier]) {
+					content.attachments = [attachment]
+				} else {
+					try? FileManager.default.removeItem(at: copy)
+				}
 			}
 		}
 		let request = UNNotificationRequest(identifier: "gaze-intruder", content: content, trigger: nil)
@@ -64,5 +72,12 @@ final class IntruderNotice {
 			guard granted else { return }
 			center.add(request)
 		}
+	}
+
+	private static func isReadableJPEG(_ url: URL) -> Bool {
+		guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+			CGImageSourceGetType(source) as String? == UTType.jpeg.identifier,
+			CGImageSourceGetCount(source) > 0 else { return false }
+		return CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
 	}
 }

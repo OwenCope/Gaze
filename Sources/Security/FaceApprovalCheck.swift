@@ -161,6 +161,8 @@ final class FaceApprovalCheck {
 			let result = await evaluator.evaluate(sample)
 			guard current(), camera.evidenceContinuity.permits(continuity, at: .now),
 				capturedAt <= .now, capturedAt.duration(to: .now) <= CameraFrameLease.maximumAge else { restart(); continue }
+			// A frame the photo classifier doubts is skipped, not held against the hold.
+			if case .suspect = result.spoofDecision { continue }
 			guard result.permitsMatchHold(requiresAntiSpoof: true), let face = result.face else { restart(); continue }
 			if hold.faceID != face.id { challenge.reset(); gate.reset() }
 			let held = hold.consume(faceID: face.id, now: capturedAt, required: .seconds(2))

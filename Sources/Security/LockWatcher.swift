@@ -180,7 +180,7 @@ final class LockWatcher {
 	private static let movementExcursionScoreDrop: Float = 0.30
 
 	/// How long Follow the light shows its tick before the next prompt or the unlock.
-	private static let lookConfirmation: Duration = .milliseconds(500)
+	private static let lookConfirmation: Duration = .milliseconds(300)
 
 	/// Intersection over union of two Vision-normalized boxes. Same space on both sides
 	/// is all it needs; the values never leave this comparison.
@@ -346,7 +346,7 @@ final class LockWatcher {
 		didSubmitPassword = false
 		Self.logger.notice("Display turned off during a scan; stopping until it wakes.")
 		logAttemptTiming(outcome: "display-slept")
-		recordEndedWithoutGaze(.leftLocked)
+		recordEndedWithoutGaze(.leftLocked, endReason: "display-slept")
 		attempt?.cancel()
 		attempt = nil
 		attemptID = nil
@@ -365,7 +365,7 @@ final class LockWatcher {
 		didSubmitPassword = false
 		Self.logger.notice("Screen saver started; not scanning until it's dismissed.")
 		logAttemptTiming(outcome: "screen-saver-started")
-		recordEndedWithoutGaze(.leftLocked)
+		recordEndedWithoutGaze(.leftLocked, endReason: "saver-started")
 		attempt?.cancel()
 		attempt = nil
 		attemptID = nil
@@ -510,6 +510,7 @@ final class LockWatcher {
 		// thing, so the panel and any subscriber can never disagree about the state.
 		StateBroadcast.reset()
 		StateBroadcast.post(.locked)
+		GazeStatusBroadcast.screenLocked()
 
 		let identifier = UUID()
 		attemptID = identifier
@@ -686,6 +687,7 @@ final class LockWatcher {
 			} else if !Self.screenIsLocked() {
 				Self.logger.notice("Unlocked into a session Gaze cannot verify; hiding the panel.")
 				StateBroadcast.post(.idle)
+				GazeStatusBroadcast.screenUnlocked(by: .other)
 				isLocked = false
 				spaceMonitor.stop()
 				submissionID = nil
@@ -716,6 +718,7 @@ final class LockWatcher {
 		isLocked = false
 		spaceMonitor.stop()
 		StateBroadcast.post(.idle)
+		GazeStatusBroadcast.screenUnlocked(by: didSubmitPassword ? .gaze : .other)
 		// Whatever unlocked the Mac, we are done. Cancelling releases the camera promptly
 		// rather than leaving the indicator lit after the user has typed their password.
 		attempt?.cancel()
@@ -763,10 +766,10 @@ final class LockWatcher {
 
 	/// The lock ended without Gaze doing it: someone got in another way, or the
 	/// display went dark first. Filed once per lock, even with no face frame.
-	private func recordEndedWithoutGaze(_ result: UnlockAttempt.Result) {
+	private func recordEndedWithoutGaze(_ result: UnlockAttempt.Result, endReason: String? = nil) {
 		guard !closedAttemptLogged else { return }
 		closedAttemptLogged = true
-		UnlockAttemptLog.shared.record(result, photo: lastFacePixelBuffer)
+		UnlockAttemptLog.shared.record(result, photo: lastFacePixelBuffer, endReason: endReason)
 	}
 
 	/// One timing line per attempt, when it ends. Measurement only: nothing here
@@ -1050,7 +1053,7 @@ final class LockWatcher {
 		/// The last moment anybody was in front of the camera.
 		var lastFaceAt = Date()
 		/// Set after a rejection, so the next try starts from a clean slate.
-		var cooldownUntil: Date?
+		var cooldownUntil: ContinuousClock.Instant?
 		/// When the current run of too-blurred frames began, so a second of them
 		/// can ask for light before the search gives up on the face.
 		var blurredSince: Date?
@@ -1114,6 +1117,13 @@ final class LockWatcher {
 		/// Whether this scan already filed an attempt record, so the search-end
 		/// fallback does not file a second one.
 		var recordedAttempt = false
+		/// Matched frames the classifier doubted (`.suspect`) this scan. They never
+		/// count toward the match hold; a scan that ends buried in them files a
+		/// suspect-heavy reason instead of a generic one.
+		var suspectFrames = 0
+		/// Consecutive polls with no fresh frame. Past a few the holds are stale,
+		/// well before the stall timeout fires, so both reset.
+		var consecutiveWaits = 0
 
 		Self.logger.notice(
 			"""
@@ -1168,8 +1178,17 @@ final class LockWatcher {
 				cameraFailed = true
 				return
 			case .waiting:
+				// No fresh frame this poll. After several in a row the holds describe a
+				// face that is no longer there, so both reset — well under the 1 s
+				// stall timeout that ends the scan.
+				consecutiveWaits += 1
+				if consecutiveWaits >= 10 {
+					matchingHold.reset()
+					rejectionHold.reset()
+				}
 				continue
 			case .fresh(let continuous):
+				consecutiveWaits = 0
 				if shownAt == nil {
 					report(.scanning)
 					firstFrameAt = .now
@@ -1189,13 +1208,17 @@ final class LockWatcher {
 			}
 
 			if challengeGate.expired(at: .now) {
-				report(.notRecognized)
+				report(.challengeExpired)
 				// Not counted toward the lockout: an unanswered movement is someone who
 				// looked away or walked off, not a face that failed to match.
 				Self.logger.notice("Challenge not answered in time; ending this attempt.")
 				UnlockAttemptLog.shared.record(.notRecognised,
 					steps: UnlockAttempt.Steps(lookPasses: challenge?.lookPassLog),
-					photo: camera.sample?.pixelBuffer, reason: .movementTimedOut)
+					photo: camera.sample?.pixelBuffer, reason: .movementTimedOut,
+					bestScore: bestScore, threshold: self.store.embedder.matchThreshold,
+					framesWithFace: framesWithFace, qualityRejects: qualityRejects,
+					consecutiveFailures: lockout.consecutiveFailures,
+					attemptsRemaining: lockout.attemptsRemaining)
 				recordedAttempt = true
 				StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
 				updateCapsule("notRecognised", .notRecognised)
@@ -1203,7 +1226,7 @@ final class LockWatcher {
 				challengeGate.reset()
 				matchingHold.reset()
 				rejectionHold.reset()
-				cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
+				cooldownUntil = ContinuousClock.now.advanced(by: .milliseconds(Int(Self.retryCooldown * 1000)))
 				continue
 			}
 
@@ -1237,7 +1260,7 @@ final class LockWatcher {
 			// A beat after a rejection before looking again, so the panel has time to say
 			// "not recognised" and the next attempt is not judged on the same frames.
 			if let until = cooldownUntil {
-				guard Date() >= until else { continue }
+				guard ContinuousClock.now >= until else { continue }
 				cooldownUntil = nil
 				report(.scanning)
 				updateCapsule("scanning", .scanning)
@@ -1434,7 +1457,11 @@ final class LockWatcher {
 				if rejectionHold.consume(capturedAt: sampleCapturedAt, required: .seconds(Self.rejectAfter)) {
 					report(.notRecognized)
 					lockout.recordFailure()
-					UnlockAttemptLog.shared.record(.unknownFace, photo: sample.pixelBuffer, reason: .differentPerson)
+					UnlockAttemptLog.shared.record(.unknownFace, photo: sample.pixelBuffer, reason: .differentPerson,
+						bestScore: bestScore, threshold: self.store.embedder.matchThreshold,
+						framesWithFace: framesWithFace, qualityRejects: qualityRejects,
+						consecutiveFailures: lockout.consecutiveFailures,
+						attemptsRemaining: lockout.attemptsRemaining)
 					recordedAttempt = true
 					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed)
 					updateCapsule("notRecognised", .notRecognised)
@@ -1442,7 +1469,7 @@ final class LockWatcher {
 					challenge?.next()
 					challengeGate.reset()
 					rejectionHold.reset()
-					cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
+					cooldownUntil = ContinuousClock.now.advanced(by: .milliseconds(Int(Self.retryCooldown * 1000)))
 				}
 				continue
 			}
@@ -1459,6 +1486,14 @@ final class LockWatcher {
 			}
 
 			if let decision = result.spoofDecision {
+				// One frame the classifier doubts: skip it without counting it either way.
+				// Only a frame that passes every check can complete the hold below.
+				if case .suspect(let score) = decision {
+					Self.logger.notice("Frame skipped: the photo classifier flagged it (\(String(format: "%.3f", score), privacy: .public)).")
+					matchingHold.reset()
+					suspectFrames += 1
+					continue
+				}
 				if case .unavailable = decision {
 					report(.verificationUnavailable)
 					Self.logger.error("Anti-spoof inference failed; refusing password submission.")
@@ -1473,7 +1508,11 @@ final class LockWatcher {
 					// ever said no.
 					Self.logger.notice("Match rejected by anti-spoof: \(reason, privacy: .public) (\(String(format: "%.3f", score), privacy: .public)).")
 					lockout.recordFailure()
-					UnlockAttemptLog.shared.record(.spoofRejected, photo: sample.pixelBuffer, reason: .photoOrScreen)
+					UnlockAttemptLog.shared.record(.spoofRejected, photo: sample.pixelBuffer, reason: .photoOrScreen,
+						bestScore: bestScore, threshold: self.store.embedder.matchThreshold,
+						framesWithFace: framesWithFace, qualityRejects: qualityRejects,
+						consecutiveFailures: lockout.consecutiveFailures,
+						attemptsRemaining: lockout.attemptsRemaining)
 					recordedAttempt = true
 					StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .failed, score: Double(score))
 					updateCapsule("spoofRejected", .spoofRejected)
@@ -1482,7 +1521,7 @@ final class LockWatcher {
 					matchingHold.reset()
 					rejectionHold.reset()
 					await evaluator.resetSpoofCues()
-					cooldownUntil = Date().addingTimeInterval(Self.retryCooldown)
+					cooldownUntil = ContinuousClock.now.advanced(by: .milliseconds(Int(Self.retryCooldown * 1000)))
 					continue
 				}
 			}
@@ -1675,8 +1714,9 @@ final class LockWatcher {
 		Self.logger.notice(
 			"""
 			Search ended. ticks=\(ticks) withFace=\(framesWithFace) \
-			qualityRejected=\(qualityRejects) (small=\(tooSmall) blurred=\(tooBlurred)) \
+			qualityRejected=\(qualityRejects) (small=\(tooSmall) blurred=\(tooBlurred)) suspect=\(suspectFrames) \
 			largestFace=\(largestFace) bestQuality=\(bestQuality) best=\(bestScore) \
+			waits=\(consecutiveWaits) attemptsRemaining=\(self.lockout.attemptsRemaining) \
 		lastAbsence=\(lastAbsence, privacy: .public)
 		""")
 		// The scan gave up without unlocking and nothing else filed it: say why, from
@@ -1685,7 +1725,9 @@ final class LockWatcher {
 			// A face that was seen clearly but never matched gets no reason: nothing
 			// in the frame explains it, and guessing would mislead.
 			let reason: UnlockAttempt.Reason?
-			if framesWithFace == 0 {
+			if suspectFrames >= UnlockFrameEvaluator.classifierFireFrames {
+				reason = .photoOrScreen
+			} else if framesWithFace == 0 {
 				reason = .noFace
 			} else {
 				switch lastRejection {
@@ -1694,7 +1736,11 @@ final class LockWatcher {
 				case .invalidMeasurements, nil: reason = nil
 				}
 			}
-			UnlockAttemptLog.shared.record(.notRecognised, photo: lastFacePixelBuffer, reason: reason)
+			UnlockAttemptLog.shared.record(.notRecognised, photo: lastFacePixelBuffer, reason: reason,
+				bestScore: bestScore, threshold: self.store.embedder.matchThreshold,
+				framesWithFace: framesWithFace, qualityRejects: qualityRejects,
+				consecutiveFailures: lockout.consecutiveFailures,
+				attemptsRemaining: lockout.attemptsRemaining, endReason: "gave-up")
 		}
 		StateBroadcast.post(lockout.isLockedOut ? .lockedOut : .idle)
 

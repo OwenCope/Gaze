@@ -34,7 +34,7 @@ struct SetupAccessibilityDemo: View {
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
 		.allowsHitTesting(false)
 		.accessibilityElement(children: .ignore)
-		.accessibilityLabel("System Settings, with Gaze turned on.")
+		.accessibilityLabel(isOn ? "System Settings, with Gaze turned on." : "System Settings, with Gaze turned off.")
 		.task(id: isReady) {
 			if isReady || reduceMotion {
 				isOn = true

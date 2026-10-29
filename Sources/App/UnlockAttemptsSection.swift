@@ -199,7 +199,8 @@ struct UnlockAttemptsSection: View {
 		switch attempt.result {
 		case .unlocked: return "checkmark.circle"
 		case .openedAnotherWay, .closedWithoutUnlocking: return "key"
-		case .notRecognised, .unknownFace, .spoofRejected, .leftLocked: return "xmark.circle"
+		case .notRecognised, .unknownFace, .spoofRejected: return "xmark.circle"
+		case .leftLocked: return "lock.circle"
 		}
 	}
 

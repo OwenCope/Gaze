@@ -2,7 +2,7 @@
 # Stages a versioned Gaze DMG from an app bundle built by build.sh.
 #
 #   ./build.sh                              # or DIST=1 for release
-#   DIST=1 ./Tools/Release/BuildDMG.sh      # writes build/installers/Gaze-<version>.dmg
+#   DIST=1 ./Tools/Release/BuildDMG.sh      # writes build/installers/Gaze-<version>-<build>.dmg
 #   ./Tools/Release/BuildDMG.sh --help      # usage, env overrides, then exit
 #
 # Env overrides:
@@ -10,7 +10,7 @@
 #                        or build/release/Gaze.app when DIST=1).
 #   GAZE_DMG_OUTPUT_DIR  output dir (default build/installers).
 #   GAZE_SIGNING_IDENTITY, GAZE_SIGNING_REFERENCE  see Signing.sh.
-# Refuses to overwrite an existing Gaze-<version>.dmg.
+# Refuses to overwrite an existing Gaze-<version>-<build>.dmg.
 #
 # Never builds, signs the app, or changes an install. The app must already
 # exist at build/Gaze.app (local) or build/release/Gaze.app (DIST=1).
@@ -32,7 +32,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 	sed -n '2,/^set /p' "$0" | sed 's/^# \{0,1\}//'
 	echo "Version is read from the staged app's CFBundleShortVersionString."
-	echo "Existing Gaze-<version>.dmg is never overwritten."
+	echo "Existing Gaze-<version>-<build>.dmg is never overwritten."
 	exit 0
 fi
 [ $# -eq 0 ] || { echo "Usage: $(basename "$0") [-h|--help]" >&2; exit 1; }
@@ -107,9 +107,14 @@ case "$VERSION" in
 	""|*[!0-9A-Za-z.\-]*)
 		echo "Version '$VERSION' is unsuitable for a filename." >&2; exit 1;;
 esac
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist" 2>/dev/null)" || { echo "Could not read CFBundleVersion from $APP." >&2; exit 1; }
+case "$BUILD" in
+	""|*[!0-9A-Za-z.\-]*)
+		echo "Build '$BUILD' is unsuitable for a filename." >&2; exit 1;;
+esac
 
 mkdir -p "$OUT_DIR"
-IMAGE="$OUT_DIR/Gaze-$VERSION.dmg"
+IMAGE="$OUT_DIR/Gaze-$VERSION-$BUILD.dmg"
 [ -e "$IMAGE" ] && { echo "Output already exists; remove it or set GAZE_DMG_OUTPUT_DIR: $IMAGE" >&2; exit 1; }
 
 STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/gaze-dmg-stage.XXXXXX")"
@@ -239,6 +244,14 @@ See Plugin/README.md and SECURITY.md before changing any
 authorization policy.
 EOF
 echo "  ✓ Gaze.app + Applications link + Docs"
+
+echo "→ Checking disk space for the image"
+STAGE_KB="$(/usr/bin/du -sk "$STAGE" | /usr/bin/awk '{print $1}')"
+FREE_KB="$(/bin/df -k "$STAGE_ROOT" | /usr/bin/awk 'NR==2 {print $4}')"
+NEED_KB=$((STAGE_KB * 2 + 102400))
+[ "$FREE_KB" -ge "$NEED_KB" ] || {
+	echo "Insufficient disk space for the DMG (need ~$((NEED_KB / 1024))MB free)." >&2; exit 1;
+}
 
 echo "→ Creating $IMAGE"
 /usr/bin/hdiutil create -volname "Gaze $VERSION" -srcfolder "$STAGE" \

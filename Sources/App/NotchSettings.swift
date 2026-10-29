@@ -40,8 +40,7 @@ struct NotchSettingsSection: View {
 					}
 				}
 
-				if !isOnEar {
-					RowDivider(inset: Theme.rowInset)
+				RowDivider(inset: Theme.rowInset)
 				SettingRow(title: "Material") {
 					Picker("Material", selection: $settings.notchStyle) {
 						ForEach(Preferences.NotchStyle.allCases, id: \.self) { style in
@@ -63,7 +62,6 @@ struct NotchSettingsSection: View {
 							step: 0.01,
 							format: { "\(Int(($0 * 100).rounded()))%" })
 					}
-				}
 			}
 
 		sizeControls

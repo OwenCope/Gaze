@@ -98,6 +98,8 @@ final class GazeBrowserApproval {
 				hold.reset(); challenge.reset(); gate.reset(); panel.motion = .scanning
 				continue
 			}
+			// A frame the photo classifier doubts is skipped, not held against the hold.
+			if case .suspect = result.spoofDecision { continue }
 			guard result.permitsMatchHold(requiresAntiSpoof: true), let face = result.face else {
 				hold.reset(); challenge.reset(); gate.reset(); panel.motion = .scanning
 				continue

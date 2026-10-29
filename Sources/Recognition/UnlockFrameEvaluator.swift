@@ -44,6 +44,12 @@ actor UnlockFrameEvaluator {
 	/// reset per unlock attempt (fresh evaluator) or on an explicit `resetSpoofCues`.
 	private var bezelCue = DeviceBezelGate()
 	private var glareCue = GlareCue()
+	/// Frames in this scan the classifier called a spoof. Its score swings from frame to
+	/// frame on a real face (Owen's rejected lock-screen photos scored 0.00 to 0.65 while
+	/// a single spiking frame rejected the attempt), so like the cues it needs several
+	/// frames before it rejects. A frame it flags is still never used for a match.
+	private var classifierSpoofFrames = 0
+	static let classifierFireFrames = 3
 	private let matcher: FaceTemplateMatcher
 
 	init(embedder: any FaceEmbedder, faces: [FaceEnrollment], antiSpoof: AntiSpoofGate?, allowsMaskUnlock: Bool = false) {
@@ -67,6 +73,7 @@ actor UnlockFrameEvaluator {
 	func resetSpoofCues() {
 		bezelCue.reset()
 		glareCue.reset()
+		classifierSpoofFrames = 0
 	}
 
 	func evaluate(_ sample: FaceSample) -> Result {
@@ -112,7 +119,14 @@ actor UnlockFrameEvaluator {
 	/// a live frame into a spoof rejection — never the reverse.
 	private func denyChecked(_ sample: FaceSample) -> AntiSpoofGate.Decision? {
 		guard let decision = antiSpoof?.evaluate(sample) else { return nil }
+		if case .spoof(_, let score) = decision {
+			classifierSpoofFrames += 1
+			return classifierSpoofFrames >= Self.classifierFireFrames ? decision : .suspect(score: score)
+		}
 		guard case .live = decision else { return decision }
+		// An isolated suspect between live frames decays, so only a cluster of
+		// suspect frames reaches `classifierFireFrames` and rejects.
+		classifierSpoofFrames = max(0, classifierSpoofFrames - 1)
 		// Same 2.7x context crop the learned detector sees (224 px, the Spoof
 		// model's input side); the face box is mapped from the same geometry.
 		let side = 224

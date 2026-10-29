@@ -135,6 +135,7 @@ struct SettingsView: View {
 	@State private var cameraGranted = Self.cameraAuthorized
 	@State private var inputMonitoringGranted = SpaceKeyMonitor.isAllowed
 	@State private var sudoInstalled = SudoApproval.isInstalled
+	@State private var sudoError: String?
 	@State private var loginItemEnabled = LoginItem.isEnabled
 	@State private var loginItemNeedsApproval = LoginItem.needsApproval
 	@State private var loginItemError: String?
@@ -1670,15 +1671,22 @@ struct SettingsView: View {
 					get: { sudoInstalled },
 					set: { on in
 						Task { @MainActor in
-							if on {
-								guard await BiometricGate.require(.approveAdminPrompts) else { return }
-								try? await SudoApproval.install()
-							} else {
-								try? await SudoApproval.uninstall()
+							if on { guard await BiometricGate.require(.approveSudo) else { return } }
+							do {
+								if on { try await SudoApproval.install() } else { try await SudoApproval.uninstall() }
+								sudoError = nil
+							} catch SudoApprovalError.cancelled {
+								sudoError = nil
+							} catch {
+								sudoError = (on ? "Couldn’t turn on sudo approval. " : "Couldn’t turn off sudo approval. ")
+									+ error.localizedDescription
 							}
 							sudoInstalled = SudoApproval.isInstalled
 						}
 					}))
+			if let sudoError {
+				StatusLine(kind: .error, message: sudoError)
+			}
 		}
 	}
 
@@ -1722,6 +1730,13 @@ struct SettingsView: View {
 				detail: "Open Gaze from Spotlight or Finder when it’s hidden",
 				symbol: "menubar.rectangle",
 				isOn: $settings.showsMenuBarIcon)
+
+			RowDivider()
+			SettingToggle(
+				title: "Share status with other apps",
+				detail: "Lets apps like DynamicLake show when Gaze is scanning or unlocking. Never shares your face or password.",
+				symbol: "dot.radiowaves.left.and.right",
+				isOn: $settings.broadcastStatus)
 		}
 	}
 

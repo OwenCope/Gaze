@@ -11,8 +11,12 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(uname -m)-apple-macos26.0"
 	"$ROOT/Sources/LockScreen/GazeFaceMark.swift" \
 	"$ROOT/Sources/Companion/"*.swift \
 	"$ROOT/Sources/LockScreen/NotchCapsule.swift" \
+	"$ROOT/Sources/LockScreen/WallpaperGlass.swift" \
+	"$ROOT/Sources/LockScreen/LockPanelPreview.swift" \
 	"$ROOT/Sources/LockScreen/NotchPanelShape.swift" \
 	"$ROOT/Sources/LockScreen/NotchMetrics.swift" \
+	"$ROOT/Sources/LockScreen/NativeUnlockAnimation.swift" \
+	"$ROOT/Sources/LockScreen/NativeMovementMark.swift" \
 	"$ROOT/Sources/LockScreen/NotchPreviewCanvas.swift" \
 	"$ROOT/Tests/Support/CompanionCapture.swift" \
 	"$ROOT/Tests/Notch/NotchTests.swift" \

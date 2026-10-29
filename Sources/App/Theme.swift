@@ -180,8 +180,10 @@ enum Theme {
 	static let selection = dynamic(light: .black.opacity(0.08), dark: .white.opacity(0.16))
 	static let hoverFill = dynamic(light: .black.opacity(0.05), dark: .white.opacity(0.07))
 
-	/// Apple's system green. Gaze identity only, never chrome.
-	static let faceID = Color(red: 0.20, green: 0.78, blue: 0.35)
+	/// Sampled neon green. Gaze identity only, never chrome.
+	static let faceID = Color(red: 74.0 / 255.0, green: 238.0 / 255.0, blue: 127.0 / 255.0)
+	/// Dim green for the fail end-state: the same hue held back, not grey.
+	static let faceIDDim = Color(red: 34.0 / 255.0, green: 100.0 / 255.0, blue: 55.0 / 255.0)
 	static let warning = Color(red: 1.0, green: 0.62, blue: 0.04)
 	static let danger = Color(red: 1.0, green: 0.27, blue: 0.23)
 

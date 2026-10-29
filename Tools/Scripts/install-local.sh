@@ -6,7 +6,7 @@
 # old copy and building somewhere else changes nothing you can see. This swaps the app
 # at that path, keeping the previous one beside it, and restarts the agent.
 #
-#   Tools/Scripts/install-local.sh                  install build/dmg-launch/Gaze.app
+#   Tools/Scripts/install-local.sh                  install build/Gaze.app
 #   Tools/Scripts/install-local.sh path/to/Gaze.app install that build
 #   Tools/Scripts/install-local.sh --restore        put the previous copy back
 set -euo pipefail
@@ -24,19 +24,28 @@ fi
 # The executable the agent launches, and the .app around it.
 EXECUTABLE="$(/usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$AGENT_PLIST")"
 TARGET="${EXECUTABLE%/Contents/MacOS/*}"
-PREVIOUS="${TARGET%.app} previous.app"
+PREVIOUS="${TARGET%.app}-previous.app"
 
 if [ "${1:-}" = "--restore" ]; then
 	[ -d "$PREVIOUS" ] || { echo "No previous copy at $PREVIOUS" >&2; exit 1; }
 	SOURCE="$PREVIOUS"
 else
-	SOURCE="${1:-$ROOT/build/dmg-launch/Gaze.app}"
+	SOURCE="${1:-$ROOT/build/Gaze.app}"
 	[ -d "$SOURCE" ] || { echo "No build at $SOURCE. Run ./build.sh first." >&2; exit 1; }
 fi
 
 version() { /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$1/Contents/Info.plist" 2>/dev/null || echo "?"; }
 
 codesign --verify --deep --strict "$SOURCE" || { echo "$SOURCE is not validly signed; not installing." >&2; exit 1; }
+if [ -d "$TARGET" ]; then
+	TARGET_REQUIREMENT="$(codesign -d -r- "$TARGET" 2>/dev/null | sed -n 's/^designated => //p')"
+	if [ -n "${TARGET_REQUIREMENT:-}" ]; then
+		codesign --verify --deep --strict -R "=$TARGET_REQUIREMENT" "$SOURCE" || {
+			echo "Signing identity differs from the existing Gaze app. The existing bundle was not replaced." >&2
+			exit 1
+		}
+	fi
+fi
 
 echo "Stopping Gaze…"
 launchctl bootout "$DOMAIN/$AGENT_LABEL" 2>/dev/null || true
@@ -45,7 +54,9 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 	sleep 0.5
 done
 
-STAGING="$(mktemp -d)/Gaze.app"
+STAGING_ROOT="$(mktemp -d)"
+STAGING="$STAGING_ROOT/Gaze.app"
+trap 'rm -rf "${STAGING_ROOT:-}"' ERR EXIT
 ditto "$SOURCE" "$STAGING"
 if [ "${1:-}" = "--restore" ]; then
 	rm -rf "$TARGET"

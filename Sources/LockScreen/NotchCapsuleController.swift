@@ -50,8 +50,11 @@ final class NotchCapsuleController {
 	/// Last build outcome, so the missing-space state is readable from Settings diagnostics rather than the log alone.
 	private(set) static var lastBuildOutcome: (message: String, at: Date)?
 
-	/// Refuses focus, which keeps it out of the lock screen's input path entirely.
-	private final class UnfocusableWindow: NSWindow {
+	/// Non-activating floating panel, so it never takes focus or enters the
+	/// lock screen's input path. Follows the approval-panel prototype:
+	/// borderless + nonactivating, floating, key only if needed (which, with
+	/// `canBecomeKey == false` below, is never).
+	private final class UnfocusableWindow: NSPanel {
 		override var canBecomeKey: Bool { false }
 		override var canBecomeMain: Bool { false }
 	}
@@ -61,9 +64,11 @@ final class NotchCapsuleController {
 	func show(phase: NotchCapsuleModel.Phase = .scanning) {
 		dismissalTask?.cancel()
 		model.phase = phase
+		Self.broadcast(phase)
+		announce(phase: phase)
 
 		if let screen = NSScreen.main {
-			model.prefersOpaque = WallpaperBrightness.isLight(on: screen)
+			model.lightBehind = WallpaperBrightness.isLight(on: screen)
 		}
 		model.style = Preferences.shared.notchStyle
 		model.shape = Preferences.shared.panelShape
@@ -90,6 +95,7 @@ final class NotchCapsuleController {
 				builtChallengeRoom = next.challengeRoom
 			}
 		}
+		syncBackdrop(for: window)
 		window.alphaValue = 1
 		window.orderFrontRegardless()
 		Self.logger.notice(
@@ -134,7 +140,47 @@ final class NotchCapsuleController {
 		if phase != previous {
 			announce(phase: phase)
 		}
+		Self.broadcast(phase)
 		syncLookTarget(for: phase)
+	}
+
+	/// Mirrors the panel on the public status feed. The movement is read back from the
+	/// prompt's symbol and hint because the phase carries no other record of it.
+	private static func broadcast(_ phase: NotchCapsuleModel.Phase) {
+		switch phase {
+		case .locked, .unlocked:
+			break
+		case .scanning:
+			GazeStatusBroadcast.scanStarted()
+		case .challenge(_, let symbol, let hintX, _, _, let isReturningToRest):
+			let movement: GazeStatusBroadcast.Movement? = switch symbol {
+			case _ where isReturningToRest: nil
+			case "arrowshape.left.fill": .turnLeft
+			case "arrowshape.right.fill": .turnRight
+			case "arrowshape.down.fill": .nod
+			case "mouth.fill": .openMouth
+			case "eye.fill": hintX == 0 ? .blink : .followLight
+			default: nil
+			}
+			if let movement { GazeStatusBroadcast.challenge(movement) } else { GazeStatusBroadcast.scanStarted() }
+		case .pending, .success:
+			GazeStatusBroadcast.recognised()
+		case .notRecognised:
+			GazeStatusBroadcast.notRecognised()
+		case .spoofRejected:
+			GazeStatusBroadcast.spoofRejected()
+		case .unavailable(let message):
+			// Codes, not the sentence: the sentences are copy and may change.
+			let reason: GazeStatusBroadcast.Reason =
+				if message.contains("paused") { .paused }
+				else if message.contains("Too many") { .lockedOut }
+				else if message.contains("password changed") { .passwordChanged }
+				else if message.contains("camera") { .cameraNotResponding }
+				else if message.contains("check faces") { .recognitionUnavailable }
+				else if message.contains("type your password") { .passwordEntryFailed }
+				else { .other }
+			GazeStatusBroadcast.unavailable(reason)
+		}
 	}
 
 	/// The edge light follows the look prompts and nothing else: up while an
@@ -186,6 +232,7 @@ final class NotchCapsuleController {
 
 	func hide(after delay: TimeInterval = 0) {
 		LookTargetOverlay.shared.hide()
+		GazeStatusBroadcast.scanStopped()
 		dismissalTask?.cancel()
 		guard let window else { return }
 		dismissalTask = Task { [weak self, weak window] in
@@ -199,7 +246,7 @@ final class NotchCapsuleController {
 			self.model.isExpanded = false
 
 			let teardownDelay = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-				? NotchAnimation.reducedDuration + 0.06 : NotchAnimation.teardownDelay
+				? 0 : NotchAnimation.teardownDelay
 			do {
 				try await Task.sleep(for: .seconds(teardownDelay))
 			} catch { return }
@@ -210,6 +257,40 @@ final class NotchCapsuleController {
 			self.host = nil
 			self.dismissalTask = nil
 		}
+	}
+
+	/// Which wallpaper and window frame the current backdrop was cut for.
+	private var backdropKey: String?
+
+	/// Cuts the wallpaper behind the window for hand-drawn Liquid Glass, once per wallpaper,
+	/// screen and window frame rather than per show or per frame. Decoded off the main
+	/// thread: a 6K HEIC takes long enough to hold up the panel appearing.
+	private func syncBackdrop(for window: NSWindow) {
+		guard model.style == .liquidGlass, let screen = NSScreen.main else {
+			model.backdrop = nil
+			backdropKey = nil
+			return
+		}
+		let frame = window.frame
+		let url = NSWorkspace.shared.desktopImageURL(for: screen)
+		let key = "\(url?.path ?? "")|\(NSStringFromRect(frame))|\(NSStringFromRect(screen.frame))"
+		guard key != backdropKey else { return }
+		backdropKey = key
+		model.backdrop = nil
+		let screenFrame = screen.frame
+		Task.detached(priority: .userInitiated) { [weak self] in
+			guard let url, let image = GlassBackdrop.loadImage(url) else { return }
+			let rect = CGRect(
+				x: frame.minX - screenFrame.minX, y: screenFrame.maxY - frame.maxY,
+				width: frame.width, height: frame.height)
+			let backdrop = GlassBackdrop.make(from: image, canvas: screenFrame.size, rect: rect)
+			await self?.apply(backdrop, key: key)
+		}
+	}
+
+	private func apply(_ backdrop: GlassBackdrop?, key: String) {
+		guard backdropKey == key else { return }
+		model.backdrop = backdrop
 	}
 
 	// MARK: - Construction
@@ -303,12 +384,15 @@ final class NotchCapsuleController {
 		self.builtChallengeRoom = next.challengeRoom
 
 		let window = UnfocusableWindow(
-			contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+			contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+		window.isFloatingPanel = true
+		window.becomesKeyOnlyIfNeeded = true
 		window.isOpaque = false
 		window.backgroundColor = .clear
 		window.hasShadow = false
 		window.ignoresMouseEvents = true
-		// Above other notch apps, not below them.
+		// Above the fullscreen staging window (LockScreenShoot at .screenSaver)
+		// and above other notch apps, not below them.
 		//
 		// This was `.mainMenu + 2` — level 26 — while Dynamic Lake draws its bar at 104. On
 		// the lock screen that put their bar over ours, which was survivable for the attached
@@ -319,8 +403,8 @@ final class NotchCapsuleController {
 		//
 		// This window only exists while the screen is locked, and for those few seconds its
 		// status is the thing worth seeing.
-		window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.overlayWindow)) + 4)
-		window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+		window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)) + 4)
+		window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 		window.hidesOnDeactivate = false
 
 		let host = NSHostingView(

@@ -302,6 +302,8 @@ struct RecognitionTestView: View {
 			if text.contains("device-bezel") { return ("Blocked: a rectangle around your face", false) }
 			if text.contains("glare") { return ("Blocked: glare on your face", false) }
 			return ("Blocked: looks like a photo or screen", false)
+		case .suspect:
+			return ("Checking: this frame looked like a photo", false)
 		case .unavailable, nil:
 			return ("Blocked: photo check unavailable", false)
 		}

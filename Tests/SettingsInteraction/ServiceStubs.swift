@@ -19,6 +19,7 @@ import SwiftUI
     static let shared = Preferences()
     var tamperProtection = false
     var showsMenuBarIcon = true
+    var broadcastStatus = false
 }
 
 @MainActor enum LoginItem {

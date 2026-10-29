@@ -222,6 +222,21 @@ if [ -d "$ROOT/Resources/Credits" ]; then
 	echo "  ✓ $credit_count portrait(s)"
 fi
 
+# Metal shaders (the lock screen's Liquid Glass) become default.metallib, which SwiftUI's
+# ShaderLibrary.default loads from the main bundle's Resources.
+metal_sources=("$ROOT"/Sources/*/*.metal)
+if [ -e "${metal_sources[0]}" ]; then
+	echo "→ Compiling Metal shaders"
+	metal_air=()
+	for source in "${metal_sources[@]}"; do
+		air="$STAGE_ROOT/$(basename "$source" .metal).air"
+		xcrun -sdk macosx metal -c -O3 -mmacosx-version-min="${MIN_SDK_MAJOR}.0" "$source" -o "$air"
+		metal_air+=("$air")
+	done
+	xcrun -sdk macosx metallib "${metal_air[@]}" -o "$STAGE/Contents/Resources/default.metallib"
+	echo "  ✓ default.metallib (${#metal_air[@]} file(s))"
+fi
+
 # TourKit's MIT licence ships in the bundle because its source is compiled in.
 cp "$ROOT/ThirdParty/TourKit/LICENSE" "$STAGE/Contents/Resources/TourKit-LICENSE.txt"
 echo "  ✓ TourKit-LICENSE.txt"
@@ -365,7 +380,17 @@ esac
 cp "$ROOT/Sources/FinderExtension/Info.plist" "$APPEX/Contents/Info.plist"
 APPEX_VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$STAGE/Contents/Info.plist")"
 APPEX_BUILD="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$STAGE/Contents/Info.plist")"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APPEX_VERSION" -c "Set :CFBundleVersion $APPEX_BUILD" "$APPEX/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APPEX_VERSION" "$APPEX/Contents/Info.plist" 2>/dev/null || \
+	/usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APPEX_VERSION" "$APPEX/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APPEX_BUILD" "$APPEX/Contents/Info.plist" 2>/dev/null || \
+	/usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $APPEX_BUILD" "$APPEX/Contents/Info.plist"
+# Keep the authorization plugin's versions in step with the app at build time.
+if [ -f "$ROOT/Plugin/Info.plist" ]; then
+	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APPEX_VERSION" "$ROOT/Plugin/Info.plist" 2>/dev/null || \
+		/usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $APPEX_VERSION" "$ROOT/Plugin/Info.plist"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APPEX_BUILD" "$ROOT/Plugin/Info.plist" 2>/dev/null || \
+		/usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $APPEX_BUILD" "$ROOT/Plugin/Info.plist"
+fi
 echo "  ✓ GazeFinder.appex"
 
 # The sudo PAM module. Loaded by /usr/bin/sudo once the user turns on "Approve sudo

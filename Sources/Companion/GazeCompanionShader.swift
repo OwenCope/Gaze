@@ -141,11 +141,11 @@ float4 facePixel(float2 uv, constant FaceUniforms &uniforms) {
     float smile = (1 - smoothstep(-pixelWidth, pixelWidth, mouth)) * mouthVisibility;
     float feature = max(eyes, smile) * front;
     float glow = exp(-max(0.0, featureDistance) * 55.0) * 0.008 * front;
-    encoded += glow;
+    encoded += glow * float3(1.0);
     float pearl = uniforms.expression.z;
     encoded = mix(encoded, float3(0.80) + encoded * 0.50, pearl);
     encoded *= uniforms.expression.w;
-    encoded = mix(encoded, float3(mix(0.97, 0.10, pearl)), feature);
+    encoded = mix(encoded, mix(float3(1.0), float3(0.10), pearl), feature);
     float shellAlpha = clamp(uniforms.viewport.w + rim * 0.16, 0.0, 1.0);
     float alpha = mix(shellAlpha, 1.0, feature);
     return float4(encoded * alpha, alpha);

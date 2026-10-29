@@ -3,47 +3,47 @@ import SwiftUI
 
 /// The steps of setup.
 ///
-/// Positioning and capturing are phases of one job in `EnrollmentModel`, so they
-/// are one screen that follows the model rather than two with a Continue between
-/// them — a button asking someone to confirm what the app can already see.
-///
-/// The three screens either side of the capture are not decoration. Setup used to
-/// be welcome → capture → done, which ended on "You're all set" for an app that
-/// had no password to type and no permission to type it with: it could recognise
-/// you and then do nothing. Everything needed to actually unlock is asked for
-/// here, in the order it becomes true — what this does, the face, the password,
-/// the permission — and `done` reports which of it landed.
-///
-	/// The welcome and the explanation are always shown. Opening setup
-/// is a request to set up, and a short path that skipped ahead to "You're all
-/// set" was how someone got a success screen having done nothing. The capture
-/// is shown for a first enrolment or when explicitly requested, and skipped
-/// when a usable enrolment already exists so a repeat run does not save
-/// another face. The password
-/// and permission steps are the exception: they are the only two that can already
-/// be satisfied, and there is nothing to ask when the answer is already stored.
-/// Setup, start to finish.
-///
-/// The flow owns the camera and the enrollment model rather than the steps owning
-/// them. Steps come and go as people move through, and a camera owned by a step
-/// would be opened and closed at every transition — a visible stall, a fresh
-/// exposure ramp each time, and enrollment progress thrown away and restarted.
-///
-/// There is a progress row and a back button now, and there did not used to be.
-/// The old reasoning — "a progress dial for two screens is decoration" — was
-/// right about two screens and stopped being right at six: an indicator earns its
-/// place exactly when someone can no longer hold the remaining length in their
-/// head, and four steps past a welcome is over that line.
-///
-/// Both live in `SetupScaffold` rather than here, and both are deliberately
-/// partial. The row appears only on the four middle steps, because the welcome
-/// and the finish are the ends of the flow rather than positions in it. Back
-/// appears only where returning costs nothing, which rules out stepping back into
-/// a capture that has already saved a face.
-///
-/// Dark throughout, like the rest of Gaze. Not decoration either: the screen is
-/// mostly camera, and a dark surround stops the room behind the app competing
-/// with the picture and keeps the face the brightest thing on it.
+ /// Positioning and capturing are phases of one job in `EnrollmentModel`, so they
+ /// are one screen that follows the model rather than two with a Continue between
+ /// them — a button asking someone to confirm what the app can already see.
+ ///
+ /// The three screens either side of the capture are not decoration. Setup used to
+ /// be welcome → capture → done, which ended on "You're all set" for an app that
+ /// had no password to type and no permission to type it with: it could recognise
+ /// you and then do nothing. Everything needed to actually unlock is asked for
+ /// here, in the order it becomes true — what this does, the face, the password,
+ /// the permission — and `done` reports which of it landed.
+ ///
+     /// The welcome and the explanation are always shown. Opening setup
+ /// is a request to set up, and a short path that skipped ahead to "You're all
+ /// set" was how someone got a success screen having done nothing. The capture
+ /// is shown for a first enrolment or when explicitly requested, and skipped
+ /// when a usable enrolment already exists so a repeat run does not save
+ /// another face. The password
+ /// and permission steps are the exception: they are the only two that can already
+ /// be satisfied, and there is nothing to ask when the answer is already stored.
+ /// Setup, start to finish.
+ ///
+ /// The flow owns the camera and the enrollment model rather than the steps owning
+ /// them. Steps come and go as people move through, and a camera owned by a step
+ /// would be opened and closed at every transition — a visible stall, a fresh
+ /// exposure ramp each time, and enrollment progress thrown away and restarted.
+ ///
+ /// There is a progress row and a back button now, and there did not used to be.
+ /// The old reasoning — "a progress dial for two screens is decoration" — was
+ /// right about two screens and stopped being right at six: an indicator earns its
+ /// place exactly when someone can no longer hold the remaining length in their
+ /// head, and four steps past a welcome is over that line.
+ ///
+ /// Both live in `SetupScaffold` rather than here, and both are deliberately
+ /// partial. The row appears only on the four middle steps, because the welcome
+ /// and the finish are the ends of the flow rather than positions in it. Back
+ /// appears only where returning costs nothing, which rules out stepping back into
+ /// a capture that has already saved a face.
+ ///
+ /// Dark throughout, like the rest of Gaze. Not decoration either: the screen is
+ /// mostly camera, and a dark surround stops the room behind the app competing
+ /// with the picture and keeps the face the brightest thing on it.
 struct SetupFlow: View {
 
 	let store: FaceEnrollmentStore
@@ -406,7 +406,7 @@ struct SetupFlow: View {
 		guard work.isCurrent(revision), isPresented, step == .capture else { return }
 		// Say so rather than returning quietly. Returning left the capture screen up
 		// with a full ring and nothing happening — the enrollment was finished and
-		// the flow simply stopped, which looks like a hang and loses the work.
+		/// the flow simply stopped, which looks like a hang and loses the work.
 		guard let cameraID = camera.boundDeviceID else {
 			fail("Lost the camera before your face could be saved. Try again.")
 			return

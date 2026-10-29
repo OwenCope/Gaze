@@ -17,5 +17,8 @@ struct GazeTourMovementPage: View {
 					.frame(width: 340, height: 340)
 			}
 			.frame(maxWidth: .infinity, maxHeight: .infinity)
+			.accessibilityElement(children: .ignore)
+			.accessibilityLabel(lesson.map { "\($0.title). \($0.explanation())" } ?? "Gaze companion")
+			.accessibilityHidden(lesson == nil)
 	}
 }

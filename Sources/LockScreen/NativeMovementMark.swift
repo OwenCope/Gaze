@@ -70,13 +70,12 @@ struct NativeGlyph: View {
 				context.stroke(bracket, with: .color(tint), style: stroke)
 			}
 
-			// The face turns inside the frame: foreshortened and tipped, which is what
-			// sells a flat drawing as a head moving in space. Scaling the context scales
-			// the strokes with it, so the far side of the turn is genuinely heavier.
+			// The face turns inside the frame: tipped and shifted sideways, which is
+			// what reads as a lean. No lateral squeeze: scaling x down with the turn
+			// foreshortened the mark into a squash rather than a head moving in space.
 			context.translateBy(x: 0.5, y: 0.5)
 			context.rotate(by: .degrees(face.nod * -2.5))
-			context.scaleBy(x: 1 - abs(face.turn) * 0.30,
-				y: 1 - abs(face.turn) * 0.05 - face.nod * 0.10)
+			context.scaleBy(x: 1, y: 1 - face.nod * 0.10)
 			context.translateBy(x: -0.5, y: -0.5)
 			context.translateBy(x: face.turn * 0.02, y: face.nod * 0.06)
 
@@ -184,7 +183,7 @@ struct NativeMovementMark: View {
 
 	/// The drawn head overscales itself, so this does too — swapping one mark for the
 	/// other should not change how large it reads in the panel.
-	private static let overscale = 1.18
+	private static let overscale = 1.30
 
 	private struct PlaybackKey: Equatable {
 		let motion: GazeFaceMotion

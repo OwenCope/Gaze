@@ -68,12 +68,12 @@ enum NativeUnlockAssets {
 		}
 	}
 
-	/// Whether this colour ships at least one image.
+	/// Whether this colour ships the success image.
 	///
 	/// The panel reads this before deciding to stay dropped through the unlock, so a
 	/// build without the clips keeps the retract-immediately behaviour it always had.
 	static func isAvailable(colour: Preferences.UnlockAnimationColour) -> Bool {
-		Clip.idle.url(colour: colour) != nil || Clip.idle.stillURL(colour: colour) != nil
+		Clip.success.url(colour: colour) != nil || Clip.success.stillURL(colour: colour) != nil
 	}
 }
 
@@ -148,7 +148,7 @@ struct NativeUnlockAnimation: View {
 
 	/// The drawn head overscales itself by this much, so the clip does too — swapping
 	/// one mark for the other should not change how large it reads in the panel.
-	private static let overscale = 1.18
+	private static let overscale = 1.30
 
 	var body: some View {
 		media
@@ -169,6 +169,8 @@ struct NativeUnlockAnimation: View {
 				.blendMode(.screen)
 		} else if let still = clip.stillURL(colour: colour) {
 			NativeUnlockStill(url: still)
+		} else {
+			GazeFaceMark(phase: phase, active: active)
 		}
 	}
 }

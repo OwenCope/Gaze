@@ -259,7 +259,7 @@ struct SetupCameraAccessContent: View {
 			onClose: onClose,
 			pageMedia: { _ in AnyView(SetupShot(source: .image("setup-camera-prompt"), aspectRatio: 516.0 / 562.0, cornerRadius: 26)) },
 			primaryEnabled: actionTitle != nil ? !isRequesting : true,
-			showsPrimaryButton: actionTitle != nil,
+			showsPrimaryButton: true,
 			footer: position.map { AnyView(SetupProgress(position: $0)) },
 			onBack: onBack
 		)
@@ -273,7 +273,7 @@ struct SetupCameraAccessContent: View {
 		case .denied:
 			"Camera access is off. Enable Gaze in Privacy & Security → Camera, then return here to continue."
 		case .restricted:
-			"A system policy is blocking the camera."
+			"A system policy is blocking the camera. Close setup, ask your administrator to allow camera access, then try again."
 		default:
 			"Camera access is unavailable. Close setup and try again."
 		}

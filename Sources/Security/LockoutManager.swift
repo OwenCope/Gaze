@@ -40,6 +40,9 @@ final class LockoutManager {
 		isLockedOut ? 0 : max(0, Self.maxAttempts - state.consecutiveFailures)
 	}
 
+	/// Failures so far toward lockout. Diagnostics only.
+	var consecutiveFailures: Int { state.consecutiveFailures }
+
 	init(load: (() throws -> State?)? = nil, save: ((State) throws -> Void)? = nil) {
 		loadState = load ?? { try SecureVault.load(State.self, from: Self.account) }
 		saveState = save ?? { try SecureVault.store($0, as: Self.account) }
@@ -84,7 +87,7 @@ final class LockoutManager {
 		state.consecutiveFailures = min(Self.maxAttempts, state.consecutiveFailures + 1)
 		persist()
 		Self.logger.notice(
-			"Face rejected. \(self.attemptsRemaining) attempt(s) before lockout.")
+			"Face rejected. consecutiveFailures=\(self.state.consecutiveFailures) \(self.attemptsRemaining) attempt(s) before lockout.")
 	}
 
 	/// Records a match. Only ever called after a successful unlock.

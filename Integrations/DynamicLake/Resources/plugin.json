@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "identifier": "com.gazeunlock.Gaze.dynamiclake",
+  "name": "Gaze",
+  "version": "1.0.0",
+  "developerName": "Owen Cope",
+  "executable": "gaze-dynamiclake",
+  "arguments": [],
+  "icon": "icon.png",
+  "autoStart": true,
+  "settings": [
+    {
+      "id": "showMovementPrompts",
+      "type": "switch",
+      "title": "Show Movement Prompts",
+      "description": "Show the movement Gaze asks for, like Nod or Blink.",
+      "systemImage": "face.smiling",
+      "default": true
+    },
+    {
+      "id": "showAppLock",
+      "type": "switch",
+      "title": "Show App Lock",
+      "description": "Show when App Lock is covering an app.",
+      "systemImage": "lock.fill",
+      "default": true
+    },
+    {
+      "id": "about",
+      "type": "button",
+      "title": "Gaze",
+      "description": "Turn on Share status with other apps in Gaze Settings, General.",
+      "systemImage": "faceid",
+      "url": "https://gazeunlock.com",
+      "buttonTitle": "Open Website"
+    }
+  ]
+}

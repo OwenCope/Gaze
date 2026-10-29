@@ -6,6 +6,7 @@ trap 'rm -rf "$BUILD"' EXIT
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcrun swiftc -parse-as-library \
 	"$ROOT/Tests/MovementSettings/UnlockBackendStub.swift" \
 	"$ROOT/Sources/App/Preferences.swift" \
+	"$ROOT/Sources/App/StatusBroadcast.swift" \
 	"$ROOT/Sources/Camera/CameraFrameLease.swift" \
 	"$ROOT/Sources/Security/UnlockChallengeGate.swift" \
 	"$ROOT/Tests/MovementSettings/MovementSettingsTests.swift" \

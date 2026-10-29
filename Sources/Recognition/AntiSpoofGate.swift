@@ -21,6 +21,9 @@ struct AntiSpoofGate: Sendable {
 		case unavailable
 		/// Rejected. `reason` is log/telemetry text; `score` is the signal that tripped it.
 		case spoof(reason: String, score: Float)
+		/// The classifier called this one frame a spoof, but not yet often enough in the
+		/// scan to reject. The frame must not count toward a match; the caller skips it.
+		case suspect(score: Float)
 	}
 
 	private let spoof: SpoofDetector?

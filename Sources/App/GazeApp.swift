@@ -58,6 +58,8 @@ struct GazeApp: App {
 		// StartupTiming/AppServices/OnboardingHistory or any service starts. Flagged
 		// launches (notably `--agent`) never take this exit, so KeepAlive relaunches
 		// cannot loop on it.
+		// Renders and exits when asked; no services start.
+		LockPanelPreview.runIfRequested()
 		if SettingsLaunchHandoff.redirectIfNeeded() { Darwin.exit(0) }
 		let totalStart = StartupTiming.start()
 		// Read synchronously: SwiftUI evaluates `defaultLaunchBehavior` once, at launch, so
@@ -581,6 +583,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 			StartupTiming.measure(label: "tamper-guard") { TamperGuard.shared.start() }
 			StartupTiming.measure(label: "unlock-triggers") { AppServices.shared.startUnlockTrigger() }
 			StartupTiming.measure(label: "app-lock") { AppServices.shared.syncAppLock() }
+			GazeStatusBroadcast.start { Preferences.shared.broadcastStatus }
 			// Looks for a new release shortly after launch, then daily. See
 			// `startScheduledChecks` for why this is not left to the button in Settings.
 			StartupTiming.measure(label: "update-scheduling") { ReleaseUpdateChecker.shared.startScheduledChecks() }

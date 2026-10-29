@@ -151,14 +151,6 @@ final class NotchCapsuleModel {
 			return false
 		}
 
-		/// The padlock is drawn in every phase.
-		///
-		/// It used to disappear while scanning and come back for the unlock, which made it a
-		/// thing that flickered rather than a state you can read: the padlock *is* the answer
-		/// to "is this Mac locked", and that question has an answer the whole time. It stays
-		/// put and changes at the one moment its answer changes.
-		var showsLockChip: Bool { true }
-
 		/// What the mark in the panel announces to VoiceOver.
 		///
 		/// On the phase rather than on either mark, because there are two marks — the drawn
@@ -182,7 +174,7 @@ final class NotchCapsuleModel {
 	var phase: Phase = .scanning
 	/// Deepen the tint when the wallpaper behind is light, or glass goes pale and the
 	/// glyph disappears into it.
-	var prefersOpaque = false
+	var lightBehind = false
 	/// Mirrors `Preferences.notchStyle`, captured when the panel is shown.
 	var style: Preferences.NotchStyle = .normal
 	/// Mirrors `Preferences.panelShape`, captured when the panel is shown.
@@ -197,6 +189,9 @@ final class NotchCapsuleModel {
 	/// Mirrors `Preferences.unlockAnimationColour`, captured when the panel is shown.
 	var animationColour: Preferences.UnlockAnimationColour = .blue
 	var transparency: Double = 0.3
+	/// The wallpaper behind the window, for drawing Liquid Glass on the lock screen where
+	/// system glass has nothing to sample. Nil falls back to `.glassEffect`.
+	var backdrop: GlassBackdrop?
 	/// Mirrors `Preferences.showNotchCaptions`, captured when the panel is shown.
 	/// Display only: captions reserve space only when enabled.
 	var showsCaptions = true
@@ -314,7 +309,12 @@ struct NotchCapsule: View {
 	var hasNotch: Bool = true
 
 	@Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+	@Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+	@Environment(\.colorSchemeContrast) private var contrast
 	@Environment(\.notchReduceMotion) private var previewReduceMotion
+	/// Shared morph space for the panel's glass pieces, so splits and rejoins reshape
+	/// rather than swap. Visuals, shapes and timings are unchanged; this only coordinates.
+	@Namespace private var panelGlass
 	private var reduceMotion: Bool { systemReduceMotion || previewReduceMotion }
 	// Reduce Motion skips the grow-out by reading as expanded, so opacity must never gate on isExpanded — that would blank the resting padlock.
 	private var expanded: Bool { reduceMotion || model.isExpanded }
@@ -567,7 +567,7 @@ struct NotchCapsule: View {
 
 	private var earLock: some View {
 		Image(systemName: isEarUnlocked ? "lock.open.fill" : "lock.fill")
-			.accessibilityHidden(true)
+			.accessibilityLabel(model.phase.markAccessibilityLabel)
 			.font(.system(size: EarFlankMetrics.lockSize, weight: .semibold))
 			.foregroundStyle(.white)
 			.contentTransition(.symbolEffect(.replace))
@@ -579,9 +579,8 @@ struct NotchCapsule: View {
 			.frame(width: EarFlankMetrics.faceSize, height: EarFlankMetrics.faceSize)
 	}
 
-	private var earShape: NotchPanelShape {
-		NotchPanelShape(
-			topRadius: EarFlankMetrics.topRadius, bottomRadius: EarFlankMetrics.bottomRadius)
+	private var earShape: RoundedRectangle {
+		RoundedRectangle(cornerRadius: EarFlankMetrics.topRadius, style: .continuous)
 	}
 
 	/// The silhouette fill, honouring Style like the island does.
@@ -595,10 +594,7 @@ struct NotchCapsule: View {
 				.fill(.black.opacity(glassTint))
 				.background { earShape.fill(.ultraThinMaterial) }
 		case .liquidGlass:
-			Color.clear.glassEffect(
-				.clear.tint(.black.opacity(liquidTint)),
-				in: earShape)
-				.overlay { liquidEdge(over: earShape) }
+			liquidSurface(earShape, outline: .rounded(EarFlankMetrics.topRadius))
 		}
 	}
 
@@ -640,17 +636,17 @@ struct NotchCapsule: View {
 			}
 		}
 		.padding(.horizontal, 4)
-		.background { earSilhouette }
+		.background { earSilhouette.glassEffectID("ear", in: panelGlass).glassEffectTransition(.identity) }
 		// Only the face side grows, so matching clear space on the lock side keeps the
 		// reserved gap centred on the camera instead of sliding left of it.
 		.padding(.leading, earFaceFlankWidth - EarFlankMetrics.flank)
 		.frame(height: earNotchHeight)
+		.scaleEffect(expanded ? 1 : 0.94, anchor: .top)
 		.opacity(expanded ? 1 : 0)
 		.animation(reduceMotion ? nil : NotchAnimation.phase, value: earCaption ?? "")
-		.animation(reduceMotion ? nil : DynamicIslandMetrics.morph, value: earFaceFlankWidth)
 		.animation(
 			reduceMotion ? nil : (expanded ? NotchAnimation.expand : NotchAnimation.retract),
-			value: expanded)
+			value: "\(expanded)-\(earFaceFlankWidth)")
 	}
 
 	// MARK: - Dynamic island body
@@ -759,24 +755,28 @@ struct NotchCapsule: View {
 				.fill(.black.opacity(glassTint))
 				.background { shape.fill(.ultraThinMaterial) }
 		case .liquidGlass:
-			Color.clear.glassEffect(
-				.clear.tint(.black.opacity(liquidTint)),
-				in: shape)
-				.overlay { liquidEdge(over: shape) }
+			liquidSurface(shape, outline: .capsule)
 		}
 	}
 
 	/// The glyph on the leading end: the movement's own symbol while a prompt is up,
 	/// otherwise the lock, opening on success.
 	private var dynamicGlyph: some View {
-		Image(systemName: model.phase.challengeSymbol ?? (isDynamicUnlocked ? "lock.open.fill" : "lock.fill"))
+		Image(systemName: model.phase.challengeSymbol ?? dynamicLockSymbol)
 			.accessibilityHidden(true)
 			.font(.system(size: DynamicIslandMetrics.glyphSize, weight: .semibold))
-			// Green only on success: the rest of the time the glyph is a status mark, and
-			// colour there would spend the confirmation colour before anything is confirmed.
+			// Green only on success, as a checkmark in circle: the rest of the time
+			// the glyph is a status mark, and colour there would spend the
+			// confirmation colour before anything is confirmed.
 			.foregroundStyle(isDynamicSuccess ? Theme.faceID : .white)
 			.contentTransition(.symbolEffect(.replace))
 			.frame(width: 20)
+	}
+
+	/// Success ends on a green checkmark in circle; every other state keeps the lock vocabulary.
+	private var dynamicLockSymbol: String {
+		if isDynamicSuccess { return "checkmark.circle.fill" }
+		return isDynamicUnlocked ? "lock.open.fill" : "lock.fill"
 	}
 
 	/// One row for every state: glyph, words when there are any, companion. Nothing is
@@ -803,9 +803,12 @@ struct NotchCapsule: View {
 				// wide as the cap even at rest.
 				.frame(maxWidth: .infinity, alignment: .leading)
 				.accessibilityHidden(true)
-				// Opacity only: a scale here was a second, differently timed motion inside
-				// the morph.
-				.transition(.opacity)
+				// Slide plus opacity on the existing feedback timing: a scale here was a
+				// second, differently timed motion inside the morph.
+				.transition(
+					.asymmetric(
+						insertion: .move(edge: .bottom).combined(with: .opacity),
+						removal: .move(edge: .top).combined(with: .opacity)))
 			} else {
 				Spacer(minLength: 0)
 			}
@@ -817,7 +820,7 @@ struct NotchCapsule: View {
 		}
 		.padding(.horizontal, DynamicIslandMetrics.edgeInset)
 		.frame(width: dynamicWidth, height: dynamicHeight)
-		.background { dynamicSilhouette }
+		.background { dynamicSilhouette.glassEffectID("dynamic", in: panelGlass).glassEffectTransition(.identity) }
 		// Words arriving mid-morph stay inside the capsule instead of spilling past it.
 		.clipShape(Capsule(style: .continuous))
 		// Animate the whole island as one layer, so size, radius and contents stay in step.
@@ -845,7 +848,16 @@ struct NotchCapsule: View {
 	private var earWidth: CGFloat { max(0, (compactBarWidth - cutoutWidth) / 2) }
 
 	var body: some View {
-		ZStack(alignment: .top) {
+		// The glass crop is measured from the panel view, not the screen, so the Settings
+		// preview lines up as well as the lock screen does.
+		capsuleBody.coordinateSpace(.named(GlassBackdrop.space))
+	}
+
+	private var capsuleBody: some View {
+		// One morph space for every glass piece below: the container coordinates
+		// the glassEffectID identities while layout and timings stay as they are.
+		GlassEffectContainer(spacing: 12) {
+			ZStack(alignment: .top) {
 			// Grows downward out of the cutout and retracts back into it. Collapsed, the
 			// shape is exactly the notch's height, so it is completely hidden behind the
 			// physical cutout — nothing appears or disappears, it emerges.
@@ -863,6 +875,9 @@ struct NotchCapsule: View {
 				dynamicBody
 			} else {
 				background
+					.glassEffectID("panel", in: panelGlass)
+					.glassEffectUnion(id: "panel", namespace: panelGlass)
+					.glassEffectTransition(.identity)
 				// Widened by the flare on each side, not narrowed by it.
 				//
 				// `NotchPanelShape` insets its body to leave room for the flares, so
@@ -885,7 +900,8 @@ struct NotchCapsule: View {
 			// travel at all, while the attached panel got the full spring. Keeping the view
 			// mounted and animating a *value* is what gives both shapes the same timing.
 			if model.shape == .island {
-				islandBody
+				islandBody.glassEffectID("island", in: panelGlass)
+					.glassEffectTransition(.materialize)
 					.frame(width: islandWidth, height: islandHeight)
 					// The mark rides *inside* the island rather than being positioned against
 					// the window. Drawn separately it stayed at its final place while the
@@ -917,7 +933,7 @@ struct NotchCapsule: View {
 		// The padlock stays closed for the wait: pending shows the waiting words in the
 		// drop and the same padlock shut where it has sat all along. Only the confirmed
 		// unlock opens it.
-			if model.phase.showsLockChip && !isEarFlank && !isDynamicIsland {
+			if !isEarFlank && !isDynamicIsland {
 				lockChip
 					// Always positioned against the *resting* bar, never the panel.
 					//
@@ -959,6 +975,7 @@ struct NotchCapsule: View {
 			reduceMotion ? nil : NotchAnimation.feedback,
 			value: [String(describing: isCompactPhase), model.phase.captionText ?? ""].joined(separator: "|"))
 		.symbolEffectsRemoved(reduceMotion)
+		}
 	}
 
 	private var showsChallengeCaption: Bool {
@@ -994,7 +1011,10 @@ struct NotchCapsule: View {
 				// exposing the caption would read every state twice.
 				.accessibilityHidden(true)
 				.id(prompt)
-				.transition(.opacity)
+				.transition(
+					.asymmetric(
+						insertion: .move(edge: .bottom).combined(with: .opacity),
+						removal: .move(edge: .top).combined(with: .opacity)))
 			}
 		}
 	}
@@ -1007,12 +1027,36 @@ struct NotchCapsule: View {
 	///
 	/// Nebulark's green stays in every style — it is the island's own identity rather than a
 	/// property of the material, and it is the one thing that makes this shape *this* shape.
+	@ViewBuilder
 	private var islandBody: some View {
+		if model.style == .liquidGlass {
+			// Glass has no fill to hang a backing off: the ultra-thin backing and the green
+			// wash over it were what made this a flat grey slab with murky green at the
+			// bottom. The green stays as light along the lower rim instead.
+			liquidSurface(islandShape, outline: .rounded(islandShape.cornerSize.width))
+				.shadow(color: .black.opacity(0.3), radius: 18, y: 8)
+				.overlay { islandGlow }
+		} else {
+			islandShape
+				.fill(islandFill)
+				.background { islandBacking.shadow(color: .black.opacity(0.35), radius: 18, y: 8) }
+				.overlay { islandShape.fill(islandGreen).blendMode(.sourceAtop) }
+				.overlay { islandEdge }
+		}
+	}
+
+	/// Nebulark's green on glass: a soft glow at the bottom edge, not a fill.
+	private var islandGlow: some View {
 		islandShape
-			.fill(islandFill)
-			.background { islandBacking.shadow(color: .black.opacity(0.35), radius: 18, y: 8) }
-			.overlay { islandShape.fill(islandGreen).blendMode(.sourceAtop) }
-			.overlay { islandEdge }
+			.strokeBorder(Theme.faceID.opacity(0.45), lineWidth: 2)
+			.blur(radius: 4)
+			.mask {
+				LinearGradient(
+					stops: [.init(color: .clear, location: 0.55), .init(color: .black, location: 1)],
+					startPoint: .top, endPoint: .bottom)
+			}
+			.clipShape(islandShape)
+			.allowsHitTesting(false)
 	}
 
 	/// Liquid glass gets the specular edge; Solid and Frosted get a hairline.
@@ -1082,11 +1126,7 @@ struct NotchCapsule: View {
 			case .liquidGlass:
 				// The real macOS 26 material — it refracts and picks up what is behind
 				// it rather than just being a dark tint over a blur.
-				Color.clear
-					.glassEffect(
-						.clear.tint(.black.opacity(liquidTint)),
-						in: shape)
-					.overlay { liquidEdge(over: shape) }
+				liquidSurface(shape, outline: .panel(shape))
 					.mask { fade }
 			}
 		}
@@ -1133,22 +1173,36 @@ struct NotchCapsule: View {
 		min(0.6, max(0, NotchGlass.liquidTint(boost: lightWallpaperBoost) * (1.2 - model.transparency)))
 	}
 
+	/// The Liquid Glass surface in any of the panel's shapes.
+	///
+	/// Drawn from the wallpaper when the controller has one: this window sits in the lock
+	/// screen's own space, where `.glassEffect` samples nothing and renders as an opaque slab.
+	/// The settings preview has no backdrop and a real window behind it, so it keeps the
+	/// system glass. Reduce Transparency or Increase Contrast gets the solid panel.
+	@ViewBuilder
+	private func liquidSurface<S: Shape>(_ shape: S, outline: GlassOutline) -> some View {
+		if reduceTransparency || contrast == .increased {
+			shape.fill(.black)
+				.overlay { shape.stroke(.white.opacity(0.18), lineWidth: 1).clipShape(shape) }
+		} else if let backdrop = model.backdrop {
+			WallpaperGlass(
+				backdrop: backdrop, shape: shape, outline: outline, lightBehind: model.lightBehind)
+		} else {
+			Color.clear.glassEffect(
+				.clear.tint(.black.opacity(liquidTint)),
+				in: shape)
+				.overlay { liquidEdge(over: shape) }
+		}
+	}
+
 	/// Specular edge over liquid glass, so the clearer tint still reads as a panel.
 	private func liquidEdge<S: Shape>(over shape: S) -> some View {
 		// The dark panel recipe from the macOS 27 Figma kit, kept to what reads on a tinted
 		// panel: light bands inside the top and bottom edges and thin side rims. Centred
 		// strokes clipped to the shape, so they sit inside like strokeBorder but work for
 		// the custom panel shape too.
-		GeometryReader { proxy in
-			let band = min(10 / max(proxy.size.height, 1), 0.5)
+		GeometryReader { _ in
 			ZStack {
-				shape.fill(LinearGradient(stops: [
-					.init(color: .white.opacity(0.16), location: 0),
-					.init(color: .clear, location: band),
-					.init(color: .clear, location: 1 - band),
-					.init(color: .white.opacity(0.16), location: 1),
-				], startPoint: .top, endPoint: .bottom))
-				.blendMode(.plusLighter)
 				shape.stroke(
 					LinearGradient(
 						colors: [.white.opacity(0.45), .white.opacity(0.08), .white.opacity(0.18)],
@@ -1170,12 +1224,12 @@ struct NotchCapsule: View {
 
 	/// Extra black mixed in when the wallpaper behind the panel is bright.
 	///
-	/// `prefersOpaque` was computed on every show — `WallpaperBrightness.isLight(on:)`, set
+	/// `lightBehind` was computed on every show — `WallpaperBrightness.isLight(on:)`, set
 	/// on the model, and then read by nothing at all. The whole point of measuring it is
 	/// this: over a pale wallpaper both glass styles wash out and a white glyph on them has
 	/// almost no contrast left. Only the two translucent styles use it; `.normal` is already
 	/// solid black and has nothing to gain.
-	private var lightWallpaperBoost: Double { model.prefersOpaque ? 0.22 : 0 }
+	private var lightWallpaperBoost: Double { model.lightBehind ? 0.22 : 0 }
 
 	/// The padlock, in the screen beside the cutout.
 	///
@@ -1192,7 +1246,7 @@ struct NotchCapsule: View {
 	/// between a status indicator and a sticker.
 	private var lockChip: some View {
 		Image(systemName: model.phase == .unlocked ? "lock.open.fill" : "lock.fill")
-			.accessibilityHidden(true)
+			.accessibilityLabel(model.phase.markAccessibilityLabel)
 			.font(.system(size: 11, weight: .semibold))
 			// White, not green. This is the menu bar's own vocabulary — the padlock beside
 			// the cutout is a status glyph like the ones to its right, and those are never

@@ -98,6 +98,7 @@ final class AppLockShield {
 		startWindowObserver(for: app)
 		followTask = Task { [weak self] in await self?.follow(bundleID: bundleID) }
 		faceUnlockAttempt?(bundleID)
+		GazeStatusBroadcast.appLockShown(bundleID: bundleID)
 	}
 
 	/// Called by the camera step (or the password fallback) on a match.
@@ -105,6 +106,7 @@ final class AppLockShield {
 		guard let id = bundleID, !didUnlock else { return }
 		didUnlock = true
 		machine.unlock(id)
+		GazeStatusBroadcast.appLockUnlocked(bundleID: id)
 		stopFaceScan?()
 		// The smile first, as on the lock screen, then the shield goes.
 		status.phase = .success

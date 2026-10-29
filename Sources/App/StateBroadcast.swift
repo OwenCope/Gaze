@@ -36,7 +36,6 @@ public enum GazeState: String, Sendable {
 ///     forName: .init("com.gazeunlock.Gaze.state"), object: nil, queue: .main
 /// ) { note in
 ///     let state = note.object as? String          // "detecting", "succeeded", …
-///     let score = note.userInfo?["score"] as? Double   // present on succeeded/failed
 /// }
 /// ```
 ///
@@ -73,11 +72,13 @@ enum StateBroadcast {
 	/// every frame would put sixteen notifications a second through the distributed centre,
 	/// which is a system-wide bus shared with every other application on the Mac.
 	static func post(_ state: GazeState, score: Double? = nil) {
+		// Same opt-in as the newer status feed (StatusBroadcast): off, nothing leaves Gaze.
+		// The match score is no longer published; any app on the Mac can read this bus.
+		guard GazeStatusBroadcast.isEnabled() else { return }
 		guard state != last else { return }
 		last = state
 
-		var info: [AnyHashable: Any] = ["state": state.rawValue]
-		if let score { info["score"] = score }
+		let info: [AnyHashable: Any] = ["state": state.rawValue]
 
 		for published in [name, legacyName] {
 			DistributedNotificationCenter.default().postNotificationName(

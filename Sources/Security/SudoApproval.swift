@@ -29,15 +29,10 @@ final class SudoApproval {
 	private var source: DispatchSourceRead?
 	private var listenerFD: Int32 = -1
 	private var socketPath: String = ""
-	private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Sudo")
+	nonisolated private static let logger = Logger(subsystem: "com.gazeunlock.Gaze", category: "Sudo")
 	private static let socketName = "sudo.sock"
 	private static let folderName = "Library/Application Support/Gaze"
 	private static let expectedPeerPath = "/usr/bin/sudo"
-	private static let modulePath = "/usr/local/lib/pam/pam_gaze.so"
-	private static let requirementPath = "/usr/local/lib/pam/pam_gaze.requirement"
-	private static let sudoLocalPath = "/etc/pam.d/sudo_local"
-	private static let sudoLocalTemplate = "/etc/pam.d/sudo_local.template"
-	private static let authLine = "auth sufficient /usr/local/lib/pam/pam_gaze.so"
 	private static let truncatedMarker = " [+more]"
 
 	init(check: FaceApprovalCheck) {
@@ -309,14 +304,13 @@ final class SudoApproval {
 
 	/// Whether /etc/pam.d/sudo_local currently routes sudo through Gaze.
 	static var isInstalled: Bool {
-		guard let text = try? String(contentsOfFile: sudoLocalPath, encoding: .utf8) else { return false }
 		// Spacing-insensitive: an earlier Gaze wrote the same line with tab-like padding,
 		// and an exact match left the switch off while sudo was already routed to Gaze.
-		func words(_ line: String) -> [String] { line.split(whereSeparator: \.isWhitespace).map(String.init) }
-		guard text.components(separatedBy: "\n").contains(where: { words($0) == words(authLine) }) else { return false }
+		guard let text = try? String(contentsOfFile: SudoInstallScript.Paths().sudoLocalPath, encoding: .utf8),
+			SudoInstallScript.routesThroughGaze(text) else { return false }
 		// Without the requirement file the module trusts no listener, so a
 		// missing file means the setup is not complete.
-		return FileManager.default.fileExists(atPath: requirementPath)
+		return FileManager.default.fileExists(atPath: SudoInstallScript.Paths().requirementPath)
 	}
 
 	/// Reads this app's own designated requirement, which the installer writes
@@ -346,71 +340,40 @@ final class SudoApproval {
 
 	/// Copies pam_gaze.so into place, writes the listener requirement Gaze's
 	/// module checks, and adds the sudo_local line, all inside one privileged
-	/// shell script so the user authenticates only once. The line goes at the
-	/// top and is never added twice; existing sudo_local lines are kept
-	/// untouched. Throws when the module is missing from the app bundle.
+	/// shell script so the user authenticates only once. Throws when anything
+	/// fails, including a script that ran but left sudo not routed to Gaze.
 	static func install(moduleIn bundle: Bundle = .main) async throws {
 		guard let source = bundle.resourceURL?.appendingPathComponent("pam_gaze.so").path,
 			FileManager.default.fileExists(atPath: source) else {
 			throw SudoApprovalError.moduleMissing
 		}
 		let requirement = try designatedRequirement()
-		let script = """
-		set -e
-		mkdir -p \(shQuote("/usr/local/lib/pam"))
-		cp \(shQuote(source)) \(shQuote(modulePath))
-		chown root:wheel \(shQuote(modulePath))
-		chmod 0444 \(shQuote(modulePath))
-		printf '%s\\n' \(shQuote(requirement)) > \(shQuote(requirementPath))
-		chown root:wheel \(shQuote(requirementPath))
-		chmod 0444 \(shQuote(requirementPath))
-		line=\(shQuote(authLine))
-		f=\(shQuote(sudoLocalPath))
-		t=\(shQuote(sudoLocalTemplate))
-		if [ ! -f "$f" ]; then if [ -f "$t" ]; then cp "$t" "$f"; else : > "$f"; fi; fi
-		tmp=$(mktemp /etc/pam.d/.sudo_local.XXXXXX)
-		printf '%s\\n' "$line" > "$tmp"
-		grep -v 'pam_gaze\\.so' "$f" | grep -v '^# Added by Gaze' >> "$tmp" || true
-		cat "$tmp" > "$f"; rm -f "$tmp"
-		"""
-		try await runPrivileged(script)
+		try await runPrivileged(SudoInstallScript.install(source: source, requirement: requirement))
+		guard isInstalled else { throw SudoApprovalError.notInstalledAfterScript }
 	}
 
 	/// Removes the sudo_local line, the module, and the listener requirement,
 	/// again as one privileged script. Other sudo_local lines are kept.
 	static func uninstall() async throws {
-		let script = """
-		set -e
-		line=\(shQuote(authLine))
-		f=\(shQuote(sudoLocalPath))
-		if [ -f "$f" ]; then tmp=$(mktemp /etc/pam.d/.sudo_local.XXXXXX); grep -v 'pam_gaze\\.so' "$f" | grep -v '^# Added by Gaze' > "$tmp" || true; cat "$tmp" > "$f"; rm -f "$tmp"; fi
-		rm -f \(shQuote(modulePath))
-		rm -f \(shQuote(requirementPath))
-		"""
-		try await runPrivileged(script)
+		try await runPrivileged(SudoInstallScript.uninstall())
 	}
 
 	/// Runs the script with administrator privileges on a background thread:
 	/// NSAppleScript blocks while the system prompts, and that must never
 	/// freeze the app's main thread.
 	private static func runPrivileged(_ shellScript: String) async throws {
-		let escaped = shellScript
-			.replacingOccurrences(of: "\\", with: "\\\\")
-			.replacingOccurrences(of: "\"", with: "\\\"")
-			.replacingOccurrences(of: "\n", with: "\\n")
-		let scriptSource = "do shell script \"\(escaped)\" with administrator privileges"
+		let scriptSource = SudoInstallScript.appleScript(shellScript)
 		try await Task.detached(priority: .userInitiated) {
 			var failure: NSDictionary?
 			let script = NSAppleScript(source: scriptSource)
 			guard script?.executeAndReturnError(&failure) != nil, failure == nil else {
-				let message = failure?["NSAppleScriptErrorMessage"] as? String ?? "the privileged script failed"
+				// -128 is the user cancelling the administrator prompt.
+				if failure?[NSAppleScript.errorNumber] as? Int == -128 { throw SudoApprovalError.cancelled }
+				let message = failure?[NSAppleScript.errorMessage] as? String ?? "the privileged script failed"
+				logger.error("The sudo setup script failed: \(message, privacy: .public)")
 				throw SudoApprovalError.scriptFailed(message)
 			}
 		}.value
-	}
-
-	private static func shQuote(_ value: String) -> String {
-		"'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
 	}
 }
 
@@ -418,6 +381,8 @@ enum SudoApprovalError: LocalizedError {
 	case moduleMissing
 	case requirementUnavailable
 	case socketPathTooLong
+	case cancelled
+	case notInstalledAfterScript
 	case scriptFailed(String)
 
 	var errorDescription: String? {
@@ -428,8 +393,12 @@ enum SudoApprovalError: LocalizedError {
 			return "Gaze could not read its own code signature; reinstall Gaze to restore it."
 		case .socketPathTooLong:
 			return "The sudo socket path is too long to bind."
+		case .cancelled:
+			return "The administrator prompt was cancelled."
+		case .notInstalledAfterScript:
+			return "The setup ran, but sudo still isn't set up to use Gaze."
 		case .scriptFailed(let message):
-			return "Changing the sudo setup failed: \(message)"
+			return "macOS reported: \(message)"
 		}
 	}
 }

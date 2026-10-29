@@ -36,7 +36,8 @@ struct GazeCompanionView: View {
 		let sample = poseSampler
 		let renderContext = "\(presentation == .notch ? "notch" : "standard").\(motion)"
 		Group {
-			if renderError != nil {
+			// The offscreen panel preview cannot capture a Metal layer, so it takes the 2D path.
+			if renderError != nil || LockPanelPreview.isRendering {
 				TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !canAnimate || settled)) { context in
 					let pose = sample(context.date.timeIntervalSinceReferenceDate)
 					GeometryReader { geometry in

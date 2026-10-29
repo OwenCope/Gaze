@@ -24,6 +24,7 @@ enum BiometricGate {
 		case toggleAppLock = "lock or unlock an app"
 		case changeAppLock = "change App Lock"
 		case approveAdminPrompts = "fill administrator password prompts with your face"
+		case approveSudo = "approve sudo in Terminal with your face"
 	}
 
 	static var isAvailable: Bool {

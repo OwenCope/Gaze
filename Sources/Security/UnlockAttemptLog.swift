@@ -43,6 +43,24 @@ struct UnlockAttempt: Codable, Identifiable {
 	/// Optional so older logs still decode.
 	var steps: Steps?
 
+	/// Best face-match score seen during the look, and the threshold it was
+	/// judged against. Diagnostics only; never gates anything.
+	/// Optional so older logs still decode.
+	var bestScore: Float?
+	var threshold: Float?
+	/// Frames where a face was found, and frames rejected by the quality gate.
+	/// Optional so older logs still decode.
+	var framesWithFace: Int?
+	var qualityRejects: Int?
+	/// Lockout counter after this look, and attempts left. Diagnostics only.
+	/// Optional so older logs still decode.
+	var consecutiveFailures: Int?
+	var attemptsRemaining: Int?
+	/// Why the lock ended without Gaze unlocking: display-slept, saver-started
+	/// or gave-up. Filed on looks that did not unlock.
+	/// Optional so older logs still decode.
+	var endReason: String?
+
 	struct Steps: Codable, Equatable {
 		var camera: TimeInterval? = nil
 		var recognise: TimeInterval? = nil
@@ -127,12 +145,23 @@ final class UnlockAttemptLog {
 	/// Records one attempt. Never throws, never blocks: the photo conversion and
 	/// every write happen in a detached task. Safe to call on the unlock path.
 	func record(_ result: UnlockAttempt.Result, duration: TimeInterval? = nil, steps: UnlockAttempt.Steps? = nil,
-		photo: CVPixelBuffer? = nil, reason: UnlockAttempt.Reason? = nil) {
+		photo: CVPixelBuffer? = nil, reason: UnlockAttempt.Reason? = nil,
+		bestScore: Float? = nil, threshold: Float? = nil, framesWithFace: Int? = nil,
+		qualityRejects: Int? = nil, consecutiveFailures: Int? = nil, attemptsRemaining: Int? = nil,
+		endReason: String? = nil) {
 		let id = UUID()
 		let keepsPhoto = photo != nil
 			&& (photoPolicy == .always || (photoPolicy == .whenNotGaze && result != .unlocked))
+		// Scores, counters and the end tag are filed on every look that did not
+		// unlock. Unlocks keep the record they already had: duration and steps.
+		let isUnlock = result == .unlocked
 		let attempt = UnlockAttempt(id: id, date: Date(), result: result, reason: reason, duration: duration,
-			photoFile: keepsPhoto ? "\(id.uuidString).jpg" : nil, steps: steps)
+			photoFile: keepsPhoto ? "\(id.uuidString).jpg" : nil, steps: steps,
+			bestScore: isUnlock ? nil : bestScore, threshold: isUnlock ? nil : threshold,
+			framesWithFace: isUnlock ? nil : framesWithFace, qualityRejects: isUnlock ? nil : qualityRejects,
+			consecutiveFailures: isUnlock ? nil : consecutiveFailures,
+			attemptsRemaining: isUnlock ? nil : attemptsRemaining,
+			endReason: isUnlock ? nil : endReason)
 		attempts.insert(attempt, at: 0)
 		if result == .unknownFace || result == .spoofRejected {
 			IntruderNotice.shared.noteAttempt(at: attempt.date,

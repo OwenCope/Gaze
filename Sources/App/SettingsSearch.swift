@@ -240,6 +240,14 @@ struct SettingsSearchItem: Identifiable, Hashable, Sendable {
 			section: "behaviourSection"
 		),
 		SettingsSearchItem(
+			id: "share-status",
+			title: "Share status with other apps",
+			subtitle: "Lets apps like DynamicLake show when Gaze is scanning or unlocking",
+			keywords: ["dynamiclake", "dynamic island", "notch", "integration", "broadcast", "other apps"],
+			pane: "general",
+			section: "behaviourSection"
+		),
+		SettingsSearchItem(
 			id: "onboarding",
 			title: "Getting Started",
 			subtitle: "Review setup and onboarding",

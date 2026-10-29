@@ -25,7 +25,7 @@ struct GazeWelcomeTour: View {
 		TourPage(
 			imageName: "Art/tour-backdrop.png",
 			imageBundle: .main,
-			title: "Meet Gaze",
+			title: "Unlock with a look",
 			description: "Use your Mac’s camera to recognize your face at the lock screen. Face data never leaves this Mac."
 		),
 		TourPage(

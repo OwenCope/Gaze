@@ -29,7 +29,6 @@ struct SetupShot: View {
 			.shadow(color: .black.opacity(0.45), radius: 24, y: 12)
 			.frame(maxWidth: .infinity, maxHeight: .infinity)
 			.allowsHitTesting(false)
-			.accessibilityHidden(true)
 	}
 
 	@ViewBuilder
@@ -38,17 +37,35 @@ struct SetupShot: View {
 		case .video(let name):
 			if let url = Bundle.main.url(forResource: name, withExtension: "mp4", subdirectory: "Art") {
 				LoopingVideo(url: url)
+					.accessibilityHidden(true)
 			} else {
-				Color(white: 0.08)
+				missingMedia
 			}
 		case .image(let name):
 			if let url = Bundle.main.url(forResource: name, withExtension: "png", subdirectory: "Art"),
 				let image = NSImage(contentsOf: url) {
 				Image(nsImage: image).resizable().interpolation(.high)
+					.accessibilityHidden(true)
 			} else {
-				Color(white: 0.08)
+				missingMedia
 			}
 		}
+	}
+
+	private var missingMedia: some View {
+		ZStack {
+			Color(white: 0.12)
+			VStack(spacing: 8) {
+				Image(systemName: "photo.badge.exclamationmark")
+					.font(.system(size: 28, weight: .medium))
+					.foregroundStyle(.white.opacity(0.7))
+				Text("Preview unavailable")
+					.font(.system(size: 13, weight: .medium))
+					.foregroundStyle(.white.opacity(0.7))
+			}
+		}
+		.accessibilityElement(children: .combine)
+		.accessibilityLabel("Preview unavailable")
 	}
 }
 

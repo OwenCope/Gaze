@@ -8,7 +8,7 @@ final class LockScanDiagnostics {
 
 	enum Outcome: CaseIterable {
 		case starting, scanning, movement, manualInput, cameraUnavailable, firstFrameTimeout, cameraStalled
-		case verificationUnavailable, notRecognized, spoofRejected, ended, scanOnlyPassed
+		case verificationUnavailable, notRecognized, challengeExpired, spoofRejected, ended, scanOnlyPassed
 		case submissionStopped, submissionPending, submissionUnconfirmed, unlocked, cancelled
 
 		var isScanning: Bool { self == .starting || self == .scanning || self == .movement }
@@ -24,6 +24,7 @@ final class LockScanDiagnostics {
 			case .cameraStalled: "The camera stopped delivering fresh frames. No password was sent. Use your password or Touch ID."
 			case .verificationUnavailable: "A required verification check was unavailable. No password was sent. Use your password or Touch ID."
 			case .notRecognized: "Face verification or a movement did not complete. No password was sent. Face the camera and return to rest between movements."
+			case .challengeExpired: "The movement was not answered in time. No password was sent. Watch for the prompt and follow it before it times out."
 			case .spoofRejected: "The anti-spoof check rejected the attempt. No password was sent. Use your password or Touch ID."
 			case .ended: "The scan ended without complete verification. No password was sent. Try Test Recognition to check framing and movement."
 			case .scanOnlyPassed: "Recognition and the selected movement checks passed in scan-only mode. That mode does not enter a password or unlock your Mac."

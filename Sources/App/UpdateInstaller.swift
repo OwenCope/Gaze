@@ -107,9 +107,10 @@ final class UpdateInstaller {
 		progress: AsyncStream<Double>.Continuation
 	) async -> Result<Swap, InstallFailure> {
 		defer { progress.finish() }
+		let tmp = FileManager.default.temporaryDirectory.appending(
+			path: "GazeUpdate-\(UUID().uuidString)", directoryHint: .isDirectory)
+		var staged: URL?
 		do {
-			let tmp = FileManager.default.temporaryDirectory.appending(
-				path: "GazeUpdate-\(UUID().uuidString)", directoryHint: .isDirectory)
 			try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
 			let dmg = tmp.appending(path: "Gaze.dmg", directoryHint: .notDirectory)
 			try await download(url: url, to: dmg, progress: progress)
@@ -127,27 +128,58 @@ final class UpdateInstaller {
 			try verify(app: candidate, expectedVersion: expectedVersion)
 			Self.logger.notice("Update verified.")
 			let parent = URL(fileURLWithPath: runningPath).deletingLastPathComponent()
-			let staged = parent.appending(
+			let stagedApp = parent.appending(
 				path: ".Gaze-update-\(UUID().uuidString).app", directoryHint: .isDirectory)
+			staged = stagedApp
+			try ensureStagingSpace(for: candidate, parent: parent)
 			try runProcess(
-				"/usr/bin/ditto", [candidate.path, staged.path],
+				"/usr/bin/ditto", [candidate.path, stagedApp.path],
 				message: "Couldn't install the update. Try again.")
 			try runProcess(
-				"/usr/bin/xattr", ["-dr", "com.apple.quarantine", staged.path],
+				"/usr/bin/xattr", ["-dr", "com.apple.quarantine", stagedApp.path],
 				message: "Couldn't install the update. Try again.")
 			Self.logger.notice("Update staged.")
 			let script = tmp.appending(path: "update.sh", directoryHint: .notDirectory)
 			try writeSwapScript(
-				at: script, appPath: runningPath, stagedPath: staged.path, tmpPath: tmp.path)
+				at: script, appPath: runningPath, stagedPath: stagedApp.path, tmpPath: tmp.path)
 			Self.logger.notice("Update script written.")
 			return .success(Swap(scriptPath: script.path))
 		} catch let failure as InstallFailure {
 			Self.logger.notice("Update failed: \(failure.message)")
+			if let staged { try? FileManager.default.removeItem(at: staged) }
+			try? FileManager.default.removeItem(at: tmp)
 			return .failure(failure)
 		} catch {
 			Self.logger.notice("Update failed: couldn't install the update.")
+			if let staged { try? FileManager.default.removeItem(at: staged) }
+			try? FileManager.default.removeItem(at: tmp)
 			return .failure(InstallFailure(message: "Couldn't install the update. Try again."))
 		}
+	}
+
+	/// Fails when the volume holding the running app cannot fit the staged copy.
+	nonisolated static func ensureStagingSpace(for candidate: URL, parent: URL) throws {
+		let needed = (try? stagedSize(of: candidate)) ?? (300 * 1024 * 1024)
+		let keys: Set<URLResourceKey> = [.volumeAvailableCapacityForImportantUsageKey]
+		if let free = try? parent.resourceValues(forKeys: keys).volumeAvailableCapacityForImportantUsage {
+			guard Int64(free) > needed + 200 * 1024 * 1024 else {
+				throw InstallFailure(message: "Not enough disk space to install the update.")
+			}
+		}
+	}
+
+	nonisolated static func stagedSize(of url: URL) throws -> Int64 {
+		var size: Int64 = 0
+		let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey]
+		if let enumerator = FileManager.default.enumerator(
+			at: url, includingPropertiesForKeys: Array(keys))
+		{
+			for case let file as URL in enumerator {
+				let values = try file.resourceValues(forKeys: keys)
+				if values.isRegularFile == true { size += Int64(values.fileSize ?? 0) }
+			}
+		}
+		return size
 	}
 
 	nonisolated static func download(
@@ -197,13 +229,20 @@ final class UpdateInstaller {
 	}
 
 	nonisolated static func verify(app: URL, expectedVersion: String) throws {
-		guard let data = try? Data(
-			contentsOf: app.appending(path: "Contents/Info.plist", directoryHint: .notDirectory)),
+		var expected = expectedVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+		if expected.first == "v" || expected.first == "V" { expected.removeFirst() }
+		let parts = expected.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)
+		guard !parts.isEmpty, !parts[0].isEmpty,
+			let data = try? Data(
+				contentsOf: app.appending(path: "Contents/Info.plist", directoryHint: .notDirectory)),
 			let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
 			let identifier = info["CFBundleIdentifier"] as? String,
 			identifier == Bundle.main.bundleIdentifier,
 			let version = info["CFBundleShortVersionString"] as? String,
-			version == expectedVersion
+			version == String(parts[0]),
+			let build = info["CFBundleVersion"] as? String,
+			!build.isEmpty,
+			parts.count == 1 || build == String(parts[1])
 		else { throw InstallFailure(message: "This update couldn't be verified.") }
 		// The mounted app must satisfy this app's own designated requirement:
 		// same team and identifier, not just any signed bundle named Gaze.
@@ -239,6 +278,10 @@ final class UpdateInstaller {
 	/// Waits for this process to exit, swaps the staged app in and reopens it.
 	/// The app relaunches plainly with `open`: it is a login item
 	/// (`SMAppService.mainApp`), not a launchd agent, so there is nothing to kickstart.
+	/// Exits without swapping when the old process is still alive after the wait
+	/// or another update already holds the lock. The menu-bar agent is removed
+	/// before the swap so it cannot relaunch the half-replaced bundle, and the
+	/// app only reopens when no running instance still owns the bundle path.
 	nonisolated static func writeSwapScript(at script: URL, appPath: String, stagedPath: String, tmpPath: String) throws {
 		let pid = ProcessInfo.processInfo.processIdentifier
 		let text = """
@@ -246,10 +289,20 @@ final class UpdateInstaller {
 			APP=\(shQuote(appPath))
 			STAGED=\(shQuote(stagedPath))
 			TMP=\(shQuote(tmpPath))
+			LOCK="$TMP/update.lock"
+			if command -v flock >/dev/null 2>&1; then
+			  exec 9>"$LOCK"
+			  flock -n 9 || exit 1
+			else
+			  mkdir "$LOCK.dir" 2>/dev/null || exit 1
+			  trap 'rmdir "$LOCK.dir" 2>/dev/null || true' EXIT
+			fi
 			for _ in $(seq 1 50); do kill -0 \(pid) 2>/dev/null || break; sleep 0.2; done
+			if kill -0 \(pid) 2>/dev/null; then exit 1; fi
+			/bin/launchctl remove com.gazeunlock.Gaze.agent 2>/dev/null || true
 			mv "$APP" "$TMP/Gaze-previous.app"
 			if ! mv "$STAGED" "$APP"; then mv "$TMP/Gaze-previous.app" "$APP"; exit 1; fi
-			open "$APP"
+			if ! /usr/bin/pgrep -qf "$APP/Contents/MacOS/Gaze" 2>/dev/null; then open "$APP"; fi
 			rm -rf "$TMP"
 
 			"""

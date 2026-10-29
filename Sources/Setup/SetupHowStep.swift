@@ -15,7 +15,7 @@ struct SetupHowStep: View {
 		if movementCount == 0 {
 			return "Look at your Mac and it unlocks. Your password and Touch ID still work."
 		}
-		let moves = movementCount == 2 ? "two small moves" : "one small move"
+		let moves = movementCount == 2 ? "two small movements" : "one small movement"
 		return "Look at your Mac, make \(moves), and it unlocks. Your password and Touch ID still work."
 	}
 
