@@ -1,5 +1,7 @@
 # Build output
 build/
+outputs/
+exports/
 *.dSYM/
 *.dmg
 
@@ -69,3 +71,7 @@ Resources/FaceEmbedding.mlpackage/
 .commandcode/
 AGENTS.md
 Data/
+.manus/
+.work/
+Icon?
+Integrations/*/build/
