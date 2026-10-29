@@ -16,6 +16,10 @@ xcrun swiftc -parse-as-library -sdk "$SDK" -target "$(host_target)" \
 	"$ROOT/Sources/App/DesktopWallpaper.swift" \
 	"$ROOT/Sources/LockScreen/GazeFaceMark.swift" \
 	"$ROOT/Sources/LockScreen/NotchCapsule.swift" \
+	"$ROOT/Sources/LockScreen/WallpaperGlass.swift" \
+	"$ROOT/Sources/LockScreen/NativeUnlockAnimation.swift" \
+	"$ROOT/Sources/LockScreen/NativeMovementMark.swift" \
+	"$ROOT/Sources/LockScreen/LockPanelPreview.swift" \
 	"$ROOT/Sources/LockScreen/NotchPanelShape.swift" \
 	"$ROOT/Sources/Companion/"*.swift \
 	"$ROOT/Sources/Enrollment/EnrollmentRing.swift" \
