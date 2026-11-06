@@ -45,3 +45,5 @@ NODE
 bash "$ROOT/Tests/Release/verify-artifact.sh"
 bash "$ROOT/Tests/Release/preflight-checks.sh"
 bash "$ROOT/Tests/Release/source-archive.sh"
+
+bash "$ROOT/Tests/Release/iris-model.sh"
