@@ -29,6 +29,8 @@ final class NotchCapsuleController {
 	private var dismissalTask: Task<Void, Never>?
 	private var contentSize: CGSize = .zero
 	private var builtChallengeRoom: CGFloat = 0
+	private var builtCutoutWidth: CGFloat = 0
+	private var builtHasNotch = false
 	/// Height of the region hidden behind the physical cutout, so the glyph can be
 	/// centred in the visible part rather than in the whole window.
 	private var notchInset: CGFloat = 0
@@ -87,12 +89,22 @@ final class NotchCapsuleController {
 		guard let window else { return }
 		if !needsMount, let screen = NSScreen.main {
 			let next = geometry(on: screen)
-			if next.challengeRoom != builtChallengeRoom {
+			if next.windowFrame != window.frame || next.contentSize != contentSize
+				|| next.notchInset != notchInset || next.challengeRoom != builtChallengeRoom
+				|| (NotchMetrics.width(on: screen) ?? 180) != builtCutoutWidth
+				|| NotchMetrics.hasNotch(on: screen) != builtHasNotch {
+				// Resizing the window alone leaves the capsule using the dimensions captured
+				// by its original root view. Refresh both, keeping the observable model.
+				host?.rootView = capsuleView(
+					on: screen, size: next.contentSize,
+					windowSize: next.windowFrame.size, notchHeight: next.notchInset)
 				window.setFrame(next.windowFrame, display: true)
 				host?.frame = NSRect(origin: .zero, size: next.windowFrame.size)
 				contentSize = next.contentSize
 				notchInset = next.notchInset
 				builtChallengeRoom = next.challengeRoom
+				builtCutoutWidth = NotchMetrics.width(on: screen) ?? 180
+				builtHasNotch = NotchMetrics.hasNotch(on: screen)
 			}
 		}
 		syncBackdrop(for: window)
@@ -382,6 +394,8 @@ final class NotchCapsuleController {
 		self.contentSize = size
 		self.notchInset = notchHeight
 		self.builtChallengeRoom = next.challengeRoom
+		self.builtCutoutWidth = NotchMetrics.width(on: screen) ?? 180
+		self.builtHasNotch = NotchMetrics.hasNotch(on: screen)
 
 		let window = UnfocusableWindow(
 			contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -407,14 +421,8 @@ final class NotchCapsuleController {
 		window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 		window.hidesOnDeactivate = false
 
-		let host = NSHostingView(
-			rootView: AnyView(
-				NotchCapsule(
-					model: model, width: size.width, height: size.height,
-					notchInset: notchHeight,
-					cutoutWidth: NotchMetrics.width(on: screen) ?? 180,
-					hasNotch: NotchMetrics.hasNotch(on: screen))
-					.frame(width: windowSize.width, height: windowSize.height, alignment: .top)))
+		let host = NSHostingView(rootView: capsuleView(
+			on: screen, size: size, windowSize: windowSize, notchHeight: notchHeight))
 		host.frame = NSRect(origin: .zero, size: windowSize)
 		window.contentView = host
 
@@ -427,6 +435,16 @@ final class NotchCapsuleController {
 		} else {
 			Self.lastBuildOutcome = nil
 		}
+	}
+
+	private func capsuleView(on screen: NSScreen, size: CGSize, windowSize: CGSize, notchHeight: CGFloat) -> AnyView {
+		AnyView(
+			NotchCapsule(
+				model: model, width: size.width, height: size.height,
+				notchInset: notchHeight,
+				cutoutWidth: NotchMetrics.width(on: screen) ?? 180,
+				hasNotch: NotchMetrics.hasNotch(on: screen))
+				.frame(width: windowSize.width, height: windowSize.height, alignment: .top))
 	}
 
 	// No render(): the model drives the view, so there is nothing to rebuild.
