@@ -4,6 +4,15 @@ import Foundation
 /// compiles this instead of Sources/App/Preferences.swift, so every
 /// Preferences read in the lock views needs a member here.
 final class PreviewPrefs {
+	var notchStyle: Preferences.NotchStyle = .normal
+	var panelShape: Preferences.PanelShape = .attached
+	var glyphPlacement: Preferences.GlyphPlacement = .centred
+	var nativeUnlockAnimation = false
+	var unlockAnimationColour: Preferences.UnlockAnimationColour = .blue
+	var notchTransparency = 0.0
+	var showNotchCaptions = true
+	var notchWidthAdjust = 0.0
+	var notchHeightAdjust = 0.0
 }
 
 enum Preferences {
