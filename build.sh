@@ -153,12 +153,14 @@ fi
 # The prebuilt branch comes first, as it does for FaceEmbedding above. A checkout whose
 # IrisLandmarks.mlpackage is a stub — carrying only Manifest.json, with the real
 # Data/com.apple.CoreML tree absent — made coremlc abort here, and the only recourse was
-# to move the stub out of the way by hand for every build.
+# to move the stub out of the way by hand for every build. A manifest-only
+# placeholder is equivalent to an absent optional model; only compile when
+# the package has a Data tree. Errors in populated packages still stop the build.
 if [ -d "$ROOT/Resources/IrisLandmarks.mlmodelc" ]; then
 	echo "→ Using prebuilt iris landmark model"
 	cp -R "$ROOT/Resources/IrisLandmarks.mlmodelc" "$STAGE/Contents/Resources/"
 	echo "  ✓ IrisLandmarks.mlmodelc (prebuilt)"
-elif [ -d "$ROOT/Resources/IrisLandmarks.mlpackage" ]; then
+elif [ -d "$ROOT/Resources/IrisLandmarks.mlpackage/Data" ]; then
 	xcrun coremlc compile "$ROOT/Resources/IrisLandmarks.mlpackage" "$STAGE/Contents/Resources" >/dev/null
 	echo "  ✓ IrisLandmarks.mlmodelc"
 else
